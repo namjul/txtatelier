@@ -17,6 +17,17 @@ This project uses the **Attractor Protocol** - a framework for building living s
 
 **Read this first** to understand the "why" behind all other protocols.
 
+### [CENTER_PLANNING.md](./CENTER_PLANNING.md)
+**Planning and documenting centers as they unfold.**
+
+- Document each significant center in `centers/<name>.md`
+- Track center lifecycle: Proposed → Emerging → Established → Weakening → Dissolved
+- Plan interventions with contact tests before implementing
+- Record history of what worked and what failed
+- Maintain audit trail of center evolution
+
+**Use this** when planning changes to centers.
+
 ### [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md)
 **Living Systems Commits - applying Attractor Protocol to git.**
 
@@ -45,14 +56,17 @@ This project uses the **Attractor Protocol** - a framework for building living s
 **For developers:**
 1. Read [ATTRACTOR_PROTOCOL.md](./ATTRACTOR_PROTOCOL.md) to understand the philosophy
 2. Review [AGENTS.md](./AGENTS.md) for code style and architecture
-3. Use [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md) for commit messages
-4. Configure git template: `git config commit.template .gitmessage`
+3. Before changing a center, check/create `centers/<name>.md` per [CENTER_PLANNING.md](./CENTER_PLANNING.md)
+4. Use [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md) for commit messages
+5. Configure git template: `git config commit.template .gitmessage`
 
 **For AI agents:**
 1. Treat [ATTRACTOR_PROTOCOL.md](./ATTRACTOR_PROTOCOL.md) as source of orientation
-2. Follow [AGENTS.md](./AGENTS.md) for code changes
-3. Structure commits per [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md)
-4. Always ask: "What would make this wrong?"
+2. Before proposing center changes, consult `centers/<name>.md` (create if needed)
+3. Plan interventions with contact tests per [CENTER_PLANNING.md](./CENTER_PLANNING.md)
+4. Follow [AGENTS.md](./AGENTS.md) for code changes
+5. Structure commits per [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md)
+6. Always ask: "What would make this wrong?"
 
 ---
 

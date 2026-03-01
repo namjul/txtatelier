@@ -282,6 +282,16 @@ This project uses **Living Systems Commits** - a protocol that treats software a
 
 **Core principle:** Every non-trivial commit includes a **contact test** - specifying what would make the claim wrong.
 
+**CRITICAL RULE: Only commit after the user was asked and explicitly confirmed it.**
+
+Agents must:
+1. Prepare changes (edit files, stage with `git add`)
+2. Show proposed commit message to user
+3. Wait for explicit user confirmation
+4. Only then execute `git commit`
+
+Never commit autonomously, even if changes seem complete.
+
 **See [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md) for complete documentation.**
 
 ### Quick Reference
