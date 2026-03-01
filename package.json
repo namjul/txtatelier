@@ -3,7 +3,23 @@
   "description": "Local-first file sync with Evolu - workspaces as centers",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "workspaces": [
     "centers/*"
-  ]
+  ],
+  "scripts": {
+    "check": "bunx biome check .",
+    "format": "bunx biome format --write .",
+    "format:check": "bunx biome format .",
+    "lint": "bunx biome lint .",
+    "lint:fix": "bunx biome check --write .",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
 }
