@@ -16,20 +16,22 @@ See [[PROJECT]] for architecture details and [[IMPLEMENTATION_PLAN]] for phases 
 
 ## Workspace Structure
 
-This repository uses a role-based workspace layout:
+**Rule: Bun workspaces MUST be valid centers.**
 
-/apps
-  /cli      → Bun CLI application
-  /pwa      → SolidJS PWA
+Every workspace in `centers/` must justify itself as a center:
+- Not every center needs to be a workspace (centers can be docs, patterns, concepts)
+- Cannot create workspaces for utilities/organization without demonstrating organizing power
 
-/packages
-  /core     → Domain model, schema, sync, machines
+**Current state:** No centers/workspaces implemented yet.
 
-Rules:
-- Apps may depend on packages.
-- Packages must not depend on apps.
-- All business logic lives in /packages/core.
-- UI framework code must not exist in /packages.
+**What qualifies as a center?** See ATTRACTOR_PROTOCOL.md § Center (operational definition)
+
+**Why this rule:**
+- Aligns technical organization (workspaces) with conceptual organization (centers)
+- Prevents utility bloat and arbitrary package proliferation
+- Makes dependencies semantically meaningful
+
+**See:** CENTER_PLANNING.md § Centers and Workspaces for workspace planning protocol
 
 ## Build, Lint, and Test Commands
 

@@ -1,0 +1,9 @@
+{
+  "name": "txtatelier",
+  "description": "Local-first file sync with Evolu - workspaces as centers",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "centers/*"
+  ]
+}

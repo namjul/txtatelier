@@ -56,17 +56,19 @@ This project uses the **Attractor Protocol** - a framework for building living s
 **For developers:**
 1. Read [ATTRACTOR_PROTOCOL.md](./ATTRACTOR_PROTOCOL.md) to understand the philosophy
 2. Review [AGENTS.md](./AGENTS.md) for code style and architecture
-3. Before changing a center, check/create `centers/<name>.md` per [CENTER_PLANNING.md](./CENTER_PLANNING.md)
-4. Use [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md) for commit messages
-5. Configure git template: `git config commit.template .gitmessage`
+3. **Understand:** Bun workspaces MUST be valid centers (see AGENTS.md § Workspace Structure)
+4. Before changing a center, check/create center docs per [CENTER_PLANNING.md](./CENTER_PLANNING.md)
+5. Use [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md) for commit messages
+6. Configure git template: `git config commit.template .gitmessage`
 
 **For AI agents:**
 1. Treat [ATTRACTOR_PROTOCOL.md](./ATTRACTOR_PROTOCOL.md) as source of orientation
-2. Before proposing center changes, consult `centers/<name>.md` (create if needed)
-3. Plan interventions with contact tests per [CENTER_PLANNING.md](./CENTER_PLANNING.md)
-4. Follow [AGENTS.md](./AGENTS.md) for code changes
-5. Structure commits per [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md)
-6. Always ask: "What would make this wrong?"
+2. **Rule:** Bun workspaces MUST be valid centers (see AGENTS.md § Workspace Structure)
+3. Before proposing center changes, consult center docs in `centers/`
+4. Plan interventions with contact tests per [CENTER_PLANNING.md](./CENTER_PLANNING.md)
+5. Follow [AGENTS.md](./AGENTS.md) for code changes
+6. Structure commits per [COMMIT_CONVENTION.md](./COMMIT_CONVENTION.md)
+7. Always ask: "What would make this wrong?"
 
 ---
 

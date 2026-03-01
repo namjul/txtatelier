@@ -389,6 +389,43 @@ centers/
 
 ---
 
+## Centers and Workspaces (This Project)
+
+**For the workspace-center rule, see AGENTS.md § Workspace Structure**
+
+### When Centers Become Workspaces
+
+When a center needs to be a Bun workspace:
+
+**Directory structure:**
+```
+centers/<center-name>/
+  package.json          # Workspace package
+  README.md            # Package docs + center planning metadata
+  src/                  # Implementation
+  test/                # Tests
+```
+
+**README.md template:**
+Combines standard package documentation with center planning metadata (Status, Contact Test, History). See "Center Document Structure" section above for template.
+
+### Archive
+
+Dissolved centers in `centers/archive/<name>/` are NOT workspaces.
+
+### Open Questions (To Be Resolved With Evidence)
+
+**Utilities:** Where do non-center utilities live?
+- Option A: Inside centers that use them (no shared utilities)
+- Option B: `lib/` or `shared/` directory (separate from centers)
+- Option C: Make utilities a weak center (justify with organizing power)
+- **Decision:** Wait for evidence - don't create utilities preemptively
+
+**Granularity:** How fine-grained should centers be?
+- Let evidence guide - start coarse, split if natural boundaries emerge
+
+---
+
 ## When to Create Center Documents
 
 **Create document when:**
