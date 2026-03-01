@@ -16,22 +16,27 @@ See [[PROJECT]] for architecture details and [[IMPLEMENTATION_PLAN]] for phases 
 
 ## Workspace Structure
 
-**Rule: Bun workspaces MUST be valid centers.**
+**Rule 1: Bun workspaces MUST be valid centers.**
 
 Every workspace in `centers/` must justify itself as a center:
-- Not every center needs to be a workspace (centers can be docs, patterns, concepts)
+- Not every center needs to be a workspace (centers can be modules, patterns, concepts)
 - Cannot create workspaces for utilities/organization without demonstrating organizing power
 
-**Current state:** No centers/workspaces implemented yet.
+**Rule 2: Every explicit center MUST have a CENTER.md file.**
+
+**Location:**
+- Workspace centers: `centers/{center-name}/CENTER.md`
+- Module centers: Colocated with code (e.g., `centers/cli/src/file-sync/CENTER.md`)
 
 **What qualifies as a center?** See ATTRACTOR_PROTOCOL.md § Center (operational definition)
 
-**Why this rule:**
+**Why these rules:**
 - Aligns technical organization (workspaces) with conceptual organization (centers)
 - Prevents utility bloat and arbitrary package proliferation
-- Makes dependencies semantically meaningful
+- Makes centers explicit and discoverable through CENTER.md files
+- Tracks center evolution through documented interventions
 
-**See:** CENTER_PLANNING.md § Centers and Workspaces for workspace planning protocol
+**See:** CENTER_PLANNING.md for center documentation protocol
 
 ## Build, Lint, and Test Commands
 

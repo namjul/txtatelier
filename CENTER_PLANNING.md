@@ -21,7 +21,18 @@ This creates an audit trail showing:
 
 ## Center Document Structure
 
-Each significant center gets a document: `centers/<center-name>.md`
+**Rule: Every explicit center MUST have a CENTER.md file.**
+
+**Location:**
+- **Workspace centers:** `centers/{center-name}/CENTER.md`
+- **Module centers:** Colocated with code (e.g., `centers/cli/src/file-sync/CENTER.md`)
+- **Other centers:** Wherever the center's main code lives
+
+**Purpose:**
+- Document center planning (status, interventions, contact tests)
+- Track center evolution over time
+- Make centers explicit and discoverable
+- Prevent implicit/undocumented centers
 
 ### Document Format
 

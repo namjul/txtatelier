@@ -12,26 +12,22 @@ Command-line interface for txtatelier. Provides user commands for sync operation
 
 Currently: Blank canvas - no functionality implemented.
 
-## Installation
+**Internal structure:**
+- `src/file-sync/` - Loop A (Filesystem → Evolu) implementation (see file-sync/CENTER.md)
+- `src/index.ts` - CLI entry point and command orchestration
 
-```bash
-# From repository root
-bun install
-
-# Run CLI
-bun run --cwd centers/cli start
-```
+---
 
 ## Center Definition
 
 ### Hypothesis
 
-The CLI center will organize user interaction with the file sync system,
-providing commands for status, conflict resolution, and manual sync triggers.
+The CLI center will organize user interaction with the file sync system, providing commands for status, conflict resolution, and manual sync triggers.
 
 **This center:**
 - Provides command-line interface for users (when implemented)
-- Orchestrates file-sync and evolu-sync centers (Phase 0+)
+- Contains file-sync center (Loop A: Filesystem → Evolu)
+- Will contain evolu-sync center (Loop B: Evolu → Filesystem, Phase 1)
 - Offers observability commands (Phase 8)
 
 **Contact test for "will this become a center?"**
@@ -61,10 +57,10 @@ Proposed - blank canvas only, no functionality
 
 ## Relationships to Other Centers
 
-**Will orchestrate:**
-- file-sync (Phase 0) - trigger sync operations
-- evolu-sync (Phase 1) - coordinate both sync loops
-- conflict-handler (Phase 3) - provide conflict resolution commands
+**Contains internally:**
+- file-sync center (Phase 0) - Loop A implementation
+- evolu-sync center (Phase 1) - Loop B implementation
+- conflict-handler logic (Phase 3) - conflict detection and resolution
 
 **Will be strengthened by:**
 - workspace-center-field - validates CLI as legitimate center
@@ -76,18 +72,3 @@ Proposed - blank canvas only, no functionality
 - Which CLI framework to use? (commander, yargs, or custom)
 - How granular should commands be?
 - Should CLI have interactive mode or just commands?
-
----
-
-## Development
-
-```bash
-# Watch mode
-bun run --cwd centers/cli dev
-
-# Run once
-bun run --cwd centers/cli start
-
-# Run tests (when added)
-bun run --cwd centers/cli test
-```
