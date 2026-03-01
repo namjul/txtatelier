@@ -45,6 +45,11 @@ export const startWatching = async (
       for await (const event of watcher) {
         if (!event.filename) continue;
 
+        // Ignore temp files created during atomic writes
+        if (event.filename.includes(".tmp-")) {
+          continue;
+        }
+
         const absolutePath = join(watchDir, event.filename);
         console.log(`[watch] ${event.eventType}: ${event.filename}`);
 

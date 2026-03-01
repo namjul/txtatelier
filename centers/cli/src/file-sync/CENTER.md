@@ -1,6 +1,6 @@
 # File-Sync Center
 
-**Status:** Strengthening
+**Status:** Strong
 **Created:** 2026-03-01
 **Last Updated:** 2026-03-01
 
@@ -8,24 +8,33 @@
 
 ## What This Center Does
 
-Implements Loop A (Filesystem → Evolu) - watches filesystem for changes and updates Evolu database when content differs.
+Implements bidirectional sync between filesystem and Evolu CRDT database.
 
-**Current state:** Phase 0 Loop A complete and tested. Single-device sync working.
+**Current state:** Phase 0 + Phase 1 complete. Bidirectional sync working on single device.
 
 **Implemented:**
-- Custom Evolu platform layer for Bun CLI
-- SQLite driver with debounced persistence (5 sec delay)
-- PlatformIO abstraction for file I/O
-- Schema definition for file records
-- Mnemonic management (auto-generated, persisted by Evolu)
-- Filesystem watching (Node.js fs.watch, debounced 100ms)
-- Content hashing (Bun.hash with xxHash64)
-- Evolu mutation logic (insert new files, update changed files, skip unchanged)
+- **Phase 0 (Loop A: Filesystem → Evolu)**
+  - Custom Evolu platform layer for Bun CLI
+  - SQLite driver with debounced persistence (5 sec delay)
+  - PlatformIO abstraction for file I/O
+  - Schema definition for file records
+  - Mnemonic management (auto-generated, persisted by Evolu)
+  - Filesystem watching (Node.js fs.watch, debounced 100ms)
+  - Content hashing (Bun.hash with xxHash64)
+  - Evolu mutation logic (insert new files, update changed files, skip unchanged)
+
+- **Phase 1 (Loop B: Evolu → Filesystem)**
+  - Local-only `_syncState` table for tracking applied hashes
+  - Evolu subscriptions for real-time sync
+  - Atomic file writes (temp + rename pattern)
+  - Basic conflict detection (hash comparison)
+  - Conflict file creation (`.conflict-{ownerId}-{timestamp}`)
+  - Echo prevention (skip own ownerId)
 
 **Not yet implemented:**
-- Loop B (Evolu → Filesystem) - Phase 1
-- Multi-device replication - Phase 2
-- Conflict detection - Phase 3
+- Multi-device replication - Phase 2 (enable Evolu sync)
+- Deletion handling - Phase 4
+- Startup reconciliation - Phase 5
 
 ---
 
@@ -47,17 +56,21 @@ The file-sync center will organize the core synchronization logic from filesyste
 
 ### Current Strength
 
-Strengthening - Loop A complete, organizing power demonstrated through coherent sync implementation
+Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 **Evidence:**
 - Custom Evolu platform successfully integrated
 - SQLite database persists to `~/.txtatelier/txtatelier.db`
+- Local-only `_syncState` table working (Evolu's underscore convention)
 - Mnemonic generation and owner management working
 - Graceful shutdown with debounced persistence (prevents data loss)
-- Loop A fully functional (filesystem → Evolu sync working)
-- All three sync paths verified: insert, update, no-change
-- 11 TypeScript modules (platform + schema + hash + watch + sync)
-- CLI successfully starts, watches directory, syncs files, persists data
+- **Loop A fully functional:** Filesystem → Evolu sync working (insert, update, no-change)
+- **Loop B fully functional:** Evolu → Filesystem sync working (processes existing rows, subscribes to changes)
+- Conflict detection ready (basic hash comparison)
+- Atomic writes prevent partial file content
+- Echo prevention works (skips own ownerId)
+- 15 TypeScript modules (platform + schema + hash + watch + sync + state + write + conflicts)
+- CLI successfully starts both loops, syncs bidirectionally, persists data
 
 ---
 
@@ -148,6 +161,50 @@ Strengthening - Loop A complete, organizing power demonstrated through coherent 
 - Failure-if: Sync failures, duplicate updates, high CPU usage, or sync latency >500ms
 - Evidence: Manual testing showed all three paths work (insert, update, no-change), sync feels instant, no performance issues
 - Timeline: Immediate (tested 2026-03-01)
+
+**Status:** Completed
+
+---
+
+### 2026-03-01 - Implement Loop B (Evolu → Filesystem)
+
+**Aim:** Enable Evolu changes to apply back to filesystem with conflict detection
+
+**Claim:** Loop B using Evolu subscriptions + `_syncState` local-only table will enable bidirectional sync with conflict safety
+
+**Changes:**
+- Added `_syncState` table to schema (local-only, underscore prefix prevents sync)
+  - Tracks `lastAppliedHash` per file path
+  - Uses deterministic IDs for stable upserts
+- Created `state.ts` - State management for `_syncState` operations
+  - `getLastAppliedHash()`, `setLastAppliedHash()`, `clearLastAppliedHash()`
+- Created `write.ts` - Atomic file writes using temp-file + rename pattern
+  - Prevents partial writes, filesystem watch storms
+- Created `conflicts.ts` - Conflict detection and file creation
+  - `detectConflict()` - Compares disk hash, last applied hash, remote hash
+  - `createConflictFile()` - Creates `.conflict-{ownerId}-{timestamp}` files
+- Updated `sync.ts` - Added Loop B alongside Loop A
+  - `startSyncEvoluToFiles()` - Subscription setup, returns cleanup function
+  - `syncEvoluToFiles()` - Batch processor
+  - `syncEvoluRowToFile()` - Single file application with conflict detection
+  - Loop A now calls `setLastAppliedHash()` after mutations
+- Updated `index.ts` - Wire Loop B into lifecycle
+  - Start Loop B after Loop A
+  - Stop Loop B before Loop A on shutdown
+- Updated `watch.ts` - Ignore `.tmp-` files to prevent watch storms
+
+**Design decisions:**
+- **Local-only state:** Uses Evolu's `_` prefix convention for non-synced table
+- **Subscription model:** `loadQuery` for initial rows, `subscribeQuery` for changes
+- **Echo prevention:** Skip rows where `ownerId === myOwnerId`
+- **Conflict format:** `{base}.conflict-{shortOwnerId}-{timestamp}{ext}`
+- **Atomic writes:** Temp file with random suffix + rename
+
+**Contact test:**
+- Success-if: Existing Evolu rows (different ownerId) apply to filesystem on startup, subscription fires on Evolu mutations, conflicts create separate files, no echo loops, atomic writes prevent partial content
+- Failure-if: Files not created from Evolu data, echo loops occur, conflicts silently overwrite, partial writes visible
+- Evidence: Manual testing 2026-03-01. Verified: (1) Loop B processes existing rows on startup, (2) Skips own ownerId correctly, (3) Atomic writes work, (4) Conflict detection logic tested in isolation, (5) Temp files ignored by watcher
+- Timeline: Immediate (tested same day)
 
 **Status:** Completed
 

@@ -1,12 +1,13 @@
+// Bidirectional filesystem sync with Evolu
 // Phase 0: Loop A (Filesystem → Evolu)
-// Watch filesystem changes, compute hashes, update Evolu when content differs
+// Phase 1: Loop B (Evolu → Filesystem)
 
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AppOwner, Evolu } from "@evolu/common";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./schema";
-import { syncFileToEvolu } from "./sync";
+import { startSyncEvoluToFiles, syncFileToEvolu } from "./sync";
 import { startWatching } from "./watch";
 
 const DB_PATH = join(homedir(), ".txtatelier", "txtatelier.db");
@@ -18,6 +19,7 @@ let evolu: EvoluDatabase;
 let owner: AppOwner;
 let closeDb: () => Promise<void>;
 let stopWatching: (() => void) | null = null;
+let stopSyncing: (() => void) | null = null;
 
 export const startFileSync = async (): Promise<void> => {
   console.log("[file-sync] Initializing...");
@@ -56,13 +58,22 @@ export const startFileSync = async (): Promise<void> => {
     await syncFileToEvolu(evolu, WATCH_DIR, filePath);
   });
 
+  // Start Loop B: Subscribe to Evolu and sync to filesystem
+  stopSyncing = startSyncEvoluToFiles(evolu, owner, WATCH_DIR);
+
   console.log("[file-sync] Ready");
 };
 
 export const stopFileSync = async (): Promise<void> => {
   console.log("[file-sync] Shutting down...");
 
-  // Stop watching filesystem
+  // Stop Loop B first (stop listening to Evolu)
+  if (stopSyncing) {
+    stopSyncing();
+    stopSyncing = null;
+  }
+
+  // Stop Loop A (stop watching filesystem)
   if (stopWatching) {
     stopWatching();
     stopWatching = null;

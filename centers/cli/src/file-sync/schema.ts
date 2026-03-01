@@ -1,11 +1,15 @@
-// Evolu schema definition for Phase 0: File table
-// See IMPLEMENTATION_PLAN.md Phase 0 for schema specification
+// Evolu schema definition
+// Phase 0: File table (synced)
+// Phase 1: _syncState table (local-only, not synced)
 
 import * as Evolu from "@evolu/common";
 
-// Primary key for File table
+// Primary keys
 export const FileId = Evolu.id("File");
 export type FileId = typeof FileId.Type;
+
+export const SyncStateId = Evolu.id("SyncState");
+export type SyncStateId = typeof SyncStateId.Type;
 
 // Schema definition
 export const Schema = {
@@ -24,6 +28,18 @@ export const Schema = {
     // - updatedAt: Timestamp
     // - isDeleted: SqliteBoolean
     // - ownerId: OwnerId
+  },
+
+  // Local-only table for tracking filesystem sync state
+  // Underscore prefix (_) prevents sync across devices
+  // Used by Loop B to track which hashes we've applied to disk
+  _syncState: {
+    id: SyncStateId,
+    // File path (matches file.path)
+    path: Evolu.NonEmptyString1000,
+    // Last hash we wrote to the filesystem
+    // Used to detect conflicts (local changes vs remote changes)
+    lastAppliedHash: Evolu.NonEmptyString100,
   },
 };
 
