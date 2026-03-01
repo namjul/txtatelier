@@ -1,0 +1,21 @@
+# <type>(<scope>): <subject>
+#
+# Center-Impact:
+#   Strengthened/Weakened/Created/Dissolved: [center] - [why]
+#
+# Contact:
+#   Success-if: [what confirms this worked]
+#   Failure-if: [what would show this failed]
+#
+# --- For non-trivial changes, add: ---
+# Aim: [problem being solved]
+# Claim: [what this enables]
+# Assumptions: [load-bearing beliefs]
+# Evidence: [what motivated this]
+#
+# --- Common types: ---
+# strengthen, create, dissolve, revision, simplify, refactor, chore
+#
+# --- Critical: ---
+# If you can't specify what would make this WRONG, it's mythology.
+# See COMMIT_CONVENTION.md for full documentation.
