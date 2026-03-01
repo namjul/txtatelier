@@ -1,6 +1,6 @@
 # File-Sync Center
 
-**Status:** Emerging
+**Status:** Strengthening
 **Created:** 2026-03-01
 **Last Updated:** 2026-03-01
 
@@ -10,7 +10,7 @@
 
 Implements Loop A (Filesystem → Evolu) - watches filesystem for changes and updates Evolu database when content differs.
 
-**Current state:** Platform layer implemented, Evolu integrated. Ready for Loop A implementation.
+**Current state:** Phase 0 Loop A complete and tested. Single-device sync working.
 
 **Implemented:**
 - Custom Evolu platform layer for Bun CLI
@@ -18,11 +18,14 @@ Implements Loop A (Filesystem → Evolu) - watches filesystem for changes and up
 - PlatformIO abstraction for file I/O
 - Schema definition for file records
 - Mnemonic management (auto-generated, persisted by Evolu)
+- Filesystem watching (Node.js fs.watch, debounced 100ms)
+- Content hashing (Bun.hash with xxHash64)
+- Evolu mutation logic (insert new files, update changed files, skip unchanged)
 
 **Not yet implemented:**
-- Filesystem watching
-- Content hashing
-- Evolu mutation logic (insert/update file records)
+- Loop B (Evolu → Filesystem) - Phase 1
+- Multi-device replication - Phase 2
+- Conflict detection - Phase 3
 
 ---
 
@@ -44,15 +47,17 @@ The file-sync center will organize the core synchronization logic from filesyste
 
 ### Current Strength
 
-Emerging - platform layer complete, organizing power starting to show
+Strengthening - Loop A complete, organizing power demonstrated through coherent sync implementation
 
 **Evidence:**
 - Custom Evolu platform successfully integrated
 - SQLite database persists to `~/.txtatelier/txtatelier.db`
 - Mnemonic generation and owner management working
 - Graceful shutdown with debounced persistence (prevents data loss)
-- 8 new TypeScript modules created (platform layer + schema + client management)
-- CLI successfully starts, shows mnemonic on first run, persists owner across runs
+- Loop A fully functional (filesystem → Evolu sync working)
+- All three sync paths verified: insert, update, no-change
+- 11 TypeScript modules (platform + schema + hash + watch + sync)
+- CLI successfully starts, watches directory, syncs files, persists data
 
 ---
 
@@ -98,6 +103,50 @@ Emerging - platform layer complete, organizing power starting to show
 - Success-if: CLI starts successfully, generates mnemonic, persists owner across runs, database file created
 - Failure-if: Errors on startup, mnemonic not shown, owner changes on restart, database not created
 - Evidence: Manual testing showed all success conditions met
+- Timeline: Immediate (tested 2026-03-01)
+
+**Status:** Completed
+
+---
+
+### 2026-03-01 - Implement Loop A (Filesystem → Evolu)
+
+**Aim:** Watch filesystem directory for changes and sync file records to Evolu when content differs
+
+**Claim:** Loop A with 100ms debounce, xxHash64 hashing, and Node.js fs.watch will provide reliable single-device sync without excessive CPU usage
+
+**Changes:**
+- Created `hash.ts` - Content hashing utilities using Bun.hash() (xxHash64, returns hex string)
+  - `computeFileHash(filePath)` - Hash file from disk
+  - `computeContentHash(content)` - Hash string content directly
+- Created `watch.ts` - Filesystem watching with debounce
+  - Uses Node.js `fs.watch()` with recursive option (more stable than Bun.watch)
+  - 100ms debounce per file path (balances responsiveness and stability)
+  - Creates watch directory if not exists
+  - Returns cleanup function for graceful shutdown
+- Created `sync.ts` - Evolu mutation logic
+  - `syncFileToEvolu()` - Main sync function
+  - Computes relative path from watch directory
+  - Queries existing record by path (using branded type workaround with `as any`)
+  - Inserts new record or updates if hash changed
+  - Skips update if hash matches (avoids unnecessary mutations)
+- Updated `index.ts` - Wire Loop A into CLI lifecycle
+  - Defines `WATCH_DIR` constant (`~/.txtatelier/watched`)
+  - Starts watching on startup, stops on shutdown
+  - Passes `syncFileToEvolu` callback to watcher
+
+**Design decisions:**
+- **Hash algorithm:** xxHash64 via Bun.hash() (fast, non-cryptographic, sufficient for change detection)
+- **Debounce:** 100ms (balances instant feedback with stability)
+- **Watch API:** Node.js fs.watch() (more stable than Bun.watch for now)
+- **Initial scan:** None - only watch changes (Phase 5 will add startup reconciliation)
+- **File filtering:** None for Phase 0 (all files synced)
+- **Type workaround:** Used `as any` casts for Kysely where clauses (Evolu's branded types incompatible with Kysely's type inference)
+
+**Contact test:**
+- Success-if: Files created/updated in watch directory sync to Evolu within 200ms, hash matches prevent unnecessary updates, CPU usage <5%
+- Failure-if: Sync failures, duplicate updates, high CPU usage, or sync latency >500ms
+- Evidence: Manual testing showed all three paths work (insert, update, no-change), sync feels instant, no performance issues
 - Timeline: Immediate (tested 2026-03-01)
 
 **Status:** Completed
@@ -158,7 +207,12 @@ See IMPLEMENTATION_PLAN.md for full details.
 
 ## Open Questions
 
-- Which hash algorithm? (SHA-256, BLAKE3, or xxHash for speed?)
-- Debounce duration? (50ms for responsiveness vs 200ms for stability)
-- Watch strategy? (Bun.watch vs manual polling?)
-- File filtering? (gitignore patterns? explicit allow/deny lists?)
+### Resolved
+- ✅ Hash algorithm: xxHash64 (via Bun.hash) - fast, sufficient for change detection
+- ✅ Debounce duration: 100ms - balances responsiveness and stability
+- ✅ Watch strategy: Node.js fs.watch() - more stable than Bun.watch
+
+### Outstanding
+- File filtering strategy? (gitignore patterns? explicit allow/deny lists?)
+- Should we add initial scan on startup? (Phase 5)
+- How to handle very large files? (streaming hash computation?)

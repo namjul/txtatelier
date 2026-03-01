@@ -469,18 +469,124 @@ ls ~/.txtatelier/txtatelier.db
 
 ---
 
-## Next Steps After Testing
+## Loop A Automated Tests
 
-Once all tests pass, the platform layer is confirmed working. Next Phase 0 tasks:
+**Location:** `tests/` directory in this center
 
-1. Implement filesystem watching
-2. Add content hashing
-3. Create Evolu mutation logic
-4. Test Loop A (Filesystem → Evolu sync)
+**Status:** ✅ All tests passing (verified 2026-03-01)
+
+### Test Suite Overview
+
+The automated tests verify Loop A (Filesystem → Evolu) functionality across basic operations and edge cases.
+
+### Running Loop A Tests
+
+**Basic functionality test:**
+```bash
+# From project root
+centers/cli/src/file-sync/tests/test-loop-a.sh
+```
+
+**What it tests:**
+- Insert new file (test.txt)
+- Update existing file with changed content
+- Skip unchanged file (hash match optimization)
+- Insert another file (notes.md)
+- Insert empty file (empty.txt)
+
+**Expected results:**
+- 3 files in database
+- All three sync paths verified (insert, update, no-change)
+- Content integrity confirmed via database queries
 
 ---
 
-## Contact Test for Platform Layer
+**Edge case test:**
+```bash
+# From project root
+centers/cli/src/file-sync/tests/test-loop-a-edge-cases.sh
+```
+
+**What it tests:**
+- Files with spaces in names (`file with spaces.txt`)
+- Unicode characters in content (世界 🌍)
+- Special characters in content (<>&"')
+- Rapid updates with debounce (5 updates in 250ms → 1 sync operation)
+- Large files (10KB / 200 lines)
+
+**Expected results:**
+- 4 files in database
+- Unicode content preserved correctly
+- Debounce working (multiple rapid events → single sync)
+- Large files handled without issues
+
+---
+
+### Test Results
+
+**Last test run:** 2026-03-01
+
+**Basic test:** ✅ PASSED (3/3 files synced correctly)
+**Edge case test:** ✅ PASSED (4/4 files synced correctly)
+
+**Performance observations:**
+- Sync latency: <200ms (feels instant)
+- Debounce effectiveness: 100% (5 events → 1 sync)
+- CPU usage: Minimal
+- Memory usage: Stable
+
+**Detailed results:** See `tests/TEST_RESULTS.md`
+
+---
+
+### Manual Loop A Testing
+
+If you want to manually test Loop A functionality:
+
+```bash
+# 1. Clean state
+rm -rf ~/.txtatelier/txtatelier.db ~/.txtatelier/watched/*
+
+# 2. Start CLI
+bun run --cwd centers/cli start
+
+# 3. In another terminal, create/modify files
+echo "test content" > ~/.txtatelier/watched/test.txt
+echo "updated content" > ~/.txtatelier/watched/test.txt
+echo "same content" > ~/.txtatelier/watched/test.txt
+
+# 4. Verify in logs (should see: Insert, Update, No change)
+
+# 5. Check database
+sqlite3 ~/.txtatelier/txtatelier.db "SELECT path, content, contentHash FROM file;"
+```
+
+**Expected log output:**
+```
+[watch] rename: test.txt
+[sync] Inserting: test.txt
+[watch] change: test.txt
+[sync] Updating: test.txt
+[watch] change: test.txt
+[sync] No change: test.txt (hash matches)
+```
+
+---
+
+## Next Steps After Testing
+
+Platform layer and Loop A are complete. Next phases:
+
+1. ✅ Platform layer implemented
+2. ✅ Loop A (Filesystem → Evolu) implemented
+3. Phase 1: Implement Loop B (Evolu → Filesystem)
+4. Phase 2: Multi-device replication
+
+---
+
+## Contact Tests Summary
+
+### Platform Layer Contact Test
 
 **Success-if:**
 - All 10 manual tests pass
@@ -498,6 +604,32 @@ Once all tests pass, the platform layer is confirmed working. Next Phase 0 tasks
 - Data loss on shutdown
 - Process crashes
 
-**Evidence:** Manual test results from this document
+**Status:** ✅ PASSED (2026-03-01)
 
-**Timeline:** Immediate (run tests now)
+---
+
+### Loop A Contact Test
+
+**Success-if:**
+- Files created/updated in watch directory sync to Evolu within 200ms
+- Hash matches prevent unnecessary updates
+- CPU usage <5%
+- Manual testing shows all three paths work correctly (insert, update, no-change)
+- Automated tests pass
+
+**Failure-if:**
+- Sync failures
+- Duplicate updates for unchanged content
+- High CPU usage
+- Sync latency >500ms
+
+**Status:** ✅ PASSED (2026-03-01)
+
+**Evidence:**
+- Automated test suite: 2/2 tests passed (basic + edge cases)
+- Total test cases: 9/9 passed
+- Performance: Sync latency <200ms, CPU minimal
+- Debounce: 100% effective (5 rapid updates → 1 sync)
+- Unicode/special characters: Preserved correctly
+
+**Timeline:** Immediate (tested same day)

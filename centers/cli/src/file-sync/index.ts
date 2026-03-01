@@ -6,14 +6,18 @@ import { join } from "node:path";
 import type { AppOwner, Evolu } from "@evolu/common";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./schema";
+import { syncFileToEvolu } from "./sync";
+import { startWatching } from "./watch";
 
 const DB_PATH = join(homedir(), ".txtatelier", "txtatelier.db");
+const WATCH_DIR = join(homedir(), ".txtatelier", "watched");
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
 let evolu: EvoluDatabase;
 let owner: AppOwner;
 let closeDb: () => Promise<void>;
+let stopWatching: (() => void) | null = null;
 
 export const startFileSync = async (): Promise<void> => {
   console.log("[file-sync] Initializing...");
@@ -46,19 +50,29 @@ export const startFileSync = async (): Promise<void> => {
 
   console.log(`[file-sync] Owner ID: ${owner.id}`);
 
-  // TODO Phase 0: Implement Loop A
-  // - Watch filesystem for changes
-  // - Compute content hashes
-  // - Update Evolu when content differs
+  // Start Loop A: Watch filesystem and sync to Evolu
+  console.log(`[file-sync] Watching directory: ${WATCH_DIR}`);
+  stopWatching = await startWatching(WATCH_DIR, async (filePath) => {
+    await syncFileToEvolu(evolu, WATCH_DIR, filePath);
+  });
 
   console.log("[file-sync] Ready");
 };
 
 export const stopFileSync = async (): Promise<void> => {
   console.log("[file-sync] Shutting down...");
+
+  // Stop watching filesystem
+  if (stopWatching) {
+    stopWatching();
+    stopWatching = null;
+  }
+
+  // Flush database
   if (closeDb) {
     await closeDb();
   }
+
   console.log("[file-sync] Stopped");
 };
 
