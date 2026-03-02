@@ -296,3 +296,32 @@ All core functionality verified:
 - ✅ No infinite loops or recursive conflicts
 
 **Phases 0, 1, and 3 complete. Ready to proceed to Phase 2 (multi-device replication).**
+
+---
+
+## Known Broken Tests (Phase 2 Required)
+
+### test-multi-device-sync-broken.fish
+
+**Status:** ❌ **BROKEN** - Requires Phase 2
+
+**Why it fails:**
+- Attempts real-time sync between two running CLI instances
+- Phase 0/1 has `transports: []` (no Evolu sync protocol)
+- Each CLI has separate in-memory CRDT that doesn't communicate
+- Changes stay local to each process
+
+**What it tests:**
+- Device A creates file → should appear on Device B
+- Device B creates file → should appear on Device A
+- Real-time propagation through Evolu sync
+
+**To fix:**
+- Implement Phase 2: Configure Evolu transports with WebSocket relay
+- Changes will propagate through relay server
+- Test will pass once sync protocol is working
+
+**Workarounds for testing now:**
+- Use `manual-two-devices.fish` for manual inspection
+- Use stop/restart pattern to load from shared database
+- Use direct SQLite manipulation to simulate remote changes (like conflict tests do)
