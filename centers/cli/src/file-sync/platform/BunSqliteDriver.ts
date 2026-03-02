@@ -28,7 +28,8 @@ export const createPersistentBunSqliteDriver = (
       // Fresh in-memory database
       db = new Database(":memory:", {
         strict: true,
-        safeIntegers: true,
+        // safeIntegers disabled - Evolu expects Number not BigInt for getSize()
+        safeIntegers: false,
       });
     }
 
