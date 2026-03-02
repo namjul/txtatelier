@@ -3,7 +3,7 @@
 // Loop B: Evolu → Filesystem (subscription-driven)
 
 import { join, relative } from "node:path";
-import { type AppOwner, type Evolu, sqliteTrue } from "@evolu/common";
+import { type Evolu, sqliteTrue } from "@evolu/common";
 import { createConflictFile, detectConflict } from "./conflicts";
 import { computeFileHash } from "./hash";
 import type { Schema } from "./schema";
@@ -106,7 +106,6 @@ export const syncFileToEvolu = async (
  */
 export const startSyncEvoluToFiles = (
   evolu: EvoluDatabase,
-  owner: AppOwner,
   watchDir: string,
 ): (() => void) => {
   console.log("[loop-b] Starting...");
@@ -126,7 +125,7 @@ export const startSyncEvoluToFiles = (
   // Load existing rows immediately on startup
   evolu.loadQuery(allFilesQuery).then((rows) => {
     console.log(`[loop-b] Initial load: ${rows.length} existing files`);
-    void syncEvoluToFiles(evolu, owner, watchDir, rows).then(() => {
+    void syncEvoluToFiles(evolu, watchDir, rows).then(() => {
       initialLoadComplete = true;
     });
   });
@@ -141,7 +140,7 @@ export const startSyncEvoluToFiles = (
 
     console.log("[loop-b] Change detected");
     const rows = evolu.getQueryRows(allFilesQuery);
-    void syncEvoluToFiles(evolu, owner, watchDir, rows);
+    void syncEvoluToFiles(evolu, watchDir, rows);
   });
 
   console.log("[loop-b] Subscribed");
@@ -154,17 +153,11 @@ export const startSyncEvoluToFiles = (
  */
 const syncEvoluToFiles = async (
   evolu: EvoluDatabase,
-  owner: AppOwner,
   watchDir: string,
   // biome-ignore lint/suspicious/noExplicitAny: Query rows type will be refined later
   rows: readonly any[],
 ): Promise<void> => {
   for (const row of rows) {
-    // Skip our own changes (prevent echo)
-    if (row.ownerId === owner.id) {
-      continue;
-    }
-
     const absolutePath = join(watchDir, row.path);
     await syncEvoluRowToFile(evolu, absolutePath, row);
   }
