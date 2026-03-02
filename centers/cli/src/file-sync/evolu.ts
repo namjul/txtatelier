@@ -42,9 +42,11 @@ export const createEvoluClient = async ({
 
   const evolu = createEvolu(deps)(Schema, {
     name: SimpleName.orThrow("txtatelier"),
-    // Phase 2: Enable Evolu sync via free test relay
-    // Use free.evoluhq.com for testing, or self-host a relay for production
-    transports: [{ type: "WebSocket", url: "wss://free.evoluhq.com" }],
+    // Phase 2: Evolu sync disabled due to BigInt incompatibility with Bun
+    // Error: TypeError: Invalid mix of BigInt and other type in subtraction
+    // See: https://github.com/evoluhq/evolu/issues (Evolu 7.4.1 + Bun compatibility)
+    // TODO: Re-enable when Evolu fixes Bun compatibility or switch to Node.js runtime
+    transports: [],
   });
 
   // Get owner (Evolu handles persistence internally)
