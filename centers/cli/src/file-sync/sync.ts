@@ -196,13 +196,13 @@ const syncEvoluRowToFile = async (
 
     // Check for conflicts
     if (detectConflict(diskHash, lastAppliedHash, row.contentHash)) {
-      console.log(`[loop-b] Conflict: ${row.path}`);
+      console.log(`[loop-b] Conflict detected: ${row.path}`);
       const conflictPath = await createConflictFile(
         absolutePath,
         row.content || "",
         row.ownerId,
       );
-      console.log(`[loop-b] Created conflict: ${conflictPath}`);
+      console.log(`[loop-b] Created conflict file: ${conflictPath}`);
       return;
     }
 
