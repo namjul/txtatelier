@@ -11,6 +11,9 @@ export const createPersistentBunSqliteDriver = (
   io: PlatformIO,
 ): CreateSqliteDriver => {
   return async (_name, options) => {
+    console.log("[sqlite-driver] init", {
+      memory: options?.memory ?? false,
+    });
     // 1. Load existing database or start fresh
     let existingData: Uint8Array | null = null;
     try {
