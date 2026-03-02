@@ -10,8 +10,12 @@ import type { Schema } from "./schema";
 import { startSyncEvoluToFiles, syncFileToEvolu } from "./sync";
 import { startWatching } from "./watch";
 
-const DB_PATH = join(homedir(), ".txtatelier", "txtatelier.db");
-const WATCH_DIR = join(homedir(), ".txtatelier", "watched");
+const DB_PATH =
+  process.env["TXTATELIER_DB_PATH"] ??
+  join(homedir(), ".txtatelier", "txtatelier.db");
+const WATCH_DIR =
+  process.env["TXTATELIER_WATCH_DIR"] ??
+  join(homedir(), ".txtatelier", "watched");
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -25,7 +29,7 @@ export const startFileSync = async (): Promise<void> => {
   console.log("[file-sync] Initializing...");
 
   // Create Evolu client (handles owner persistence internally)
-  const client = await createEvoluClient();
+  const client = await createEvoluClient({ dbPath: DB_PATH });
   evolu = client.evolu;
   owner = client.owner;
   closeDb = client.flush;
@@ -89,7 +93,7 @@ export const stopFileSync = async (): Promise<void> => {
 
 export const showMnemonic = async (): Promise<void> => {
   if (!owner) {
-    const client = await createEvoluClient();
+    const client = await createEvoluClient({ dbPath: DB_PATH });
     owner = client.owner;
   }
 
