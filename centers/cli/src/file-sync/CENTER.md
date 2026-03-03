@@ -447,3 +447,38 @@ See IMPLEMENTATION_PLAN.md for full details.
 - Should we add initial scan on startup? (Phase 5)
 - How to handle very large files? (streaming hash computation?)
 - Performance testing with bulk operations (>100 files)?
+
+### New Insight (2026-03-03) - Conflict Policy Tradeoff
+
+Two valid conflict policies exist, with different center-level consequences:
+
+1) **Filesystem-canonical (current implementation)**
+- Keep original file untouched on conflict
+- Write remote content to `.conflict-*` file
+- Matches project constraint: filesystem is canonical and explicit conflicts
+
+**Pros:**
+- Preserves local editor/user intent at conflict time
+- Avoids silent overwrite of in-progress local work
+- Aligns with external tools operating directly on files
+
+**Cons:**
+- Canonical filename may diverge from replicated state until manual resolution
+- Cross-device convergence on the main filename is slower
+
+2) **Evolu-on-main-file (alternative policy)**
+- Write remote content to original file
+- Move local conflicting content into `.conflict-*` file
+
+**Pros:**
+- Main file converges to replicated Evolu state immediately
+- Stronger cross-device consistency on canonical filename
+
+**Cons:**
+- Local user content gets displaced to conflict file
+- Higher surprise risk for active editing workflows
+- Conflicts with current project principle that filesystem remains canonical
+
+**Current decision:** Keep filesystem-canonical policy for now.
+
+**Follow-up question:** Should conflict policy become configurable (`filesystem-canonical` vs `evolu-priority`) in a later phase?
