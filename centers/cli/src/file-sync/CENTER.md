@@ -2,7 +2,7 @@
 
 **Status:** Strong
 **Created:** 2026-03-01
-**Last Updated:** 2026-03-01
+**Last Updated:** 2026-03-03
 
 ---
 
@@ -10,7 +10,7 @@
 
 Implements bidirectional sync between filesystem and Evolu CRDT database.
 
-**Current state:** Phase 0 + Phase 1 complete. Bidirectional sync working on single device.
+**Current state:** Phase 0 + Phase 1 + Phase 2 complete. Multi-device sync working via Evolu relay.
 
 **Implemented:**
 - **Phase 0 (Loop A: Filesystem → Evolu)**
@@ -19,20 +19,29 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
   - PlatformIO abstraction for file I/O
   - Schema definition for file records
   - Mnemonic management (auto-generated, persisted by Evolu)
+  - Mnemonic restore via TXTATELIER_MNEMONIC env var
   - Filesystem watching (Node.js fs.watch, debounced 100ms)
   - Content hashing (Bun.hash with xxHash64)
   - Evolu mutation logic (insert new files, update changed files, skip unchanged)
+  - Concurrency control (max 10 parallel file operations)
 
 - **Phase 1 (Loop B: Evolu → Filesystem)**
   - Local-only `_syncState` table for tracking applied hashes
-  - Evolu subscriptions for real-time sync
+  - Evolu subscriptions for real-time sync (500ms debounce)
   - Atomic file writes (temp + rename pattern)
   - Basic conflict detection (hash comparison)
   - Conflict file creation (`.conflict-{ownerId}-{timestamp}`)
-  - Echo prevention (skip own ownerId)
+  - Echo prevention (lastAppliedHash-based, not ownerId)
+  - Performance optimizations (early-exit on hash match, batch progress logging)
+
+- **Phase 2 (Multi-device sync)**
+  - WebSocket transport via wss://free.evoluhq.com relay
+  - BigInt compatibility fix (disabled safeIntegers for Evolu)
+  - Same-mnemonic sync (devices sharing mnemonic sync automatically)
+  - WebSocket event logging (debug connectivity)
+  - Two-stage mnemonic restore flow
 
 **Not yet implemented:**
-- Multi-device replication - Phase 2 (enable Evolu sync)
 - Deletion handling - Phase 4
 - Startup reconciliation - Phase 5
 
@@ -68,9 +77,12 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 - **Loop B fully functional:** Evolu → Filesystem sync working (processes existing rows, subscribes to changes)
 - Conflict detection ready (basic hash comparison)
 - Atomic writes prevent partial file content
-- Echo prevention works (skips own ownerId)
-- 15 TypeScript modules (platform + schema + hash + watch + sync + state + write + conflicts)
-- CLI successfully starts both loops, syncs bidirectionally, persists data
+- Echo prevention works (lastAppliedHash-based, supports same-mnemonic multi-device)
+- Multi-device sync functional (tested with two CLIs via Evolu relay)
+- Mnemonic restore working (env var + two-stage flow)
+- Performance optimizations (concurrency control, debouncing, early-exit checks)
+- 13 TypeScript modules (platform + schema + hash + watch + sync + state + write + conflicts)
+- CLI successfully starts both loops, syncs bidirectionally across devices, persists data
 
 ---
 
@@ -210,6 +222,156 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 ---
 
+### 2026-03-02 - Enable Phase 2 Multi-Device Sync
+
+**Aim:** Enable real-time sync between multiple devices through Evolu relay
+
+**Claim:** Configuring Evolu transports with WebSocket relay will enable automatic multi-device sync without manual database sharing
+
+**Changes:**
+- Configured Evolu transports with `wss://free.evoluhq.com` relay
+- Updated test-multi-device-sync.fish to test real sync instead of manual DB copy
+- Each device maintains separate database, syncs via relay
+
+**Contact test:**
+- Success-if: Two CLIs sync files via relay within 10 seconds
+- Failure-if: Files don't sync or relay connection fails
+- Timeline: Immediate (test script)
+
+**Status:** Completed → Reverted → Completed (see below)
+
+---
+
+### 2026-03-02 - Disable Phase 2 Due to Evolu/Bun Incompatibility (REVISION)
+
+**Aim:** Document and disable broken multi-device sync
+
+**Claim:** Evolu 7.4.1 has Bun runtime incompatibility causing sync protocol crashes
+
+**Changes:**
+- Disabled transports (empty array) to prevent crash
+- Documented error: `TypeError: Invalid mix of BigInt and other type in subtraction` at Protocol.js:938
+
+**Root cause:** Bun SQLite with `safeIntegers: true` returns BigInt, but Evolu's Protocol.js expects Number in getSize()
+
+**Contact test:**
+- Success-if: Evolu releases Bun-compatible version
+- Failure-if: Issue persists in future Evolu releases
+- Timeline: Monitor Evolu releases
+
+**Status:** Completed (documented failure)
+
+---
+
+### 2026-03-02 - Fix BigInt Issue and Re-Enable Phase 2
+
+**Aim:** Fix BigInt compatibility issue between Bun SQLite and Evolu
+
+**Claim:** Disabling `safeIntegers` in BunSqliteDriver will resolve Protocol.js TypeError without losing functionality
+
+**Changes:**
+- Disabled `safeIntegers` in BunSqliteDriver (changed from `true` to `false`)
+- Re-enabled Evolu transports with `wss://free.evoluhq.com`
+
+**Root cause analysis:**
+- Bun SQLite with `safeIntegers: true` → returns BigInt for integers
+- Evolu Protocol.js getSize() expects Number
+- `upper - lower` operation fails (can't mix BigInt and Number)
+
+**Contact test:**
+- Success-if: WebSocket connects, no BigInt errors in logs
+- Failure-if: TypeError persists or sync protocol fails
+- Timeline: Immediate (run CLI and check logs)
+- Evidence: Manual testing confirmed WebSocket connection successful, no errors
+
+**Status:** Completed
+
+---
+
+### 2026-03-02 - Fix Loop B Echo Prevention for Same-Owner Multi-Device
+
+**Aim:** Enable same-mnemonic multi-device sync (currently broken)
+
+**Claim:** Replacing ownerId-based echo prevention with lastAppliedHash-based approach will allow devices sharing the same mnemonic to sync correctly
+
+**Changes:**
+- Removed ownerId filter from Loop B (was skipping all rows from same owner)
+- Implemented lastAppliedHash-based echo prevention:
+  - If this device wrote the hash to Evolu → `lastAppliedHash === row.contentHash` → early-return no-op
+  - If remote device wrote → `lastAppliedHash === null` and `diskHash === null` → proceed to write
+
+**Root cause:** ownerId filter broke same-mnemonic multi-device sync. Device B would skip all rows from Device A because they shared the same owner, preventing remote writes from applying.
+
+**Contact test:**
+- Success-if: Device B writes test.txt after Device A syncs it through the relay
+- Failure-if: Files still don't appear or conflict files are created spuriously on initial load
+- Timeline: Immediate (verified by manual test)
+- Evidence: Manual testing confirmed Device B now applies files from Device A
+
+**Status:** Completed
+
+---
+
+### 2026-03-02 - Add Mnemonic Restore and WebSocket Debug Logging
+
+**Aim:** Enable device provisioning with existing mnemonic and improve relay observability
+
+**Claim:** TXTATELIER_MNEMONIC env var with two-stage restore flow will enable restoring an owner from another device's mnemonic
+
+**Changes:**
+- Added `TXTATELIER_MNEMONIC` env var support in index.ts
+- Implemented two-stage restore flow:
+  - Stage 1: Restore mnemonic (exits after persisting because Evolu's reload mechanism is browser-native)
+  - Stage 2: Start CLI with restored owner
+- Added WebSocket event logging to BunEvoluDeps (open/close/error/message/send with byte sizes)
+- Updated test-multi-device-sync.fish to verify matching owner IDs before checking file sync
+
+**Design decision:** Two-stage flow required because Evolu's `restoreMnemonic().reload()` hangs in CLI (browser-native reload mechanism)
+
+**Contact test:**
+- Success-if: Test script prints matching owner IDs and finds test.txt on Device B
+- Failure-if: Mnemonic restore exits non-zero or owner IDs differ
+- Timeline: Immediate (next test run)
+- Evidence: Manual testing confirmed matching owner IDs and successful file sync
+
+**Status:** Completed
+
+---
+
+### 2026-03-03 - Performance Optimizations (Loop B + Watch)
+
+**Aim:** Improve sync performance and reduce unnecessary disk I/O during bulk operations
+
+**Claim:** Adding subscription debouncing, concurrency control, and early-exit optimizations will prevent rapid-fire processing and reduce CPU load without sacrificing correctness
+
+**Changes:**
+- **Loop B (sync.ts):**
+  - Added 500ms subscription debounce (prevents rapid-fire processing during bulk operations)
+  - Added early-exit optimization (check `lastAppliedHash` first, skip disk I/O if already applied)
+  - Added secondary optimization (if `diskHash === row.contentHash`, update state and skip)
+  - Added batch progress logging (every 50 files for batches >50)
+- **Watcher (watch.ts):**
+  - Added concurrency control (max 10 parallel file operations)
+  - Changed from direct callback to queue-based processing
+- **Lifecycle (index.ts):**
+  - Added proper cleanup for error subscription (prevents memory leak)
+
+**Design decisions:**
+- 500ms subscription debounce balances responsiveness with stability
+- Early-exit optimization prioritizes `lastAppliedHash` check (cheapest) before disk I/O
+- Concurrency limit prevents filesystem overload during bulk changes
+- Progress logging provides visibility for large sync operations
+
+**Contact test:**
+- Success-if: Bulk operations (>50 files) show progress logs, CPU usage remains reasonable, no missed changes
+- Failure-if: Sync delays increase, CPU spikes, or changes get lost
+- Timeline: Next bulk sync test
+- Evidence: Awaiting testing with large file sets
+
+**Status:** In Progress (awaiting testing)
+
+---
+
 ## Relationships to Other Centers
 
 **Contained by:**
@@ -221,7 +383,8 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 **Uses:**
 - Evolu `@evolu/common` - CRDT storage and replication
-- Bun `bun:sqlite` - Native SQLite database (WAL mode, safeIntegers)
+- Evolu relay `wss://free.evoluhq.com` - Multi-device sync transport
+- Bun `bun:sqlite` - Native SQLite database (WAL mode, safeIntegers disabled for Evolu compat)
 - Bun file APIs - For PlatformIO (atomic writes via temp-file + rename)
 
 **Strengthened by:**
@@ -248,15 +411,21 @@ If different: Update Evolu row
 **Key principles:**
 - Filesystem is canonical (never overwrite files)
 - Deterministic (same inputs → same outputs)
-- Loop prevention (check ownerId to avoid echoes)
+- Echo prevention (lastAppliedHash-based, supports same-mnemonic multi-device)
 - Atomic operations (temp-file + rename pattern)
+- Performance-aware (early-exit optimizations, concurrency control, subscription debouncing)
+
+### Completed Phases
+
+- **Phase 0:** Loop A (Filesystem → Evolu) ✅
+- **Phase 1:** Loop B (Evolu → Filesystem) ✅
+- **Phase 2:** Multi-device replication ✅
 
 ### Future Phases
 
-- **Phase 1:** Add Loop B (Evolu → Filesystem)
-- **Phase 2:** Multi-device replication
-- **Phase 3:** Conflict detection
+- **Phase 3:** Enhanced conflict detection
 - **Phase 4:** Deletion handling
+- **Phase 5:** Startup reconciliation
 
 See IMPLEMENTATION_PLAN.md for full details.
 
@@ -266,10 +435,15 @@ See IMPLEMENTATION_PLAN.md for full details.
 
 ### Resolved
 - ✅ Hash algorithm: xxHash64 (via Bun.hash) - fast, sufficient for change detection
-- ✅ Debounce duration: 100ms - balances responsiveness and stability
+- ✅ Debounce duration: 100ms filesystem watch, 500ms subscription - balances responsiveness and stability
 - ✅ Watch strategy: Node.js fs.watch() - more stable than Bun.watch
+- ✅ Echo prevention: lastAppliedHash-based (not ownerId) - enables same-mnemonic multi-device sync
+- ✅ BigInt compatibility: Disable safeIntegers in BunSqliteDriver for Evolu Protocol.js compatibility
+- ✅ Mnemonic restore: Two-stage flow (restore + exit, then start) - Evolu reload() is browser-native
+- ✅ Concurrency control: Max 10 parallel file operations prevents filesystem overload
 
 ### Outstanding
 - File filtering strategy? (gitignore patterns? explicit allow/deny lists?)
 - Should we add initial scan on startup? (Phase 5)
 - How to handle very large files? (streaming hash computation?)
+- Performance testing with bulk operations (>100 files)?

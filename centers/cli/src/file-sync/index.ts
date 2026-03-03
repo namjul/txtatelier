@@ -25,6 +25,7 @@ let owner: AppOwner;
 let closeDb: () => Promise<void>;
 let stopWatching: (() => void) | null = null;
 let stopSyncing: (() => void) | null = null;
+let unsubscribeError: (() => void) | null = null;
 
 export const startFileSync = async (): Promise<void> => {
   console.log("[file-sync] Initializing...");
@@ -99,7 +100,8 @@ export const startFileSync = async (): Promise<void> => {
 
   console.log(`[file-sync] Owner ID: ${owner.id}`);
 
-  evolu.subscribeError(() => {
+  // Subscribe to Evolu errors
+  unsubscribeError = evolu.subscribeError(() => {
     const error = evolu.getError();
     if (error) {
       console.error("[file-sync] Evolu error:", error);
@@ -120,6 +122,12 @@ export const startFileSync = async (): Promise<void> => {
 
 export const stopFileSync = async (): Promise<void> => {
   console.log("[file-sync] Shutting down...");
+
+  // Unsubscribe from error handler
+  if (unsubscribeError) {
+    unsubscribeError();
+    unsubscribeError = null;
+  }
 
   // Stop Loop B first (stop listening to Evolu)
   if (stopSyncing) {

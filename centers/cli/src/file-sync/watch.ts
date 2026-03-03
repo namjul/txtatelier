@@ -4,6 +4,7 @@ import { watch } from "node:fs/promises";
 import { join } from "node:path";
 
 const DEBOUNCE_MS = 100;
+const MAX_CONCURRENT = 10; // Limit concurrent file operations
 
 type FileChangeCallback = (absolutePath: string) => void | Promise<void>;
 
@@ -20,6 +21,28 @@ export const startWatching = async (
   // Debounce map: path -> timeout
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+  // Concurrency control: queue and active set
+  const queue: string[] = [];
+  let activeCount = 0;
+
+  const processQueue = async () => {
+    while (queue.length > 0 && activeCount < MAX_CONCURRENT) {
+      const path = queue.shift();
+      if (!path) continue;
+
+      activeCount++;
+      try {
+        await onChange(path);
+      } catch (error) {
+        console.error(`[watch] Error processing ${path}:`, error);
+      } finally {
+        activeCount--;
+        // Process next item
+        void processQueue();
+      }
+    }
+  };
+
   const debouncedOnChange = (path: string) => {
     // Clear existing timer for this path
     const existingTimer = debounceTimers.get(path);
@@ -30,7 +53,10 @@ export const startWatching = async (
     // Set new timer
     const timer = setTimeout(() => {
       debounceTimers.delete(path);
-      void onChange(path);
+
+      // Add to queue instead of calling directly
+      queue.push(path);
+      void processQueue();
     }, DEBOUNCE_MS);
 
     debounceTimers.set(path, timer);

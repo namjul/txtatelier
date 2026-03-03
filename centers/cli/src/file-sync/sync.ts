@@ -130,6 +130,10 @@ export const startSyncEvoluToFiles = (
     });
   });
 
+  // Debounce subscription to prevent rapid-fire processing during bulk operations
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  const SUBSCRIPTION_DEBOUNCE_MS = 500;
+
   // Subscribe to future changes (fires when data changes via Evolu mutations)
   const unsubscribe = evolu.subscribeQuery(allFilesQuery)(() => {
     // Skip if initial load hasn't completed yet
@@ -138,13 +142,29 @@ export const startSyncEvoluToFiles = (
       return;
     }
 
-    console.log("[loop-b] Change detected");
-    const rows = evolu.getQueryRows(allFilesQuery);
-    void syncEvoluToFiles(evolu, watchDir, rows);
+    // Clear existing timer
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+
+    // Set new timer - only process after changes settle
+    debounceTimer = setTimeout(() => {
+      console.log("[loop-b] Change detected (debounced)");
+      const rows = evolu.getQueryRows(allFilesQuery);
+      void syncEvoluToFiles(evolu, watchDir, rows);
+      debounceTimer = null;
+    }, SUBSCRIPTION_DEBOUNCE_MS);
   });
 
   console.log("[loop-b] Subscribed");
-  return unsubscribe;
+
+  return () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    unsubscribe();
+  };
 };
 
 /**
@@ -157,9 +177,33 @@ const syncEvoluToFiles = async (
   // biome-ignore lint/suspicious/noExplicitAny: Query rows type will be refined later
   rows: readonly any[],
 ): Promise<void> => {
+  const total = rows.length;
+
+  if (total > 50) {
+    console.log(`[loop-b] Processing ${total} files...`);
+  }
+
+  let processed = 0;
+  const startTime = Date.now();
+
   for (const row of rows) {
     const absolutePath = join(watchDir, row.path);
     await syncEvoluRowToFile(evolu, absolutePath, row);
+
+    processed++;
+
+    // Log progress every 50 files for large batches
+    if (total > 50 && processed % 50 === 0) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(
+        `[loop-b] Progress: ${processed}/${total} files (${elapsed}s)`,
+      );
+    }
+  }
+
+  if (total > 50) {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[loop-b] Completed ${total} files in ${elapsed}s`);
   }
 };
 
@@ -174,16 +218,23 @@ const syncEvoluRowToFile = async (
   row: any,
 ): Promise<void> => {
   try {
+    // Get last applied state first (cheapest check)
+    const lastAppliedHash = await getLastAppliedHash(evolu, row.path);
+
+    // Early exit: if we already applied this exact hash, skip disk I/O entirely
+    if (lastAppliedHash === row.contentHash) {
+      return;
+    }
+
     // Get current disk state
     const file = Bun.file(absolutePath);
     const diskExists = await file.exists();
     const diskHash = diskExists ? await computeFileHash(absolutePath) : null;
 
-    // Get last applied state
-    const lastAppliedHash = await getLastAppliedHash(evolu, row.path);
-
-    // Optimization: Skip if already up to date
-    if (diskHash === row.contentHash && lastAppliedHash === row.contentHash) {
+    // Secondary optimization: Skip if disk matches and we just haven't recorded it yet
+    if (diskHash === row.contentHash) {
+      // Update state to prevent future checks
+      setLastAppliedHash(evolu, row.path, row.contentHash);
       return;
     }
 

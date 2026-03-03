@@ -101,7 +101,7 @@ This creates an audit trail showing:
 - Success-if: [Observable outcome]
 - Failure-if: [Observable outcome]
 - Measurement: [How we'll check]
-- Timeline: [When we'll evaluate]
+- Timeline: [When we'll evaluate - e.g., "1 week", "immediate", "after 100 uses"]
 
 **Status:** [Planned | In Progress | Completed | Abandoned]
 
@@ -202,7 +202,7 @@ without increasing complexity
 - Success-if: Response time <50ms, no instability
 - Failure-if: Time unchanged or new bugs appear
 - Measurement: Performance profiling, user feedback
-- Timeline: 1 week
+- Timeline: 1 week (then evaluate results)
 
 **Status:** Planned
 ```
@@ -223,7 +223,7 @@ Refs: centers/example-center.md
 
 ### 5. Evaluate and Update
 
-After timeline expires, update **History** section:
+When the timeline is reached (the evaluation deadline specified in the contact test), update the **History** section with actual results:
 
 **If successful:**
 
@@ -469,12 +469,21 @@ Dissolved centers in `centers/archive/<name>/` are NOT workspaces.
 1. Update intervention status to "In Progress"
 2. Link commit hash to intervention
 
-### After Evaluation
+### After Timeline Reached
 
-1. Update History section with results
-2. Update Current Description if changed
-3. Update Current Strength based on evidence
-4. Create revision commit if needed
+When the evaluation deadline arrives:
+
+1. Check contact test conditions (Success-if/Failure-if)
+2. Update History section with actual results
+3. Update Current Description if changed
+4. Update Current Strength based on evidence
+5. Create revision commit if needed
+
+**Timeline examples:**
+- Time-based: "1 week", "2 days", "1 month"
+- Event-based: "next user session", "after restart"
+- Count-based: "after 100 syncs", "after 50 production uses"
+- Immediate: "right after implementation"
 
 ---
 
