@@ -8,9 +8,11 @@
 ```bash
 ./test-loop-a.sh
 ./test-loop-a-edge-cases.sh
+./test-directional-invariants.sh
 ```
 
 Tests: Insert, Update, No-change, Empty files, Unicode, Large files
+Directional invariants: Capture does not materialize, Materialize does not mutate mirror file rows
 
 ### Loop B (Evolu → Filesystem)
 
