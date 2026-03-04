@@ -187,6 +187,9 @@ Rationale:
 - Filesystem edit -> CLI -> Evolu -> PWA refresh.
 - Dirty-draft conflict -> explicit resolution path.
 - Restore from mnemonic -> expected rows visible after sync.
+- Verification protocol and preflight script live in:
+  - `centers/pwa/PHASE_6_5_VERIFICATION.md`
+  - `centers/pwa/tests/phase-6-5-preflight.sh`
 
 ### 6.6 Mnemonic Settings and Owner Actions
 
