@@ -45,6 +45,53 @@ Data flow:
 
 ---
 
+## Design Orientation (Reference Pattern)
+
+Use the referenced page as a visual direction for the first PWA UI language.
+
+Extracted patterns to preserve:
+
+- Minimal, text-first interface with almost no decorative chrome.
+- Monospace-led typography with strong editorial hierarchy (bold identity, plain body copy).
+- Quiet neutral canvas (light gray background), near-black text, sparse blue underlined links.
+- High whitespace density and readable line length over compact information packing.
+- Structural clarity through alignment and spacing instead of cards, borders, or shadows.
+- Header split into identity block (left) and compact action list (right), then long-form content below.
+
+Translate these into implementation rules:
+
+- Prefer a monospace primary type scale for both navigation and body text.
+- Keep composition narrow and left-anchored inside a centered max-width container.
+- Use simple primitives: headings, plain lists, links, textarea/editor surface, status lines.
+- Avoid heavy component styling (rounded cards, gradients, elevated panels, icon-heavy controls).
+- Keep interaction feedback textual (`saving`, `saved`, `conflict detected`) rather than ornamental.
+- Preserve mobile readability by collapsing the split header into a single vertical flow.
+
+Initial visual tokens:
+
+- Background: warm/light neutral gray.
+- Foreground text: near-black.
+- Link color: classic hyperlink blue with underline.
+- Spacing rhythm: generous vertical gaps between content groups.
+- Motion: minimal; only subtle state transitions where they improve clarity.
+
+Theme support (daisyUI):
+
+- Ship both light and dark themes from the start using daisyUI theme switching.
+- Keep the same text-first, low-chrome language across both themes.
+- Light theme follows the reference pattern (neutral gray canvas, near-black text, blue links).
+- Dark theme mirrors contrast and restraint (deep neutral background, off-white text, accessible link blue).
+- Default theme should reflect system preference (`prefers-color-scheme`).
+- If a manual toggle is added, it should be an explicit override of system preference.
+- Ensure conflict, save-state, and navigation affordances remain equally legible in both themes.
+
+Design boundary:
+
+- This direction governs visual language, not data architecture.
+- Evolu-only writes, conflict explicitness, and CLI filesystem boundary remain non-negotiable.
+
+---
+
 ## Editing State Model
 
 Per active file, keep:
