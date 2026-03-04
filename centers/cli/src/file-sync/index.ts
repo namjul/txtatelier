@@ -9,7 +9,7 @@ import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./schema";
-import { captureChange, startStateMaterialization } from "./sync";
+import { captureChange, startStateMaterialization } from "./sync/index";
 import { startWatching } from "./watch";
 
 type EvoluDatabase = Evolu<typeof Schema>;
