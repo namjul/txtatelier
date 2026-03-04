@@ -85,7 +85,12 @@ export const startWatching = async (
   };
 
   const watcher = watch(watchDir, {
-    ignoreInitial: false,
+    // Do not emit synthetic "add" events for files already present at startup.
+    // Initial snapshot handling belongs to explicit startup reconciliation
+    // (Phase 5), not to watcher side effects. This avoids a boot-time race where
+    // capture (filesystem -> Evolu) and materialization (Evolu -> filesystem)
+    // both try to act on the same pre-existing files.
+    ignoreInitial: true,
     awaitWriteFinish: {
       stabilityThreshold: DEBOUNCE_MS,
       pollInterval: 25,
