@@ -2,10 +2,11 @@
 // Phase 0: Loop A (Filesystem → Evolu)
 // Phase 1: Loop B (Evolu → Filesystem)
 
-import type { AppOwner, Evolu } from "@evolu/common";
+import type { AppOwner, Evolu, Result } from "@evolu/common";
 import { tryAsync } from "@evolu/common";
 import { env } from "../env";
 import { logger } from "../logger";
+import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./schema";
 import { startSyncEvoluToFiles, syncFileToEvolu } from "./sync";
@@ -15,7 +16,7 @@ type EvoluDatabase = Evolu<typeof Schema>;
 
 let evolu: EvoluDatabase;
 let owner: AppOwner;
-let closeDb: () => Promise<void>;
+let closeDb: () => Promise<Result<void, FlushError>>;
 let stopWatching: (() => void) | null = null;
 let stopSyncing: (() => void) | null = null;
 let unsubscribeError: (() => void) | null = null;
@@ -43,10 +44,17 @@ export const startFileSync = async (): Promise<void> => {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       logger.log("[file-sync] Flushing database...");
 
-      await closeDb();
-      logger.log("[file-sync] Mnemonic restore persisted");
+      const flushResult = await closeDb();
+      if (!flushResult.ok) {
+        logger.error(
+          "[file-sync] Failed to flush restored mnemonic:",
+          flushResult.error,
+        );
+      } else {
+        logger.log("[file-sync] Mnemonic restore persisted");
+      }
       logger.log("[file-sync] Restart required to activate restored owner");
-      process.exit(0);
+      process.exit(flushResult.ok ? 0 : 1);
     } else {
       logger.warn(
         "[file-sync] Failed to restore mnemonic, using generated owner:",
@@ -120,7 +128,10 @@ export const stopFileSync = async (): Promise<void> => {
 
   // Flush database
   if (closeDb) {
-    await closeDb();
+    const flushResult = await closeDb();
+    if (!flushResult.ok) {
+      logger.error("[file-sync] Failed to flush database:", flushResult.error);
+    }
   }
 
   logger.log("[file-sync] Stopped");

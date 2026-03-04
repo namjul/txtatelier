@@ -4,9 +4,14 @@ import {
   type AppOwner,
   createEvolu,
   type Evolu,
+  err,
+  ok,
+  type Result,
   SimpleName,
+  tryAsync,
 } from "@evolu/common";
 import { logger } from "../logger";
+import type { FlushError } from "./errors";
 import { Schema } from "./schema";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -18,7 +23,7 @@ import { createBunPlatformIO } from "./platform/PlatformIO";
 // (Evolu doesn't properly dispose WebSocket connections in 7.4.1)
 let _cached: {
   evolu: EvoluDatabase;
-  flush: () => Promise<void>;
+  flush: () => Promise<Result<void, FlushError>>;
   owner: AppOwner;
 } | null = null;
 
@@ -39,6 +44,17 @@ export const createEvoluClient = async ({
   await fs.mkdir(dirname(dbPath), { recursive: true });
 
   const io = createBunPlatformIO(dbPath);
+  const readPreflightResult = await io.readFile();
+  if (!readPreflightResult.ok) {
+    logger.error(
+      "[txtatelier] Database preflight read failed:",
+      readPreflightResult.error,
+    );
+    throw new Error("Database preflight read failed", {
+      cause: readPreflightResult.error,
+    });
+  }
+
   const deps = createBunEvoluDeps(io);
 
   const evolu = createEvolu(deps)(Schema, {
@@ -51,13 +67,29 @@ export const createEvoluClient = async ({
   const owner = await evolu.appOwner;
 
   // Flush function - for now, just export and write the database
-  const flush = async (): Promise<void> => {
-    try {
-      const data = await evolu.exportDatabase();
-      await io.writeFile(data);
-    } catch (e) {
-      logger.error("[txtatelier] Failed to flush database:", e);
+  const flush = async (): Promise<Result<void, FlushError>> => {
+    const exportResult = await tryAsync(
+      () => evolu.exportDatabase(),
+      (cause): FlushError => ({
+        type: "DbExportFailed",
+        cause,
+      }),
+    );
+
+    if (!exportResult.ok) {
+      return err(exportResult.error);
     }
+
+    const writeResult = await io.writeFile(exportResult.value);
+    if (!writeResult.ok) {
+      return err({
+        type: "DbFlushWriteFailed",
+        dbPath,
+        cause: writeResult.error,
+      });
+    }
+
+    return ok();
   };
 
   _cached = { evolu, flush, owner };
@@ -67,7 +99,10 @@ export const createEvoluClient = async ({
 
 export const resetEvolu = async (dbPath: string) => {
   if (_cached) {
-    await _cached.flush();
+    const flushResult = await _cached.flush();
+    if (!flushResult.ok) {
+      logger.error("[txtatelier] Failed to flush database:", flushResult.error);
+    }
   }
   _cached = null;
   // This will generate a new owner on next createEvoluClient call

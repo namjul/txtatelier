@@ -16,12 +16,14 @@ export const createPersistentBunSqliteDriver = (
       memory: options?.memory ?? false,
     });
     // 1. Load existing database or start fresh
-    let existingData: Uint8Array | null = null;
-    try {
-      existingData = await io.readFile();
-    } catch {
-      // No existing database — start fresh
+    const readResult = await io.readFile();
+    if (!readResult.ok) {
+      logger.error("[sqlite-driver] Failed to read database", readResult.error);
+      throw new Error("Failed to read sqlite database", {
+        cause: readResult.error,
+      });
     }
+    const existingData = readResult.value;
 
     // 2. Create in-memory database
     let db: Database;
@@ -50,9 +52,15 @@ export const createPersistentBunSqliteDriver = (
     const saveToDisk = (): void => {
       if (isDisposed || isFlushed) return;
       const data = db.serialize();
-      io.writeFile(data).catch((e) => {
-        logger.error("[txtatelier] ERROR: Failed to save database", e);
-      });
+      void (async () => {
+        const writeResult = await io.writeFile(data);
+        if (!writeResult.ok) {
+          logger.error(
+            "[txtatelier] ERROR: Failed to save database",
+            writeResult.error,
+          );
+        }
+      })();
     };
 
     const scheduleSave = () => {
@@ -82,10 +90,12 @@ export const createPersistentBunSqliteDriver = (
       }
       isFlushed = true; // Seal before IO — prevents new saves from arming
       const data = db.serialize();
-      try {
-        await io.writeFile(data);
-      } catch (e) {
-        logger.error("[txtatelier] ERROR: Failed to save database", e);
+      const writeResult = await io.writeFile(data);
+      if (!writeResult.ok) {
+        logger.error(
+          "[txtatelier] ERROR: Failed to save database",
+          writeResult.error,
+        );
       }
     };
 
@@ -126,9 +136,15 @@ export const createPersistentBunSqliteDriver = (
         if (!isFlushed) {
           // Export before closing DB, then write asynchronously
           const data = db.serialize();
-          io.writeFile(data).catch((e) => {
-            logger.error("[txtatelier] ERROR: Failed to save database", e);
-          });
+          void (async () => {
+            const writeResult = await io.writeFile(data);
+            if (!writeResult.ok) {
+              logger.error(
+                "[txtatelier] ERROR: Failed to save database",
+                writeResult.error,
+              );
+            }
+          })();
         }
         db.close(false);
       },
