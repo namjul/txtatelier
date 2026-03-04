@@ -13,7 +13,7 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
 **Current state:** Phase 0 + Phase 1 + Phase 2 complete. Multi-device sync working via Evolu relay.
 
 **Implemented:**
-- **Phase 0 (Loop A: Filesystem → Evolu)**
+- **Phase 0 (Change Capture: Filesystem → Evolu)**
   - Custom Evolu platform layer for Bun CLI
   - SQLite driver with debounced persistence (5 sec delay)
   - PlatformIO abstraction for file I/O
@@ -25,13 +25,13 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
   - Evolu mutation logic (insert new files, update changed files, skip unchanged)
   - Concurrency control (max 10 parallel file operations)
 
-- **Phase 1 (Loop B: Evolu → Filesystem)**
+- **Phase 1 (State Materialization: Evolu → Filesystem)**
   - Local-only `_syncState` table for tracking applied hashes
   - Evolu subscriptions for real-time sync (500ms debounce)
   - Atomic file writes (temp + rename pattern)
   - Basic conflict detection (hash comparison)
   - Conflict file creation (`.conflict-{ownerId}-{timestamp}`)
-  - Conflict-file propagation fallback (direct Loop A sync after conflict creation)
+  - Conflict-file propagation fallback (direct Change Capture sync after conflict creation)
   - Echo prevention (lastAppliedHash-based, not ownerId)
   - Performance optimizations (early-exit on hash match, batch progress logging)
 
@@ -52,7 +52,7 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
 
 ### Hypothesis
 
-The file-sync center will organize the core synchronization logic from filesystem to Evolu, implementing Loop A from the architecture.
+The file-sync center will organize the core synchronization logic from filesystem to Evolu, implementing Change Capture from the architecture.
 
 **This center:**
 - Watches filesystem for changes (debounced, 50-200ms)
@@ -61,7 +61,7 @@ The file-sync center will organize the core synchronization logic from filesyste
 - Respects "filesystem is canonical" principle
 
 **Contact test for "will this become a center?"**
-- Success-if: All Loop A logic lives here, other modules depend on it, removing it breaks sync
+- Success-if: All Change Capture logic lives here, other modules depend on it, removing it breaks sync
 - Failure-if: Logic spreads across multiple locations, or is trivial wrapper around libraries
 
 ### Current Strength
@@ -74,8 +74,8 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 - Local-only `_syncState` table working (Evolu's underscore convention)
 - Mnemonic generation and owner management working
 - Graceful shutdown with debounced persistence (prevents data loss)
-- **Loop A fully functional:** Filesystem → Evolu sync working (insert, update, no-change)
-- **Loop B fully functional:** Evolu → Filesystem sync working (processes existing rows, subscribes to changes)
+- **Change Capture fully functional:** Filesystem → Evolu sync working (insert, update, no-change)
+- **State Materialization fully functional:** Evolu → Filesystem sync working (processes existing rows, subscribes to changes)
 - Conflict detection ready (basic hash comparison)
 - Atomic writes prevent partial file content
 - Echo prevention works (lastAppliedHash-based, supports same-mnemonic multi-device)
@@ -83,7 +83,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 - Mnemonic restore working (env var + two-stage flow)
 - Performance optimizations (concurrency control, debouncing, early-exit checks)
 - 13 TypeScript modules (platform + schema + hash + watch + sync + state + write + conflicts)
-- CLI successfully starts both loops, syncs bidirectionally across devices, persists data
+- CLI successfully starts both engines, syncs bidirectionally across devices, persists data
 
 ---
 
@@ -135,11 +135,11 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 ---
 
-### 2026-03-01 - Implement Loop A (Filesystem → Evolu)
+### 2026-03-01 - Implement Change Capture (Filesystem → Evolu)
 
 **Aim:** Watch filesystem directory for changes and sync file records to Evolu when content differs
 
-**Claim:** Loop A with 100ms debounce, xxHash64 hashing, and Node.js fs.watch will provide reliable single-device sync without excessive CPU usage
+**Claim:** Change Capture with 100ms debounce, xxHash64 hashing, and Node.js fs.watch will provide reliable single-device sync without excessive CPU usage
 
 **Changes:**
 - Created `hash.ts` - Content hashing utilities using Bun.hash() (xxHash64, returns hex string)
@@ -156,7 +156,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
   - Queries existing record by path (using branded type workaround with `as any`)
   - Inserts new record or updates if hash changed
   - Skips update if hash matches (avoids unnecessary mutations)
-- Updated `index.ts` - Wire Loop A into CLI lifecycle
+- Updated `index.ts` - Wire Change Capture into CLI lifecycle
   - Defines `WATCH_DIR` constant (`~/.txtatelier/watched`)
   - Starts watching on startup, stops on shutdown
   - Passes `syncFileToEvolu` callback to watcher
@@ -179,11 +179,11 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 ---
 
-### 2026-03-01 - Implement Loop B (Evolu → Filesystem)
+### 2026-03-01 - Implement State Materialization (Evolu → Filesystem)
 
 **Aim:** Enable Evolu changes to apply back to filesystem with conflict detection
 
-**Claim:** Loop B using Evolu subscriptions + `_syncState` local-only table will enable bidirectional sync with conflict safety
+**Claim:** State Materialization using Evolu subscriptions + `_syncState` local-only table will enable bidirectional sync with conflict safety
 
 **Changes:**
 - Added `_syncState` table to schema (local-only, underscore prefix prevents sync)
@@ -196,14 +196,14 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 - Created `conflicts.ts` - Conflict detection and file creation
   - `detectConflict()` - Compares disk hash, last applied hash, remote hash
   - `createConflictFile()` - Creates `.conflict-{ownerId}-{timestamp}` files
-- Updated `sync.ts` - Added Loop B alongside Loop A
+- Updated `sync.ts` - Added State Materialization alongside Change Capture
   - `startSyncEvoluToFiles()` - Subscription setup, returns cleanup function
   - `syncEvoluToFiles()` - Batch processor
   - `syncEvoluRowToFile()` - Single file application with conflict detection
-  - Loop A now calls `setLastAppliedHash()` after mutations
-- Updated `index.ts` - Wire Loop B into lifecycle
-  - Start Loop B after Loop A
-  - Stop Loop B before Loop A on shutdown
+  - Change Capture now calls `setLastAppliedHash()` after mutations
+- Updated `index.ts` - Wire State Materialization into lifecycle
+  - Start State Materialization after Change Capture
+  - Stop State Materialization before Change Capture on shutdown
 - Updated `watch.ts` - Ignore `.tmp-` files to prevent watch storms
 
 **Design decisions:**
@@ -216,7 +216,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 **Contact test:**
 - Success-if: Existing Evolu rows (different ownerId) apply to filesystem on startup, subscription fires on Evolu mutations, conflicts create separate files, no echo loops, atomic writes prevent partial content
 - Failure-if: Files not created from Evolu data, echo loops occur, conflicts silently overwrite, partial writes visible
-- Evidence: Manual testing 2026-03-01. Verified: (1) Loop B processes existing rows on startup, (2) Skips own ownerId correctly, (3) Atomic writes work, (4) Conflict detection logic tested in isolation, (5) Temp files ignored by watcher
+- Evidence: Manual testing 2026-03-01. Verified: (1) State Materialization processes existing rows on startup, (2) Skips own ownerId correctly, (3) Atomic writes work, (4) Conflict detection logic tested in isolation, (5) Temp files ignored by watcher
 - Timeline: Immediate (tested same day)
 
 **Status:** Completed
@@ -289,14 +289,14 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 ---
 
-### 2026-03-02 - Fix Loop B Echo Prevention for Same-Owner Multi-Device
+### 2026-03-02 - Fix State Materialization Echo Prevention for Same-Owner Multi-Device
 
 **Aim:** Enable same-mnemonic multi-device sync (currently broken)
 
 **Claim:** Replacing ownerId-based echo prevention with lastAppliedHash-based approach will allow devices sharing the same mnemonic to sync correctly
 
 **Changes:**
-- Removed ownerId filter from Loop B (was skipping all rows from same owner)
+- Removed ownerId filter from State Materialization (was skipping all rows from same owner)
 - Implemented lastAppliedHash-based echo prevention:
   - If this device wrote the hash to Evolu → `lastAppliedHash === row.contentHash` → early-return no-op
   - If remote device wrote → `lastAppliedHash === null` and `diskHash === null` → proceed to write
@@ -339,14 +339,14 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 ---
 
-### 2026-03-03 - Performance Optimizations (Loop B + Watch)
+### 2026-03-03 - Performance Optimizations (State Materialization + Watch)
 
 **Aim:** Improve sync performance and reduce unnecessary disk I/O during bulk operations
 
 **Claim:** Adding subscription debouncing, concurrency control, and early-exit optimizations will prevent rapid-fire processing and reduce CPU load without sacrificing correctness
 
 **Changes:**
-- **Loop B (sync.ts):**
+- **State Materialization (sync.ts):**
   - Added 500ms subscription debounce (prevents rapid-fire processing during bulk operations)
   - Added early-exit optimization (check `lastAppliedHash` first, skip disk I/O if already applied)
   - Added secondary optimization (if `diskHash === row.contentHash`, update state and skip)
@@ -380,7 +380,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 **Will be used by:**
 - CLI commands - trigger sync operations
-- evolu-sync center (Phase 1) - coordinate with Loop B
+- evolu-sync center (Phase 1) - coordinate with State Materialization
 
 **Uses:**
 - Evolu `@evolu/common` - CRDT storage and replication
@@ -395,7 +395,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 ## Architecture Notes
 
-### Phase 0: Loop A (Filesystem → Evolu)
+### Phase 0: Change Capture (Filesystem → Evolu)
 
 ```
 Filesystem change detected
@@ -418,8 +418,8 @@ If different: Update Evolu row
 
 ### Completed Phases
 
-- **Phase 0:** Loop A (Filesystem → Evolu) ✅
-- **Phase 1:** Loop B (Evolu → Filesystem) ✅
+- **Phase 0:** Change Capture (Filesystem → Evolu) ✅
+- **Phase 1:** State Materialization (Evolu → Filesystem) ✅
 - **Phase 2:** Multi-device replication ✅
 
 ### Future Phases
@@ -442,7 +442,7 @@ See IMPLEMENTATION_PLAN.md for full details.
 - ✅ BigInt compatibility: Disable safeIntegers in BunSqliteDriver for Evolu Protocol.js compatibility
 - ✅ Mnemonic restore: Two-stage flow (restore + exit, then start) - Evolu reload() is browser-native
 - ✅ Concurrency control: Max 10 parallel file operations prevents filesystem overload
-- ✅ Conflict-file propagation reliability: direct Loop A sync fallback after conflict creation
+- ✅ Conflict-file propagation reliability: direct Change Capture sync fallback after conflict creation
 
 ### Outstanding
 - File filtering strategy? (gitignore patterns? explicit allow/deny lists?)

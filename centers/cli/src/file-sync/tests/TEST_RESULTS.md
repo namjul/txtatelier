@@ -1,7 +1,7 @@
-# Loop A Test Results
+# Change Capture Test Results
 
 **Date:** 2026-03-01
-**Phase:** Phase 0 - Loop A (Filesystem → Evolu)
+**Phase:** Phase 0 - Change Capture (Filesystem → Evolu)
 
 ## Test Suite 1: Basic Functionality
 
@@ -70,15 +70,15 @@ shared.conflict-DeviceC--1772431445484.txt (Device C change)
 **Script:** `test-conflict-file-sync-simple.fish`
 
 ### Tests Executed
-1. ✅ Create normal file via Loop A
-2. ✅ Manually create conflict file (simulating Loop B output)
-3. ✅ Verify Loop A syncs conflict file to Evolu like normal file
+1. ✅ Create normal file via Change Capture
+2. ✅ Manually create conflict file (simulating State Materialization output)
+3. ✅ Verify Change Capture syncs conflict file to Evolu like normal file
 
 ### Scenario
-Conflict files should be treated as normal files by Loop A and sync to Evolu for propagation to other devices.
+Conflict files should be treated as normal files by Change Capture and sync to Evolu for propagation to other devices.
 
 ### Results
-- **Conflict file sync:** ✅ Loop A detects and syncs conflict files
+- **Conflict file sync:** ✅ Change Capture detects and syncs conflict files
 - **Normal file behavior:** ✅ Conflict files treated identically to regular files
 - **Evolu storage:** ✅ Both normal and conflict files appear in database
 - **No special handling:** ✅ No meta-conflicts created
@@ -178,7 +178,7 @@ sqlite3 ~/.txtatelier/txtatelier.db "SELECT * FROM file;"
 
 ## Conclusion
 
-**Loop A implementation is complete and working correctly.**
+**Change Capture implementation is complete and working correctly.**
 
 All core functionality verified:
 - ✅ Filesystem watching (Node.js fs.watch, recursive)
@@ -194,12 +194,12 @@ All core functionality verified:
 
 ---
 
-# Loop B Test Results
+# State Materialization Test Results
 
 **Date:** 2026-03-01
-**Phase:** Phase 1 - Loop B (Evolu → Filesystem)
+**Phase:** Phase 1 - State Materialization (Evolu → Filesystem)
 
-## Test Suite 3: Loop B Basic Functionality
+## Test Suite 3: State Materialization Basic Functionality
 
 **Script:** `test-loop-b-manual.fish`
 
@@ -231,10 +231,10 @@ All core functionality verified:
 4. ✅ Write remote content to conflict file
 
 ### Scenario
-1. Device A creates file → Loop A syncs to Evolu
+1. Device A creates file → Change Capture syncs to Evolu
 2. Device goes offline → User modifies file locally
 3. While offline, remote device modifies same file
-4. Device comes online → Loop B detects conflict
+4. Device comes online → State Materialization detects conflict
 
 ### Results
 - **Conflict detection:** ✅ Working (diskHash ≠ lastAppliedHash AND remoteHash ≠ diskHash)
@@ -245,8 +245,8 @@ All core functionality verified:
 
 ### Example Output
 ```
-[loop-b] Conflict detected: shared-file.txt
-[loop-b] Created conflict file: /home/hobl/.txtatelier/watched/shared-file.conflict-RemoteDe-1772402637522.txt
+[materialize] Conflict detected: shared-file.txt
+[materialize] Created conflict file: /home/hobl/.txtatelier/watched/shared-file.conflict-RemoteDe-1772402637522.txt
 ```
 
 **Files:**
@@ -273,14 +273,14 @@ All core functionality verified:
    - Real multi-device sync will trigger subscriptions properly
 2. **No CRDT resolution** - Multiple rows for same path not yet handled
    - Fix: Phase 2 will add proper CRDT resolution (last-write-wins by updatedAt)
-3. **No deletion handling** - Loop B doesn't handle deleted files
+3. **No deletion handling** - State Materialization doesn't handle deleted files
    - Fix: Phase 4 will implement deletion sync
 
 ---
 
 ## Conclusion
 
-**Phase 1 (Loop B) and Phase 3 (Conflict Detection) implementations are complete and working correctly.**
+**Phase 1 (State Materialization) and Phase 3 (Conflict Detection) implementations are complete and working correctly.**
 
 All core functionality verified:
 - ✅ Evolu → Filesystem synchronization

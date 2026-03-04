@@ -1,20 +1,21 @@
-# Loop A & Loop B Tests
+# Change Capture & State Materialization Tests
 
 ## Automated Tests
 
-### Loop A (Filesystem → Evolu)
+### Change Capture (Filesystem → Evolu)
 
 **Bash:**
 ```bash
 ./test-loop-a.sh
 ./test-loop-a-edge-cases.sh
 ./test-directional-invariants.sh
+./test-conflict-artifact-callback.sh
 ```
 
 Tests: Insert, Update, No-change, Empty files, Unicode, Large files
 Directional invariants: Capture does not materialize, Materialize does not mutate mirror file rows
 
-### Loop B (Evolu → Filesystem)
+### State Materialization (Evolu → Filesystem)
 
 **Fish shell:**
 ```fish
@@ -22,16 +23,16 @@ fish test-loop-b-manual.fish
 ```
 
 **What it tests:**
-- Loop B processes existing Evolu rows on startup
+- State Materialization processes existing Evolu rows on startup
 - Echo prevention (skips own ownerId)
 - Remote files (different ownerId) are written to disk
 - `_syncState` table tracks applied hashes
 
 **How it works:**
-1. Creates database via Loop A
+1. Creates database via Change Capture
 2. Manually inserts "remote" files (different ownerId) via SQL
 3. Restarts CLI
-4. Loop B's `loadQuery` fetches existing rows
+4. State Materialization `loadQuery` fetches existing rows
 5. Files with different ownerId are written to filesystem
 6. Files with own ownerId are skipped (echo prevention)
 
@@ -63,14 +64,14 @@ VALUES (
 
 # Terminal 1: Restart CLI
 bun run start
-# Watch for: [loop-b] Initial load: 1 existing files
+# Watch for: [materialize] Initial load: 1 existing files
 
 # Terminal 2: Verify
 cat ~/.txtatelier/watched/remote.txt
 # Should show: "Hello from remote!"
 ```
 
-## Understanding Loop B Behavior
+## Understanding State Materialization Behavior
 
 **Why restart is needed for manual testing:**
 
