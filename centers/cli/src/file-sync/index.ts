@@ -9,7 +9,11 @@ import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./schema";
-import { captureChange, startStateMaterialization } from "./sync/index";
+import {
+  captureChange,
+  reconcileStartupFilesystemState,
+  startStateMaterialization,
+} from "./sync/index";
 import { startWatching } from "./watch";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -92,6 +96,10 @@ export const startFileSync = async (): Promise<void> => {
       logger.error("[file-sync] Evolu error:", error);
     }
   });
+
+  // Phase 5 startup reconciliation: reflect pre-existing filesystem files into
+  // Evolu before both loops start, now that watcher ignores initial events.
+  await reconcileStartupFilesystemState(evolu, env.watchDir);
 
   // Start Change Capture: watch filesystem and reflect into Evolu
   logger.log(`[file-sync] Watching directory: ${env.watchDir}`);

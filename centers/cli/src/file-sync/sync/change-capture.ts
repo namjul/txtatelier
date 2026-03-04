@@ -12,6 +12,7 @@ import {
 import { logger } from "../../logger";
 import type { ChangeCaptureError } from "../errors";
 import { computeFileHash } from "../hash";
+import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
 import { clearLastAppliedHash, setLastAppliedHash } from "../state";
 
@@ -29,6 +30,10 @@ export const captureChange = async (
     relativePath === "." ||
     relativePath.startsWith("../")
   ) {
+    return ok();
+  }
+
+  if (isIgnoredRelativePath(relativePath)) {
     return ok();
   }
 

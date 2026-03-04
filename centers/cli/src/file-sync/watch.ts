@@ -6,6 +6,7 @@ import { tryAsync } from "@evolu/common";
 import { watch } from "chokidar";
 import { logger } from "../logger";
 import type { WatchQueueTaskError, WatchShutdownError } from "./errors";
+import { isIgnoredRelativePath } from "./ignore";
 
 const DEBOUNCE_MS = 100;
 const MAX_CONCURRENT = 10; // Limit concurrent file operations
@@ -95,7 +96,23 @@ export const startWatching = async (
       stabilityThreshold: DEBOUNCE_MS,
       pollInterval: 25,
     },
-    ignored: (changedPath) => changedPath.includes(".tmp-"),
+    ignored: (changedPath) => {
+      const absolutePath = toAbsolutePath(changedPath);
+      const relativePath = relative(watchDir, absolutePath).replaceAll(
+        "\\",
+        "/",
+      );
+
+      if (
+        relativePath === "" ||
+        relativePath === "." ||
+        relativePath.startsWith("../")
+      ) {
+        return false;
+      }
+
+      return isIgnoredRelativePath(relativePath);
+    },
   });
 
   const handleFileEvent = (eventType: string, changedPath: string): void => {

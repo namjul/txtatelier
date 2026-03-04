@@ -13,6 +13,7 @@ import { logger } from "../../logger";
 import { createConflictFile, detectConflict } from "../conflicts";
 import type { StateMaterializationError } from "../errors";
 import { computeFileHash } from "../hash";
+import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
 import {
   clearLastAppliedHash,
@@ -95,6 +96,9 @@ const syncEvoluToFiles = async (
 ): Promise<void> => {
   const rowsByPath = new Set<string>();
   for (const row of rows) {
+    if (isIgnoredRelativePath(row.path)) {
+      continue;
+    }
     rowsByPath.add(row.path);
   }
 
@@ -126,6 +130,10 @@ const syncEvoluToFiles = async (
   const startTime = Date.now();
 
   for (const row of rows) {
+    if (isIgnoredRelativePath(row.path)) {
+      continue;
+    }
+
     const absolutePath = join(watchDir, row.path);
     const result = await syncEvoluRowToFile(evolu, absolutePath, row, options);
     if (!result.ok) {

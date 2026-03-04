@@ -111,7 +111,7 @@ Conflict condition on Loop B:
 
 ### 5.3 Ignore Internal State
 
-- `.cli-state.json` and system metadata files ignored
+- Temporary write artifacts and system metadata files ignored
 
 ---
 
