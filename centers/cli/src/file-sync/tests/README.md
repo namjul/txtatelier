@@ -10,6 +10,8 @@
 ./test-loop-a-edge-cases.sh
 ./test-directional-invariants.sh
 ./test-conflict-artifact-callback.sh
+./test-remote-delete-safe.sh
+./test-remote-delete-conflict.sh
 ```
 
 Tests: Insert, Update, No-change, Empty files, Unicode, Large files
@@ -84,12 +86,16 @@ cat ~/.txtatelier/watched/remote.txt
 - Device A uses `evolu.insert()` → Evolu syncs → Device B's subscription fires automatically
 - No restart needed!
 
+## Startup Capture Note
+
+- Watcher startup uses `ignoreInitial: true` to prevent synthetic `add` events for pre-existing files.
+- This avoids a boot race between capture and materialization when both loops start together.
+- Pre-existing filesystem-only files should be handled by explicit startup reconciliation, not by watcher side effects.
+
 ## Test Results
 
 See `TEST_RESULTS.md` for detailed results from automated tests.
 
 ## TODO
 
-- Add `test-remote-delete-safe.sh` for State Materialization safe-delete path (`diskHash == lastAppliedHash`).
-- Add `test-remote-delete-conflict.sh` for remote delete with local divergence (conflict artifact, no silent delete).
 - Remake legacy test scripts that still grep old loop tags (`[loop-a]`, `[loop-b]`) to use `[capture]` and `[materialize]`.
