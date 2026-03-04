@@ -1,7 +1,6 @@
 import { createConsole } from "@evolu/common";
-
-const enableLogging = process.env["TXTATELIER_LOGGING"] !== "0";
+import { env } from "./env";
 
 export const logger = createConsole({
-  enableLogging,
+  enableLogging: env.enableLogging,
 });
