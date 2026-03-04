@@ -13,6 +13,7 @@ import {
   Show,
 } from "solid-js";
 import { evolu } from "./evolu/client";
+import { computeContentHash } from "./evolu/contentHash";
 import { createUseEvolu, EvoluProvider } from "./evolu/evolu";
 import { type FilesRow, filesQuery } from "./evolu/files";
 
@@ -56,6 +57,7 @@ const AppShell = () => {
   const [selectedFileId, setSelectedFileId] = createSignal<
     FilesRow["id"] | null
   >(null);
+  const [localDraft, setLocalDraft] = createSignal("");
   const [status, setStatus] = createSignal<StatusState>({
     message: "ready",
     tone: "idle",
@@ -71,6 +73,14 @@ const AppShell = () => {
     }
 
     return files().find((file) => file.id === id) ?? null;
+  });
+  const draftDirty = createMemo(() => {
+    const file = selectedFile();
+    if (file == null) {
+      return false;
+    }
+
+    return localDraft() !== (file.content ?? "");
   });
 
   createEffect(() => {
@@ -128,6 +138,16 @@ const AppShell = () => {
     }
   });
 
+  createEffect(() => {
+    const file = selectedFile();
+    if (file == null) {
+      setLocalDraft("");
+      return;
+    }
+
+    setLocalDraft(file.content ?? "");
+  });
+
   const setOk = (message: string) => {
     setStatus({ message, tone: "ok" });
   };
@@ -181,6 +201,29 @@ const AppShell = () => {
     anchor.click();
     window.URL.revokeObjectURL(url);
     setOk("backup exported");
+  };
+
+  const handleSaveFile = async () => {
+    const file = selectedFile();
+    if (file == null || !draftDirty()) {
+      return;
+    }
+
+    setIdle("saving");
+    const content = localDraft();
+    const contentHash = await computeContentHash(content);
+    const result = evoluClient.update("file", {
+      id: file.id,
+      content,
+      contentHash,
+    });
+
+    if (!result.ok) {
+      setError("invalid value");
+      return;
+    }
+
+    setOk("saved");
   };
 
   return (
@@ -277,11 +320,23 @@ const AppShell = () => {
             >
               {(file) => (
                 <>
-                  <p>{file().path}</p>
+                  <div class="flex items-center justify-between gap-4">
+                    <p>{file().path}</p>
+                    <button
+                      type="button"
+                      class="rounded-none border border-black/25 px-3 py-1.5 text-xs hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/25 dark:hover:bg-white/10"
+                      disabled={!draftDirty()}
+                      onClick={() => void handleSaveFile()}
+                    >
+                      save
+                    </button>
+                  </div>
                   <textarea
                     class="min-h-64 w-full rounded-none border border-black/25 bg-transparent p-2 font-mono text-xs leading-5 dark:border-white/25"
-                    readOnly
-                    value={file().content ?? ""}
+                    value={localDraft()}
+                    onInput={(event) => {
+                      setLocalDraft(event.currentTarget.value);
+                    }}
                   />
                 </>
               )}
@@ -292,7 +347,8 @@ const AppShell = () => {
         <section class="mt-6 max-w-2xl space-y-3 text-sm leading-6">
           <h2 class="text-base font-bold">Files</h2>
           <p>
-            Read workflow baseline is active. Write flow lands in Phase 6.2.
+            Read and write baseline is active. Conflict guard lands in Phase
+            6.3.
           </p>
           <p>Current owner: {ownerId()}</p>
         </section>
