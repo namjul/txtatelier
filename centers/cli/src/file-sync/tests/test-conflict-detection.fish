@@ -75,7 +75,7 @@ sqlite3 -header -column $DB_PATH "SELECT path, substr(content, 1, 30) as content
 # Restart CLI (Loop B should detect conflict)
 echo ""
 echo "[11/12] Restarting CLI (Loop B should detect conflict)..."
-echo "Watch for: [loop-b] Conflict detected"
+echo "Watch for: [materialize] Conflict detected"
 echo ""
 timeout 10s bun run start 2>&1 | tee /tmp/conflict-restart.log &
 set CLI_PID $last_pid
@@ -160,7 +160,7 @@ end
 
 echo ""
 echo "=== Loop B Logs ==="
-grep -E "\[loop-b\].*[Cc]onflict" /tmp/conflict-restart.log; or echo "No conflict logs found"
+grep -E "\[materialize\].*[Cc]onflict" /tmp/conflict-restart.log; or echo "No materialize conflict logs found"
 
 echo ""
 if test $success -eq 1

@@ -98,7 +98,3 @@ cat ~/.txtatelier/watched/remote.txt
 ## Test Results
 
 See `TEST_RESULTS.md` for detailed results from automated tests.
-
-## TODO
-
-- Remake legacy test scripts that still grep old loop tags (`[loop-a]`, `[loop-b]`) to use `[capture]` and `[materialize]`.

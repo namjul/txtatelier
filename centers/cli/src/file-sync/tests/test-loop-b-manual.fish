@@ -76,7 +76,7 @@ sqlite3 -header -column $DB_PATH "SELECT path, substr(ownerId, 1, 20) as ownerId
 # Restart CLI (Loop B should process existing rows)
 echo ""
 echo "[9/10] Restarting CLI (Loop B should process existing rows)..."
-echo "Watch for: [loop-b] Initial load: 3 existing files"
+echo "Watch for: [materialize] Initial load: 3 existing files"
 echo ""
 timeout 10s bun run start 2>&1 | tee /tmp/loop-b-restart.log &
 set CLI_PID $last_pid
@@ -139,7 +139,7 @@ sqlite3 -header -column $DB_PATH "SELECT path, substr(lastAppliedHash, 1, 16) as
 
 echo ""
 echo "=== Loop B Log Entries ==="
-grep -E "\[loop-b\]" /tmp/loop-b-restart.log; or echo "No loop-b logs found"
+grep -E "\[materialize\]" /tmp/loop-b-restart.log; or echo "No materialize logs found"
 
 echo ""
 if test $success -eq 1
