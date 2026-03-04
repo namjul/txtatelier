@@ -1,2 +1,6 @@
-export { syncFileToEvolu } from "./sync/change-capture";
-export { startSyncEvoluToFiles } from "./sync/state-materialization";
+export {
+  captureChange,
+  startStateMaterialization,
+  startSyncEvoluToFiles,
+  syncFileToEvolu,
+} from "./sync/index";

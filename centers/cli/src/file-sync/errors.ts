@@ -26,7 +26,7 @@ export type FlushError =
       readonly cause: unknown;
     };
 
-export type SyncLoopAError =
+export type ChangeCaptureError =
   | {
       readonly type: "FileStatFailed";
       readonly absolutePath: string;
@@ -53,7 +53,7 @@ export type SyncLoopAError =
       readonly cause: unknown;
     };
 
-export type SyncLoopBError =
+export type StateMaterializationError =
   | {
       readonly type: "StateListReadFailed";
       readonly cause: unknown;
@@ -88,6 +88,9 @@ export type SyncLoopBError =
       readonly path: string;
       readonly cause: unknown;
     };
+
+export type SyncLoopAError = ChangeCaptureError;
+export type SyncLoopBError = StateMaterializationError;
 
 export type WatchQueueTaskError = {
   readonly type: "WatchQueueTaskFailed";
