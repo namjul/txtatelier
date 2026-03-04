@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_DIR="${SCRIPT_DIR}/centers/cli"
+LAST_DEVICE_FILE="/tmp/.txtatelier-last-device"
+
+print_usage() {
+  cat <<'USAGE'
+Usage:
+  ./start-device
+  ./start-device -c | --c | --continue
+  ./start-device -l | --list
+  ./start-device -d <device-name> | --device <device-name>
+
+Options:
+  -c, --c, --continue   Continue with the last used device.
+  -l, --list            List all existing devices.
+  -d, --device NAME     Run a specific existing device.
+USAGE
+}
+
+device_exists() {
+  local name="$1"
+  local home_dir="/tmp/${name}"
+  [[ -d "${home_dir}" && -f "${home_dir}/.txtatelier-device" ]]
+}
+
+list_devices() {
+  shopt -s nullglob
+  local marker
+  local found=0
+  for marker in /tmp/*/.txtatelier-device; do
+    local home_dir
+    home_dir="${marker%/.txtatelier-device}"
+    local device_name
+    device_name="${home_dir#/tmp/}"
+    printf '%s\n' "${device_name}"
+    found=1
+  done
+  shopt -u nullglob
+
+  if [[ "${found}" -eq 0 ]]; then
+    echo "No devices found."
+  fi
+}
+
+generate_device_name() {
+  while true; do
+    local candidate
+    candidate="txtatelier-device-$(date +%Y%m%d-%H%M%S)-$RANDOM"
+    if ! device_exists "${candidate}"; then
+      printf '%s\n' "${candidate}"
+      return
+    fi
+  done
+}
+
+copy_to_clipboard() {
+  local content="$1"
+
+  if command -v pbcopy >/dev/null 2>&1; then
+    if printf '%s' "${content}" | pbcopy >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+
+  if command -v wl-copy >/dev/null 2>&1; then
+    if printf '%s' "${content}" | wl-copy >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+
+  if command -v xclip >/dev/null 2>&1; then
+    if printf '%s' "${content}" | xclip -selection clipboard >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+
+  if command -v xsel >/dev/null 2>&1; then
+    if printf '%s' "${content}" | xsel --clipboard --input >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+read_from_clipboard() {
+  if command -v pbpaste >/dev/null 2>&1; then
+    if pbpaste 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  if command -v wl-paste >/dev/null 2>&1; then
+    if wl-paste --no-newline 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  if command -v xclip >/dev/null 2>&1; then
+    if xclip -selection clipboard -o 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  if command -v xsel >/dev/null 2>&1; then
+    if xsel --clipboard --output 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+clipboard_mnemonic() {
+  local raw
+  if ! raw="$(read_from_clipboard 2>/dev/null)"; then
+    return 1
+  fi
+
+  local normalized
+  normalized="$(printf '%s' "${raw}" | tr '[:upper:]' '[:lower:]' | tr '\n\r\t' '   ' | tr -s ' ' | sed 's/^ //; s/ $//')"
+
+  local word_count
+  word_count="$(printf '%s\n' "${normalized}" | awk '{ print NF }')"
+  if [[ "${word_count}" -ne 12 && "${word_count}" -ne 24 ]]; then
+    return 1
+  fi
+
+  if [[ ! "${normalized}" =~ ^[a-z]+(\ [a-z]+){11}$ && ! "${normalized}" =~ ^[a-z]+(\ [a-z]+){23}$ ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${normalized}"
+}
+
+run_device() {
+  local device_name="$1"
+  local restore_mnemonic="${2:-}"
+  local home_dir="/tmp/${device_name}"
+  local db_path="${home_dir}/txtatelier.db"
+  local watch_dir="${home_dir}/watched"
+  local first_run=0
+
+  mkdir -p "${home_dir}" "${watch_dir}"
+  touch "${home_dir}/.txtatelier-device"
+
+  if [[ ! -f "${db_path}" ]]; then
+    first_run=1
+  fi
+
+  printf '%s\n' "${device_name}" > "${LAST_DEVICE_FILE}"
+
+  echo "Device: ${device_name}"
+  echo "Home: ${home_dir}"
+  echo "DB: ${db_path}"
+  echo "Watch dir: ${watch_dir}"
+  echo
+
+  if [[ "${first_run}" -eq 1 ]]; then
+    if [[ -n "${restore_mnemonic}" ]]; then
+      output_file="$(mktemp)"
+
+      (
+        cd "${CLI_DIR}"
+        TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun run start
+      ) 2>&1 | tee "${output_file}"
+
+      if grep -Fq "[file-sync] Restart required to activate restored owner" "${output_file}"; then
+        rm -f "${output_file}"
+        echo
+        echo "Mnemonic restored. Restarting device..."
+        (
+          cd "${CLI_DIR}"
+          TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" bun run start
+        )
+        return
+      fi
+
+      rm -f "${output_file}"
+      return
+    fi
+
+    (
+      cd "${CLI_DIR}"
+      TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun run start
+    ) 2>&1 | {
+      capture_mnemonic=0
+      copied_mnemonic=0
+
+      while IFS= read -r line; do
+        printf '%s\n' "${line}"
+
+        if [[ "${line}" == "[file-sync] Your mnemonic (save this securely!):" ]]; then
+          capture_mnemonic=1
+          continue
+        fi
+
+        if [[ "${capture_mnemonic}" -eq 1 && "${copied_mnemonic}" -eq 0 ]]; then
+          if [[ "${line}" == "[file-sync]   "* ]]; then
+            mnemonic="${line#"[file-sync]   "}"
+            if copy_to_clipboard "${mnemonic}"; then
+              printf '\nMnemonic copied to clipboard.\n'
+            else
+              printf '\nMnemonic detected, but no clipboard tool found.\n'
+            fi
+            copied_mnemonic=1
+            capture_mnemonic=0
+          fi
+        fi
+      done
+    }
+
+    return
+  fi
+
+  (
+    cd "${CLI_DIR}"
+    TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" bun run start
+  )
+}
+
+mode="new"
+device_name=""
+
+while (($# > 0)); do
+  case "$1" in
+    -c|--c|--continue)
+      mode="continue"
+      shift
+      ;;
+    -l|--list)
+      mode="list"
+      shift
+      ;;
+    -d|--device)
+      if (($# < 2)); then
+        echo "Missing value for $1"
+        print_usage
+        exit 1
+      fi
+      mode="device"
+      device_name="$2"
+      shift 2
+      ;;
+    --device=*)
+      mode="device"
+      device_name="${1#--device=}"
+      shift
+      ;;
+    -h|--help)
+      print_usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      print_usage
+      exit 1
+      ;;
+  esac
+done
+
+if [[ "${mode}" == "list" ]]; then
+  list_devices | sort
+  exit 0
+fi
+
+if [[ "${mode}" == "continue" ]]; then
+  if [[ ! -f "${LAST_DEVICE_FILE}" ]]; then
+    echo "No previous device found."
+    exit 1
+  fi
+
+  device_name="$(<"${LAST_DEVICE_FILE}")"
+  if ! device_exists "${device_name}"; then
+    echo "Last device does not exist anymore: ${device_name}"
+    exit 1
+  fi
+  run_device "${device_name}"
+  exit 0
+fi
+
+if [[ "${mode}" == "device" ]]; then
+  if [[ -z "${device_name}" ]]; then
+    echo "Device name cannot be empty."
+    exit 1
+  fi
+
+  if ! device_exists "${device_name}"; then
+    echo "Device does not exist: ${device_name}"
+    exit 1
+  fi
+
+  run_device "${device_name}"
+  exit 0
+fi
+
+device_name="$(generate_device_name)"
+restore_mnemonic=""
+if clipboard_value="$(clipboard_mnemonic)"; then
+  restore_mnemonic="${clipboard_value}"
+  echo "Using mnemonic from clipboard for new device."
+fi
+run_device "${device_name}" "${restore_mnemonic}"
