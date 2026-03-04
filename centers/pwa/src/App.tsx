@@ -25,6 +25,25 @@ interface StatusState {
   readonly tone: StatusTone;
 }
 
+const createConflictArtifactPath = (
+  path: string,
+  ownerId: string,
+  timestamp: number,
+): string => {
+  const slashIndex = path.lastIndexOf("/");
+  const dir = slashIndex === -1 ? "" : path.slice(0, slashIndex + 1);
+  const fileName = slashIndex === -1 ? path : path.slice(slashIndex + 1);
+  const dotIndex = fileName.lastIndexOf(".");
+
+  if (dotIndex <= 0) {
+    return `${dir}${fileName}.conflict-${ownerId}-${timestamp}`;
+  }
+
+  const base = fileName.slice(0, dotIndex);
+  const ext = fileName.slice(dotIndex);
+  return `${dir}${base}.conflict-${ownerId}-${timestamp}${ext}`;
+};
+
 const formatTypeError = createFormatTypeError<MinLengthError | MaxLengthError>(
   (error): string => {
     switch (error.type) {
@@ -57,6 +76,16 @@ const AppShell = () => {
   const [selectedFileId, setSelectedFileId] = createSignal<
     FilesRow["id"] | null
   >(null);
+  const [editorFileId, setEditorFileId] = createSignal<FilesRow["id"] | null>(
+    null,
+  );
+  const [baseContent, setBaseContent] = createSignal("");
+  const [baseFingerprint, setBaseFingerprint] = createSignal<string | null>(
+    null,
+  );
+  const [conflictRemote, setConflictRemote] = createSignal<FilesRow | null>(
+    null,
+  );
   const [localDraft, setLocalDraft] = createSignal("");
   const [status, setStatus] = createSignal<StatusState>({
     message: "ready",
@@ -75,13 +104,13 @@ const AppShell = () => {
     return files().find((file) => file.id === id) ?? null;
   });
   const draftDirty = createMemo(() => {
-    const file = selectedFile();
-    if (file == null) {
+    if (selectedFile() == null) {
       return false;
     }
 
-    return localDraft() !== (file.content ?? "");
+    return localDraft() !== baseContent();
   });
+  const conflictActive = createMemo(() => conflictRemote() != null);
 
   createEffect(() => {
     let isActive = true;
@@ -140,12 +169,43 @@ const AppShell = () => {
 
   createEffect(() => {
     const file = selectedFile();
+
     if (file == null) {
+      setEditorFileId(null);
+      setBaseContent("");
+      setBaseFingerprint(null);
+      setConflictRemote(null);
       setLocalDraft("");
       return;
     }
 
-    setLocalDraft(file.content ?? "");
+    const currentContent = file.content ?? "";
+
+    if (editorFileId() !== file.id) {
+      setEditorFileId(file.id);
+      setBaseContent(currentContent);
+      setBaseFingerprint(file.contentHash);
+      setConflictRemote(null);
+      setLocalDraft(currentContent);
+      return;
+    }
+
+    if (file.contentHash === baseFingerprint()) {
+      return;
+    }
+
+    if (draftDirty()) {
+      if (!conflictActive()) {
+        setError("conflict detected");
+      }
+      setConflictRemote(file);
+      return;
+    }
+
+    setBaseContent(currentContent);
+    setBaseFingerprint(file.contentHash);
+    setConflictRemote(null);
+    setLocalDraft(currentContent);
   });
 
   const setOk = (message: string) => {
@@ -205,7 +265,7 @@ const AppShell = () => {
 
   const handleSaveFile = async () => {
     const file = selectedFile();
-    if (file == null || !draftDirty()) {
+    if (file == null || !draftDirty() || conflictActive()) {
       return;
     }
 
@@ -223,7 +283,63 @@ const AppShell = () => {
       return;
     }
 
+    setBaseContent(content);
+    setBaseFingerprint(contentHash);
     setOk("saved");
+  };
+
+  const handleReplaceDraftWithRemote = () => {
+    const remote = conflictRemote();
+    if (remote == null) {
+      return;
+    }
+
+    const remoteContent = remote.content ?? "";
+    setLocalDraft(remoteContent);
+    setBaseContent(remoteContent);
+    setBaseFingerprint(remote.contentHash);
+    setConflictRemote(null);
+    setOk("draft replaced with remote");
+  };
+
+  const handleSaveDraftAsConflictArtifact = async () => {
+    const file = selectedFile();
+    if (file == null || !conflictActive()) {
+      return;
+    }
+
+    const appOwnerId = owner()?.id;
+    if (appOwnerId == null) {
+      setError("owner not loaded");
+      return;
+    }
+
+    setIdle("saving conflict artifact");
+    const draft = localDraft();
+    const draftHash = await computeContentHash(draft);
+    const artifactPath = createConflictArtifactPath(
+      file.path,
+      String(appOwnerId).slice(0, 8),
+      Date.now(),
+    );
+
+    const result = evoluClient.insert("file", {
+      path: artifactPath,
+      content: draft,
+      contentHash: draftHash,
+    });
+
+    if (!result.ok) {
+      setError("could not save conflict artifact");
+      return;
+    }
+
+    const remoteContent = file.content ?? "";
+    setLocalDraft(remoteContent);
+    setBaseContent(remoteContent);
+    setBaseFingerprint(file.contentHash);
+    setConflictRemote(null);
+    setOk("conflict artifact saved");
   };
 
   return (
@@ -325,12 +441,42 @@ const AppShell = () => {
                     <button
                       type="button"
                       class="rounded-none border border-black/25 px-3 py-1.5 text-xs hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/25 dark:hover:bg-white/10"
-                      disabled={!draftDirty()}
+                      disabled={!draftDirty() || conflictActive()}
                       onClick={() => void handleSaveFile()}
                     >
                       save
                     </button>
                   </div>
+                  <Show when={conflictActive()}>
+                    <div class="space-y-2 border border-[#a32222]/40 p-3 text-xs dark:border-[#ff8f8f]/50">
+                      <p>
+                        conflict detected: remote changed while this draft is
+                        dirty
+                      </p>
+                      <p>
+                        remote owner:{" "}
+                        {String(conflictRemote()?.ownerId ?? "unknown")}
+                      </p>
+                      <div class="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          class="rounded-none border border-black/25 px-2.5 py-1 hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
+                          onClick={() =>
+                            void handleSaveDraftAsConflictArtifact()
+                          }
+                        >
+                          save draft as conflict artifact
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-none border border-black/25 px-2.5 py-1 hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
+                          onClick={handleReplaceDraftWithRemote}
+                        >
+                          replace draft with remote
+                        </button>
+                      </div>
+                    </div>
+                  </Show>
                   <textarea
                     class="min-h-64 w-full rounded-none border border-black/25 bg-transparent p-2 font-mono text-xs leading-5 dark:border-white/25"
                     value={localDraft()}
@@ -346,10 +492,7 @@ const AppShell = () => {
 
         <section class="mt-6 max-w-2xl space-y-3 text-sm leading-6">
           <h2 class="text-base font-bold">Files</h2>
-          <p>
-            Read and write baseline is active. Conflict guard lands in Phase
-            6.3.
-          </p>
+          <p>Read, write, and conflict guard baseline are active.</p>
           <p>Current owner: {ownerId()}</p>
         </section>
       </Show>
