@@ -449,6 +449,8 @@ See IMPLEMENTATION_PLAN.md for full details.
 - Should we add initial scan on startup? (Phase 5)
 - How to handle very large files? (streaming hash computation?)
 - Performance testing with bulk operations (>100 files)?
+- Add deletion integration tests for both safe-delete and divergence-conflict paths.
+- Remake remaining legacy tests that still assert old loop log tags.
 
 ### New Insight (2026-03-03) - Conflict Policy Tradeoff
 

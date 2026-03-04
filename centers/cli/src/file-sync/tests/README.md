@@ -87,3 +87,9 @@ cat ~/.txtatelier/watched/remote.txt
 ## Test Results
 
 See `TEST_RESULTS.md` for detailed results from automated tests.
+
+## TODO
+
+- Add `test-remote-delete-safe.sh` for State Materialization safe-delete path (`diskHash == lastAppliedHash`).
+- Add `test-remote-delete-conflict.sh` for remote delete with local divergence (conflict artifact, no silent delete).
+- Remake legacy test scripts that still grep old loop tags (`[loop-a]`, `[loop-b]`) to use `[capture]` and `[materialize]`.
