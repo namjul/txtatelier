@@ -100,7 +100,11 @@ export const startFileSync = async (): Promise<void> => {
   });
 
   // Start Loop B: Subscribe to Evolu and sync to filesystem
-  stopSyncing = startSyncEvoluToFiles(evolu, env.watchDir);
+  stopSyncing = startSyncEvoluToFiles(evolu, env.watchDir, {
+    onConflictArtifactCreated: async (conflictPath) => {
+      await syncFileToEvolu(evolu, env.watchDir, conflictPath);
+    },
+  });
 
   logger.log("[file-sync] Ready");
 };

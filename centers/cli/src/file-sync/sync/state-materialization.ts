@@ -21,13 +21,17 @@ import {
   setLastAppliedHash,
 } from "../state";
 import { writeFileAtomic } from "../write";
-import { syncFileToEvolu } from "./change-capture";
 
 type EvoluDatabase = Evolu<typeof Schema>;
+
+export interface StateMaterializationOptions {
+  readonly onConflictArtifactCreated?: (absolutePath: string) => Promise<void>;
+}
 
 export const startSyncEvoluToFiles = (
   evolu: EvoluDatabase,
   watchDir: string,
+  options?: StateMaterializationOptions,
 ): (() => void) => {
   logger.log("[loop-b] Starting...");
 
@@ -43,7 +47,7 @@ export const startSyncEvoluToFiles = (
 
   evolu.loadQuery(allFilesQuery).then((rows) => {
     logger.log(`[loop-b] Initial load: ${rows.length} existing files`);
-    void syncEvoluToFiles(evolu, watchDir, rows).then(() => {
+    void syncEvoluToFiles(evolu, watchDir, rows, options).then(() => {
       initialLoadComplete = true;
     });
   });
@@ -64,7 +68,7 @@ export const startSyncEvoluToFiles = (
     debounceTimer = setTimeout(() => {
       logger.log("[loop-b] Change detected (debounced)");
       const rows = evolu.getQueryRows(allFilesQuery);
-      void syncEvoluToFiles(evolu, watchDir, rows);
+      void syncEvoluToFiles(evolu, watchDir, rows, options);
       debounceTimer = null;
     }, SUBSCRIPTION_DEBOUNCE_MS);
   });
@@ -85,6 +89,7 @@ const syncEvoluToFiles = async (
   watchDir: string,
   // biome-ignore lint/suspicious/noExplicitAny: Query rows type will be refined later
   rows: readonly any[],
+  options?: StateMaterializationOptions,
 ): Promise<void> => {
   const rowsByPath = new Set<string>();
   for (const row of rows) {
@@ -120,7 +125,7 @@ const syncEvoluToFiles = async (
 
   for (const row of rows) {
     const absolutePath = join(watchDir, row.path);
-    const result = await syncEvoluRowToFile(evolu, watchDir, absolutePath, row);
+    const result = await syncEvoluRowToFile(evolu, absolutePath, row, options);
     if (!result.ok) {
       failedCount += 1;
       failedByType.set(
@@ -150,6 +155,7 @@ const syncEvoluToFiles = async (
       watchDir,
       trackedState.path,
       trackedState.lastAppliedHash,
+      options,
     );
 
     if (!deleteResult.ok) {
@@ -183,10 +189,10 @@ const syncEvoluToFiles = async (
 
 const syncEvoluRowToFile = async (
   evolu: EvoluDatabase,
-  watchDir: string,
   absolutePath: string,
   // biome-ignore lint/suspicious/noExplicitAny: Row type will be refined later
   row: any,
+  options?: StateMaterializationOptions,
 ): Promise<Result<void, SyncLoopBError>> => {
   const lastAppliedResult = await tryAsync(
     () => getLastAppliedHash(evolu, row.path),
@@ -280,17 +286,20 @@ const syncEvoluRowToFile = async (
       return err(stateUpdateResult.error);
     }
 
-    const conflictSyncResult = await syncFileToEvolu(
-      evolu,
-      watchDir,
-      conflictPath,
-    );
-    if (!conflictSyncResult.ok) {
-      return err({
+    const notifyResult = await tryAsync(
+      async () => {
+        if (options?.onConflictArtifactCreated) {
+          await options.onConflictArtifactCreated(conflictPath);
+        }
+      },
+      (cause): SyncLoopBError => ({
         type: "ConflictFileCreateFailed",
         absolutePath: conflictPath,
-        cause: conflictSyncResult.error,
-      });
+        cause,
+      }),
+    );
+    if (!notifyResult.ok) {
+      return err(notifyResult.error);
     }
 
     return ok();
@@ -327,6 +336,7 @@ const applyRemoteDeletionToFilesystem = async (
   watchDir: string,
   path: string,
   lastAppliedHash: string,
+  options?: StateMaterializationOptions,
 ): Promise<Result<void, SyncLoopBError>> => {
   const absolutePath = join(watchDir, path);
   const file = Bun.file(absolutePath);
@@ -417,17 +427,20 @@ const applyRemoteDeletionToFilesystem = async (
       return err(stateResult.error);
     }
 
-    const conflictSyncResult = await syncFileToEvolu(
-      evolu,
-      watchDir,
-      conflictResult.value,
-    );
-    if (!conflictSyncResult.ok) {
-      return err({
+    const notifyResult = await tryAsync(
+      async () => {
+        if (options?.onConflictArtifactCreated) {
+          await options.onConflictArtifactCreated(conflictResult.value);
+        }
+      },
+      (cause): SyncLoopBError => ({
         type: "ConflictFileCreateFailed",
         absolutePath: conflictResult.value,
-        cause: conflictSyncResult.error,
-      });
+        cause,
+      }),
+    );
+    if (!notifyResult.ok) {
+      return err(notifyResult.error);
     }
 
     return ok();
