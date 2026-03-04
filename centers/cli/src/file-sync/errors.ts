@@ -4,6 +4,11 @@ export type ReadDbError = {
   readonly cause: unknown;
 };
 
+export type DbDeserializeError = {
+  readonly type: "DbDeserializeFailed";
+  readonly cause: unknown;
+};
+
 export type WriteDbError = {
   readonly type: "DbWriteFailed";
   readonly dbPath: string;
@@ -74,3 +79,14 @@ export type SyncLoopBError =
       readonly path: string;
       readonly cause: unknown;
     };
+
+export type WatchQueueTaskError = {
+  readonly type: "WatchQueueTaskFailed";
+  readonly path: string;
+  readonly cause: unknown;
+};
+
+export type WatchShutdownError = {
+  readonly type: "WatchCloseFailed";
+  readonly cause: unknown;
+};

@@ -2,8 +2,10 @@
 
 import { mkdir } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
+import { tryAsync } from "@evolu/common";
 import { watch } from "chokidar";
 import { logger } from "../logger";
+import type { WatchQueueTaskError, WatchShutdownError } from "./errors";
 
 const DEBOUNCE_MS = 100;
 const MAX_CONCURRENT = 10; // Limit concurrent file operations
@@ -32,15 +34,22 @@ export const startWatching = async (
       if (!path) continue;
 
       activeCount++;
-      try {
-        await onChange(path);
-      } catch (error) {
-        logger.error(`[watch] Error processing ${path}:`, error);
-      } finally {
-        activeCount--;
-        // Process next item
-        void processQueue();
+      const result = await tryAsync(
+        () => Promise.resolve(onChange(path)),
+        (cause): WatchQueueTaskError => ({
+          type: "WatchQueueTaskFailed",
+          path,
+          cause,
+        }),
+      );
+
+      if (!result.ok) {
+        logger.error(`[watch] Error processing ${path}:`, result.error);
       }
+
+      activeCount--;
+      // Process next item
+      void processQueue();
     }
   };
 
@@ -123,9 +132,19 @@ export const startWatching = async (
     }
     debounceTimers.clear();
 
-    void watcher.close().catch((error) => {
-      logger.error("[watch] Failed to close watcher:", error);
-    });
+    void (async () => {
+      const closeResult = await tryAsync(
+        () => watcher.close(),
+        (cause): WatchShutdownError => ({
+          type: "WatchCloseFailed",
+          cause,
+        }),
+      );
+
+      if (!closeResult.ok) {
+        logger.error("[watch] Failed to close watcher:", closeResult.error);
+      }
+    })();
 
     logger.log("[watch] Stopped watching");
   };

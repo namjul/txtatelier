@@ -2,8 +2,9 @@
 // Based on the Obsidian reference implementation pattern.
 
 import { Database } from "bun:sqlite";
-import type { CreateSqliteDriver } from "@evolu/common";
+import { type CreateSqliteDriver, trySync } from "@evolu/common";
 import { logger } from "../../logger";
+import type { DbDeserializeError } from "../errors";
 import type { PlatformIO } from "./PlatformIO";
 
 const SAVE_DEBOUNCE_MS = 5_000;
@@ -29,7 +30,25 @@ export const createPersistentBunSqliteDriver = (
     let db: Database;
     if (existingData && !options?.memory) {
       // Deserialize existing data into in-memory database
-      db = Database.deserialize(existingData);
+      const deserializeResult = trySync(
+        () => Database.deserialize(existingData),
+        (cause): DbDeserializeError => ({
+          type: "DbDeserializeFailed",
+          cause,
+        }),
+      );
+
+      if (!deserializeResult.ok) {
+        logger.error(
+          "[sqlite-driver] Failed to deserialize existing database",
+          deserializeResult.error,
+        );
+        throw new Error("Failed to deserialize sqlite database", {
+          cause: deserializeResult.error,
+        });
+      }
+
+      db = deserializeResult.value;
     } else {
       // Fresh in-memory database
       db = new Database(":memory:", {
