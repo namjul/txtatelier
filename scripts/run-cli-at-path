@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <watch-path>"
+  exit 1
+fi
+
+WATCH_PATH="$1"
+
+if [[ ! -d "$WATCH_PATH" ]]; then
+  echo "Error: path does not exist or is not a directory: $WATCH_PATH"
+  exit 1
+fi
+
+ABS_WATCH_PATH="$(cd "$WATCH_PATH" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "Starting txtatelier CLI for watch directory: $ABS_WATCH_PATH"
+
+(
+  cd "$REPO_ROOT/centers/cli"
+  TXTATELIER_WATCH_DIR="$ABS_WATCH_PATH" bun run start
+)
