@@ -2,7 +2,7 @@
 // Loop A: Filesystem → Evolu (watch-driven)
 // Loop B: Evolu → Filesystem (subscription-driven)
 
-import { stat } from "node:fs/promises";
+import { stat, unlink } from "node:fs/promises";
 import { join, relative } from "node:path";
 import {
   type Evolu,
@@ -18,7 +18,12 @@ import { createConflictFile, detectConflict } from "./conflicts";
 import type { SyncLoopAError, SyncLoopBError } from "./errors";
 import { computeFileHash } from "./hash";
 import type { Schema } from "./schema";
-import { getLastAppliedHash, setLastAppliedHash } from "./state";
+import {
+  clearLastAppliedHash,
+  getLastAppliedHash,
+  getTrackedSyncState,
+  setLastAppliedHash,
+} from "./state";
 import { writeFileAtomic } from "./write";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -98,9 +103,63 @@ export const syncFileToEvolu = async (
   }
 
   if (!existsResult.value) {
-    logger.log(
-      `[loop-a] File deleted: ${relativePath} (TODO: handle deletion in Phase 4)`,
+    const existingQuery = evolu.createQuery((db) =>
+      db
+        .selectFrom("file")
+        .select(["id"])
+        // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+        .where("path", "==", relativePath as any)
+        // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+        .where("isDeleted", "is not", sqliteTrue as any),
     );
+
+    const existingResult = await tryAsync(
+      () => evolu.loadQuery(existingQuery),
+      (cause): SyncLoopAError => ({
+        type: "EvoluQueryFailed",
+        relativePath,
+        cause,
+      }),
+    );
+
+    if (!existingResult.ok) {
+      logger.error(
+        `[loop-a] Failed to query deleted path ${relativePath}:`,
+        existingResult.error,
+      );
+      return err(existingResult.error);
+    }
+
+    if (existingResult.value.length === 0) {
+      return ok();
+    }
+
+    logger.log(`[loop-a] Deleting: ${relativePath}`);
+    const deleteResult = trySync(
+      () => {
+        for (const row of existingResult.value) {
+          evolu.update("file", {
+            id: row.id,
+            isDeleted: sqliteTrue,
+          });
+        }
+        clearLastAppliedHash(evolu, relativePath);
+      },
+      (cause): SyncLoopAError => ({
+        type: "EvoluMutationFailed",
+        relativePath,
+        cause,
+      }),
+    );
+
+    if (!deleteResult.ok) {
+      logger.error(
+        `[loop-a] Failed to mark ${relativePath} as deleted:`,
+        deleteResult.error,
+      );
+      return err(deleteResult.error);
+    }
+
     return ok();
   }
 
@@ -305,6 +364,27 @@ const syncEvoluToFiles = async (
   // biome-ignore lint/suspicious/noExplicitAny: Query rows type will be refined later
   rows: readonly any[],
 ): Promise<void> => {
+  const rowsByPath = new Set<string>();
+  for (const row of rows) {
+    rowsByPath.add(row.path);
+  }
+
+  const trackedStateResult = await tryAsync(
+    () => getTrackedSyncState(evolu),
+    (cause): SyncLoopBError => ({
+      type: "StateListReadFailed",
+      cause,
+    }),
+  );
+
+  if (!trackedStateResult.ok) {
+    logger.error(
+      "[loop-b] Failed to read sync state:",
+      trackedStateResult.error,
+    );
+    return;
+  }
+
   const total = rows.length;
   const failedByType = new Map<string, number>();
   let failedCount = 0;
@@ -335,6 +415,33 @@ const syncEvoluToFiles = async (
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       logger.log(
         `[loop-b] Progress: ${processed}/${total} files (${elapsed}s)`,
+      );
+    }
+  }
+
+  for (const trackedState of trackedStateResult.value) {
+    // If a previously tracked path is no longer present in active remote rows,
+    // treat that as a remote deletion and reconcile it against local disk state.
+    if (rowsByPath.has(trackedState.path)) {
+      continue;
+    }
+
+    const deleteResult = await applyRemoteDeletionToFilesystem(
+      evolu,
+      watchDir,
+      trackedState.path,
+      trackedState.lastAppliedHash,
+    );
+
+    if (!deleteResult.ok) {
+      failedCount += 1;
+      failedByType.set(
+        deleteResult.error.type,
+        (failedByType.get(deleteResult.error.type) ?? 0) + 1,
+      );
+      logger.error(
+        `[loop-b] Failed to apply deletion for ${trackedState.path}:`,
+        deleteResult.error,
       );
     }
   }
@@ -505,4 +612,149 @@ const syncEvoluRowToFile = async (
   );
 
   return stateUpdateResult.ok ? ok() : err(stateUpdateResult.error);
+};
+
+const applyRemoteDeletionToFilesystem = async (
+  evolu: EvoluDatabase,
+  watchDir: string,
+  path: string,
+  lastAppliedHash: string,
+): Promise<Result<void, SyncLoopBError>> => {
+  const absolutePath = join(watchDir, path);
+  const file = Bun.file(absolutePath);
+
+  const existsResult = await tryAsync(
+    () => file.exists(),
+    (cause): SyncLoopBError => ({
+      type: "FileDeleteFailed",
+      absolutePath,
+      cause,
+    }),
+  );
+
+  if (!existsResult.ok) {
+    return err(existsResult.error);
+  }
+
+  if (!existsResult.value) {
+    const stateResult = trySync(
+      () => clearLastAppliedHash(evolu, path),
+      (cause): SyncLoopBError => ({
+        type: "StateWriteFailed",
+        path,
+        cause,
+      }),
+    );
+
+    return stateResult.ok ? ok() : err(stateResult.error);
+  }
+
+  const diskHashResult = await tryAsync(
+    () => computeFileHash(absolutePath),
+    (cause): SyncLoopBError => ({
+      type: "DiskHashFailed",
+      absolutePath,
+      cause,
+    }),
+  );
+
+  if (!diskHashResult.ok) {
+    return err(diskHashResult.error);
+  }
+
+  if (diskHashResult.value !== lastAppliedHash) {
+    logger.log(`[loop-b] Deletion conflict detected: ${path}`);
+
+    const localContentResult = await tryAsync(
+      () => file.text(),
+      (cause): SyncLoopBError => ({
+        type: "ConflictFileCreateFailed",
+        absolutePath,
+        cause,
+      }),
+    );
+
+    if (!localContentResult.ok) {
+      return err(localContentResult.error);
+    }
+
+    const conflictResult = await tryAsync(
+      () =>
+        createConflictFile(
+          absolutePath,
+          localContentResult.value,
+          "remote-delete",
+        ),
+      (cause): SyncLoopBError => ({
+        type: "ConflictFileCreateFailed",
+        absolutePath,
+        cause,
+      }),
+    );
+
+    if (!conflictResult.ok) {
+      return err(conflictResult.error);
+    }
+
+    const stateResult = trySync(
+      () => clearLastAppliedHash(evolu, path),
+      (cause): SyncLoopBError => ({
+        type: "StateWriteFailed",
+        path,
+        cause,
+      }),
+    );
+
+    if (!stateResult.ok) {
+      return err(stateResult.error);
+    }
+
+    const conflictSyncResult = await syncFileToEvolu(
+      evolu,
+      watchDir,
+      conflictResult.value,
+    );
+    if (!conflictSyncResult.ok) {
+      return err({
+        type: "ConflictFileCreateFailed",
+        absolutePath: conflictResult.value,
+        cause: conflictSyncResult.error,
+      });
+    }
+
+    return ok();
+  }
+
+  const deleteResult = await tryAsync(
+    () => unlink(absolutePath),
+    (cause): SyncLoopBError => ({
+      type: "FileDeleteFailed",
+      absolutePath,
+      cause,
+    }),
+  );
+
+  if (!deleteResult.ok) {
+    const code =
+      typeof deleteResult.error.cause === "object" && deleteResult.error.cause
+        ? (deleteResult.error.cause as { code?: string }).code
+        : undefined;
+
+    if (code !== "ENOENT") {
+      return err(deleteResult.error);
+    }
+  }
+
+  logger.log(`[loop-b] Deleted: ${path}`);
+
+  const stateResult = trySync(
+    () => clearLastAppliedHash(evolu, path),
+    (cause): SyncLoopBError => ({
+      type: "StateWriteFailed",
+      path,
+      cause,
+    }),
+  );
+
+  return stateResult.ok ? ok() : err(stateResult.error);
 };

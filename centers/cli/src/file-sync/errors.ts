@@ -55,6 +55,10 @@ export type SyncLoopAError =
 
 export type SyncLoopBError =
   | {
+      readonly type: "StateListReadFailed";
+      readonly cause: unknown;
+    }
+  | {
       readonly type: "StateReadFailed";
       readonly path: string;
       readonly cause: unknown;
@@ -71,6 +75,11 @@ export type SyncLoopBError =
     }
   | {
       readonly type: "FileWriteFailed";
+      readonly absolutePath: string;
+      readonly cause: unknown;
+    }
+  | {
+      readonly type: "FileDeleteFailed";
       readonly absolutePath: string;
       readonly cause: unknown;
     }

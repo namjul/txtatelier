@@ -62,3 +62,38 @@ export const clearLastAppliedHash = (
     isDeleted: sqliteTrue,
   });
 };
+
+export interface SyncStateEntry {
+  readonly path: string;
+  readonly lastAppliedHash: string;
+}
+
+export const getTrackedSyncState = async (
+  evolu: EvoluDatabase,
+): Promise<ReadonlyArray<SyncStateEntry>> => {
+  // "Tracked sync state" = paths that Loop B has previously applied to disk,
+  // together with the last applied hash. This is the local memory used to
+  // decide whether a missing remote row should delete safely or create a
+  // conflict file because local content diverged.
+  const query = evolu.createQuery((db) =>
+    db
+      .selectFrom("_syncState")
+      .select(["path", "lastAppliedHash"])
+      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+      .where("isDeleted", "is not", sqliteTrue as any),
+  );
+
+  const rows = await evolu.loadQuery(query);
+  return rows.flatMap((row) => {
+    if (row.path === null || row.lastAppliedHash === null) {
+      return [];
+    }
+
+    return [
+      {
+        path: row.path,
+        lastAppliedHash: row.lastAppliedHash,
+      },
+    ];
+  });
+};
