@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@zag-js/combobox": "^1.35.3",
+    "@zag-js/solid": "^1.35.3",
     "@evolu/common": "^7.4.0",
     "@evolu/web": "^2.4.0",
     "solid-js": "^1.9.9"

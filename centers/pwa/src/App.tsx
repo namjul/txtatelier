@@ -4,11 +4,14 @@ import {
   type MinLengthError,
   Mnemonic,
 } from "@evolu/common";
+import * as combobox from "@zag-js/combobox";
+import { normalizeProps, useMachine } from "@zag-js/solid";
 import {
   createEffect,
   createMemo,
   createResource,
   createSignal,
+  createUniqueId,
   For,
   Show,
 } from "solid-js";
@@ -24,6 +27,14 @@ interface StatusState {
   readonly message: string;
   readonly tone: StatusTone;
 }
+
+interface FileOption {
+  readonly label: string;
+  readonly value: string;
+}
+
+type InputChangeDetails = combobox.InputValueChangeDetails;
+type ValueChangeDetails = combobox.ValueChangeDetails<FileOption>;
 
 const createConflictArtifactPath = (
   path: string,
@@ -73,6 +84,7 @@ const AppShell = () => {
   const [showMnemonic, setShowMnemonic] = createSignal(false);
   const [files, setFiles] = createSignal<ReadonlyArray<FilesRow>>([]);
   const [filesLoaded, setFilesLoaded] = createSignal(false);
+  const [fileSearch, setFileSearch] = createSignal("");
   const [selectedFileId, setSelectedFileId] = createSignal<
     FilesRow["id"] | null
   >(null);
@@ -103,6 +115,66 @@ const AppShell = () => {
 
     return files().find((file) => file.id === id) ?? null;
   });
+  const fileOptions = createMemo<ReadonlyArray<FileOption>>(() => {
+    const search = fileSearch().trim().toLowerCase();
+
+    return files()
+      .filter((file) => {
+        if (search === "") {
+          return true;
+        }
+        return file.path.toLowerCase().includes(search);
+      })
+      .map((file) => ({
+        label: file.path,
+        value: String(file.id),
+      }));
+  });
+  const fileCollection = createMemo(() =>
+    combobox.collection({
+      items: fileOptions(),
+      itemToString: (item: FileOption) => item.label,
+      itemToValue: (item: FileOption) => item.value,
+    }),
+  );
+  const filePickerService = useMachine(combobox.machine, {
+    id: createUniqueId(),
+    get collection() {
+      return fileCollection();
+    },
+    openOnClick: true,
+    positioning: { placement: "bottom-start" },
+    get value() {
+      const id = selectedFileId();
+      if (id == null) {
+        return [];
+      }
+
+      return [String(id)];
+    },
+    onInputValueChange(details: InputChangeDetails) {
+      setFileSearch(details.inputValue);
+    },
+    onValueChange(details: ValueChangeDetails) {
+      const selectedValue = details.value.at(0);
+      if (!selectedValue) {
+        return;
+      }
+
+      const selected = files().find(
+        (file) => String(file.id) === selectedValue,
+      );
+      if (!selected) {
+        return;
+      }
+
+      setSelectedFileId(selected.id);
+      setFileSearch(selected.path);
+    },
+  });
+  const filePicker = createMemo(() =>
+    combobox.connect(filePickerService, normalizeProps),
+  );
   const draftDirty = createMemo(() => {
     if (selectedFile() == null) {
       return false;
@@ -343,7 +415,7 @@ const AppShell = () => {
   };
 
   return (
-    <main class="mx-auto min-h-screen max-w-4xl bg-[#f2f1ee] px-5 py-10 font-mono text-[#111111] dark:bg-[#151617] dark:text-[#efefef]">
+    <main class="min-h-screen w-full bg-[#f2f1ee] px-4 py-8 font-mono text-[#111111] sm:px-6 lg:px-8 dark:bg-[#151617] dark:text-[#efefef]">
       <header class="mb-9 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>
           <h1 class="text-2xl font-bold tracking-tight">txtatelier</h1>
@@ -383,9 +455,9 @@ const AppShell = () => {
       </p>
 
       <Show when={page() === "files"}>
-        <section class="grid gap-8 md:grid-cols-[minmax(14rem,20rem)_1fr]">
-          <div>
-            <h2 class="mb-3 text-base font-bold">Files</h2>
+        <section class="space-y-5 text-sm leading-6">
+          <div class="space-y-2">
+            <h2 class="text-base font-bold">Files</h2>
             <Show
               when={filesLoaded()}
               fallback={
@@ -402,29 +474,50 @@ const AppShell = () => {
                   </p>
                 }
               >
-                <ul class="space-y-1 text-sm">
-                  <For each={files()}>
-                    {(file) => (
-                      <li>
-                        <button
-                          type="button"
-                          class="text-left text-[#0047cc] underline hover:opacity-80 dark:text-[#6ea8ff]"
-                          data-active={selectedFileId() === file.id}
-                          onClick={() => {
-                            setSelectedFileId(file.id);
-                          }}
-                        >
-                          {file.path}
-                        </button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
+                <div
+                  {...filePicker().getRootProps()}
+                  class="relative max-w-3xl"
+                >
+                  <div class="mb-1 block text-xs">Search files</div>
+                  <div {...filePicker().getControlProps()} class="flex">
+                    <input
+                      {...filePicker().getInputProps()}
+                      class="w-full rounded-none border border-black/25 bg-transparent px-2.5 py-2 text-sm outline-none focus:border-black dark:border-white/25 dark:focus:border-white"
+                      placeholder="Type a path"
+                    />
+                    <button
+                      type="button"
+                      {...filePicker().getTriggerProps()}
+                      class="border border-l-0 border-black/25 px-3 text-xs dark:border-white/25"
+                    >
+                      open
+                    </button>
+                  </div>
+                  <div {...filePicker().getPositionerProps()} class="z-10">
+                    <Show when={fileOptions().length > 0}>
+                      <ul
+                        {...filePicker().getContentProps()}
+                        class="max-h-72 overflow-auto border border-black/25 bg-[#f2f1ee] p-1 dark:border-white/25 dark:bg-[#151617]"
+                      >
+                        <For each={fileOptions()}>
+                          {(item) => (
+                            <li
+                              {...filePicker().getItemProps({ item })}
+                              class="cursor-pointer px-2 py-1 text-sm data-[highlighted]:bg-black/10 dark:data-[highlighted]:bg-white/10"
+                            >
+                              {item.label}
+                            </li>
+                          )}
+                        </For>
+                      </ul>
+                    </Show>
+                  </div>
+                </div>
               </Show>
             </Show>
           </div>
 
-          <div class="space-y-3 text-sm leading-6">
+          <div class="space-y-3">
             <h3 class="text-base font-bold">Open File</h3>
             <Show
               when={selectedFile()}
@@ -478,7 +571,7 @@ const AppShell = () => {
                     </div>
                   </Show>
                   <textarea
-                    class="min-h-64 w-full rounded-none border border-black/25 bg-transparent p-2 font-mono text-xs leading-5 dark:border-white/25"
+                    class="min-h-[68vh] w-full rounded-none border border-black/25 bg-transparent p-2 font-mono text-xs leading-5 dark:border-white/25"
                     value={localDraft()}
                     onInput={(event) => {
                       setLocalDraft(event.currentTarget.value);
@@ -490,7 +583,7 @@ const AppShell = () => {
           </div>
         </section>
 
-        <section class="mt-6 max-w-2xl space-y-3 text-sm leading-6">
+        <section class="mt-6 space-y-3 text-sm leading-6">
           <h2 class="text-base font-bold">Files</h2>
           <p>Read, write, and conflict guard baseline are active.</p>
           <p>Current owner: {ownerId()}</p>
@@ -498,7 +591,7 @@ const AppShell = () => {
       </Show>
 
       <Show when={page() === "settings"}>
-        <section class="max-w-2xl space-y-4 text-sm leading-6">
+        <section class="space-y-4 text-sm leading-6">
           <h2 class="text-base font-bold">Mnemonic Settings</h2>
           <p>
             Mnemonic remains hidden by default. Use restore, reset, and backup
