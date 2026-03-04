@@ -33,7 +33,7 @@ export const startSyncEvoluToFiles = (
   watchDir: string,
   options?: StateMaterializationOptions,
 ): (() => void) => {
-  logger.log("[loop-b] Starting...");
+  logger.log("[materialize] Starting...");
 
   const allFilesQuery = evolu.createQuery((db) =>
     db
@@ -46,7 +46,7 @@ export const startSyncEvoluToFiles = (
   let initialLoadComplete = false;
 
   evolu.loadQuery(allFilesQuery).then((rows) => {
-    logger.log(`[loop-b] Initial load: ${rows.length} existing files`);
+    logger.log(`[materialize] Initial load: ${rows.length} existing files`);
     void syncEvoluToFiles(evolu, watchDir, rows, options).then(() => {
       initialLoadComplete = true;
     });
@@ -57,7 +57,9 @@ export const startSyncEvoluToFiles = (
 
   const unsubscribe = evolu.subscribeQuery(allFilesQuery)(() => {
     if (!initialLoadComplete) {
-      logger.log("[loop-b] Skipping subscription (initial load in progress)");
+      logger.log(
+        "[materialize] Skipping subscription (initial load in progress)",
+      );
       return;
     }
 
@@ -66,14 +68,14 @@ export const startSyncEvoluToFiles = (
     }
 
     debounceTimer = setTimeout(() => {
-      logger.log("[loop-b] Change detected (debounced)");
+      logger.log("[materialize] Change detected (debounced)");
       const rows = evolu.getQueryRows(allFilesQuery);
       void syncEvoluToFiles(evolu, watchDir, rows, options);
       debounceTimer = null;
     }, SUBSCRIPTION_DEBOUNCE_MS);
   });
 
-  logger.log("[loop-b] Subscribed");
+  logger.log("[materialize] Subscribed");
 
   return () => {
     if (debounceTimer) {
@@ -106,7 +108,7 @@ const syncEvoluToFiles = async (
 
   if (!trackedStateResult.ok) {
     logger.error(
-      "[loop-b] Failed to read sync state:",
+      "[materialize] Failed to read sync state:",
       trackedStateResult.error,
     );
     return;
@@ -117,7 +119,7 @@ const syncEvoluToFiles = async (
   let failedCount = 0;
 
   if (total > 50) {
-    logger.log(`[loop-b] Processing ${total} files...`);
+    logger.log(`[materialize] Processing ${total} files...`);
   }
 
   let processed = 0;
@@ -132,7 +134,7 @@ const syncEvoluToFiles = async (
         result.error.type,
         (failedByType.get(result.error.type) ?? 0) + 1,
       );
-      logger.error(`[loop-b] Failed to sync ${row.path}:`, result.error);
+      logger.error(`[materialize] Failed to sync ${row.path}:`, result.error);
     }
 
     processed++;
@@ -140,7 +142,7 @@ const syncEvoluToFiles = async (
     if (total > 50 && processed % 50 === 0) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       logger.log(
-        `[loop-b] Progress: ${processed}/${total} files (${elapsed}s)`,
+        `[materialize] Progress: ${processed}/${total} files (${elapsed}s)`,
       );
     }
   }
@@ -165,7 +167,7 @@ const syncEvoluToFiles = async (
         (failedByType.get(deleteResult.error.type) ?? 0) + 1,
       );
       logger.error(
-        `[loop-b] Failed to apply deletion for ${trackedState.path}:`,
+        `[materialize] Failed to apply deletion for ${trackedState.path}:`,
         deleteResult.error,
       );
     }
@@ -173,12 +175,12 @@ const syncEvoluToFiles = async (
 
   if (total > 50) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    logger.log(`[loop-b] Completed ${total} files in ${elapsed}s`);
+    logger.log(`[materialize] Completed ${total} files in ${elapsed}s`);
   }
 
   if (failedCount > 0) {
     logger.warn(
-      `[loop-b] Failed rows: ${failedCount}/${total} (${Array.from(
+      `[materialize] Failed rows: ${failedCount}/${total} (${Array.from(
         failedByType.entries(),
       )
         .map(([type, count]) => `${type}=${count}`)
@@ -255,7 +257,7 @@ const syncEvoluRowToFile = async (
   }
 
   if (detectConflict(diskHash, lastAppliedHash, row.contentHash)) {
-    logger.log(`[loop-b] Conflict detected: ${row.path}`);
+    logger.log(`[materialize] Conflict detected: ${row.path}`);
 
     const conflictFileResult = await tryAsync(
       () => createConflictFile(absolutePath, row.content || "", row.ownerId),
@@ -271,7 +273,7 @@ const syncEvoluRowToFile = async (
     }
 
     const conflictPath = conflictFileResult.value;
-    logger.log(`[loop-b] Created conflict file: ${conflictPath}`);
+    logger.log(`[materialize] Created conflict file: ${conflictPath}`);
 
     const stateUpdateResult = trySync(
       () => setLastAppliedHash(evolu, row.path, row.contentHash),
@@ -305,7 +307,7 @@ const syncEvoluRowToFile = async (
     return ok();
   }
 
-  logger.log(`[loop-b] Writing: ${row.path}`);
+  logger.log(`[materialize] Writing: ${row.path}`);
   const writeResult = await tryAsync(
     () => writeFileAtomic(absolutePath, row.content || ""),
     (cause): SyncLoopBError => ({
@@ -381,7 +383,7 @@ const applyRemoteDeletionToFilesystem = async (
   }
 
   if (diskHashResult.value !== lastAppliedHash) {
-    logger.log(`[loop-b] Deletion conflict detected: ${path}`);
+    logger.log(`[materialize] Deletion conflict detected: ${path}`);
 
     const localContentResult = await tryAsync(
       () => file.text(),
@@ -466,7 +468,7 @@ const applyRemoteDeletionToFilesystem = async (
     }
   }
 
-  logger.log(`[loop-b] Deleted: ${path}`);
+  logger.log(`[materialize] Deleted: ${path}`);
 
   const stateResult = trySync(
     () => clearLastAppliedHash(evolu, path),

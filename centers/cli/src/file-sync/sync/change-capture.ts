@@ -55,7 +55,7 @@ export const syncFileToEvolu = async (
 
     if (code !== "ENOENT") {
       logger.error(
-        `[loop-a] Failed to stat ${absolutePath}:`,
+        `[capture] Failed to stat ${absolutePath}:`,
         statResult.error,
       );
       return err(statResult.error);
@@ -76,7 +76,7 @@ export const syncFileToEvolu = async (
 
   if (!existsResult.ok) {
     logger.error(
-      `[loop-a] Failed to check existence for ${absolutePath}:`,
+      `[capture] Failed to check existence for ${absolutePath}:`,
       existsResult.error,
     );
     return err(existsResult.error);
@@ -104,7 +104,7 @@ export const syncFileToEvolu = async (
 
     if (!existingResult.ok) {
       logger.error(
-        `[loop-a] Failed to query deleted path ${relativePath}:`,
+        `[capture] Failed to query deleted path ${relativePath}:`,
         existingResult.error,
       );
       return err(existingResult.error);
@@ -114,7 +114,7 @@ export const syncFileToEvolu = async (
       return ok();
     }
 
-    logger.log(`[loop-a] Deleting: ${relativePath}`);
+    logger.log(`[capture] Deleting: ${relativePath}`);
     const deleteResult = trySync(
       () => {
         for (const row of existingResult.value) {
@@ -134,7 +134,7 @@ export const syncFileToEvolu = async (
 
     if (!deleteResult.ok) {
       logger.error(
-        `[loop-a] Failed to mark ${relativePath} as deleted:`,
+        `[capture] Failed to mark ${relativePath} as deleted:`,
         deleteResult.error,
       );
       return err(deleteResult.error);
@@ -153,7 +153,7 @@ export const syncFileToEvolu = async (
   );
   if (!contentResult.ok) {
     logger.error(
-      `[loop-a] Failed to read ${absolutePath}:`,
+      `[capture] Failed to read ${absolutePath}:`,
       contentResult.error,
     );
     return err(contentResult.error);
@@ -169,7 +169,7 @@ export const syncFileToEvolu = async (
   );
   if (!contentHashResult.ok) {
     logger.error(
-      `[loop-a] Failed to hash ${absolutePath}:`,
+      `[capture] Failed to hash ${absolutePath}:`,
       contentHashResult.error,
     );
     return err(contentHashResult.error);
@@ -199,7 +199,7 @@ export const syncFileToEvolu = async (
 
   if (!existingResult.ok) {
     logger.error(
-      `[loop-a] Failed to query ${relativePath}:`,
+      `[capture] Failed to query ${relativePath}:`,
       existingResult.error,
     );
     return err(existingResult.error);
@@ -214,17 +214,17 @@ export const syncFileToEvolu = async (
 
         if (!existingRecord) {
           logger.error(
-            `[loop-a] Unexpected: record undefined after length check`,
+            `[capture] Unexpected: record undefined after length check`,
           );
           return;
         }
 
         if (existingRecord.contentHash === contentHash) {
-          logger.log(`[loop-a] No change: ${relativePath} (hash matches)`);
+          logger.log(`[capture] No change: ${relativePath} (hash matches)`);
           return;
         }
 
-        logger.log(`[loop-a] Updating: ${relativePath}`);
+        logger.log(`[capture] Updating: ${relativePath}`);
         evolu.update("file", {
           id: existingRecord.id,
           path: relativePath,
@@ -232,7 +232,7 @@ export const syncFileToEvolu = async (
           contentHash,
         });
       } else {
-        logger.log(`[loop-a] Inserting: ${relativePath}`);
+        logger.log(`[capture] Inserting: ${relativePath}`);
         evolu.insert("file", {
           path: relativePath,
           content: content || null,
@@ -251,7 +251,7 @@ export const syncFileToEvolu = async (
 
   if (!mutationResult.ok) {
     logger.error(
-      `[loop-a] Failed to mutate ${relativePath}:`,
+      `[capture] Failed to mutate ${relativePath}:`,
       mutationResult.error,
     );
     return err(mutationResult.error);
