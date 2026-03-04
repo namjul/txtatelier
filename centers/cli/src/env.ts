@@ -25,20 +25,23 @@ const formatTypeError = createFormatTypeError();
 
 const parseEnv = () => {
   const processEnv = process.env as Record<string, string | undefined>;
+  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const mnemonicInput = processEnv["TXTATELIER_MNEMONIC"];
+  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
+  const dbPathInput = processEnv["TXTATELIER_DB_PATH"];
+  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
+  const loggingInput = processEnv["TXTATELIER_LOGGING"];
+  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
+  const watchDirInput = processEnv["TXTATELIER_WATCH_DIR"];
   const mnemonic =
     mnemonicInput && mnemonicInput.trim() !== "" ? mnemonicInput : undefined;
 
   const envInput = {
-    ...(processEnv["TXTATELIER_DB_PATH"] !== undefined
-      ? { TXTATELIER_DB_PATH: processEnv["TXTATELIER_DB_PATH"] }
-      : {}),
-    ...(processEnv["TXTATELIER_LOGGING"] !== undefined
-      ? { TXTATELIER_LOGGING: processEnv["TXTATELIER_LOGGING"] }
-      : {}),
+    ...(dbPathInput !== undefined ? { TXTATELIER_DB_PATH: dbPathInput } : {}),
+    ...(loggingInput !== undefined ? { TXTATELIER_LOGGING: loggingInput } : {}),
     ...(mnemonic !== undefined ? { TXTATELIER_MNEMONIC: mnemonic } : {}),
-    ...(processEnv["TXTATELIER_WATCH_DIR"] !== undefined
-      ? { TXTATELIER_WATCH_DIR: processEnv["TXTATELIER_WATCH_DIR"] }
+    ...(watchDirInput !== undefined
+      ? { TXTATELIER_WATCH_DIR: watchDirInput }
       : {}),
   };
 
