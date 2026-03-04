@@ -1,6 +1,8 @@
 // Content hashing utilities for file change detection
 // Uses Bun's fast native hashing (xxHash64)
 
+import { logger } from "../logger";
+
 export const computeFileHash = async (filePath: string): Promise<string> => {
   try {
     const file = Bun.file(filePath);
@@ -11,7 +13,7 @@ export const computeFileHash = async (filePath: string): Promise<string> => {
     const hash = Bun.hash(new Uint8Array(content));
     return hash.toString(16);
   } catch (error) {
-    console.error(`[hash] Failed to hash file ${filePath}:`, error);
+    logger.error(`[hash] Failed to hash file ${filePath}:`, error);
     throw error;
   }
 };

@@ -3,6 +3,7 @@
 import { mkdir } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 import { watch } from "chokidar";
+import { logger } from "../logger";
 
 const DEBOUNCE_MS = 100;
 const MAX_CONCURRENT = 10; // Limit concurrent file operations
@@ -13,7 +14,7 @@ export const startWatching = async (
   watchDir: string,
   onChange: FileChangeCallback,
 ): Promise<() => void> => {
-  console.log(`[watch] Starting to watch: ${watchDir}`);
+  logger.log(`[watch] Starting to watch: ${watchDir}`);
 
   // Ensure directory exists
   await mkdir(watchDir, { recursive: true });
@@ -34,7 +35,7 @@ export const startWatching = async (
       try {
         await onChange(path);
       } catch (error) {
-        console.error(`[watch] Error processing ${path}:`, error);
+        logger.error(`[watch] Error processing ${path}:`, error);
       } finally {
         activeCount--;
         // Process next item
@@ -90,7 +91,7 @@ export const startWatching = async (
       return;
     }
 
-    console.log(
+    logger.log(
       `[watch] ${eventType}: ${relative(watchDir, absolutePath).replaceAll("\\", "/")}`,
     );
     debouncedOnChange(absolutePath);
@@ -109,12 +110,12 @@ export const startWatching = async (
   });
 
   watcher.on("error", (error) => {
-    console.error("[watch] Watcher error:", error);
+    logger.error("[watch] Watcher error:", error);
   });
 
   // Return cleanup function
   return () => {
-    console.log("[watch] Stopping watcher...");
+    logger.log("[watch] Stopping watcher...");
 
     // Clear all debounce timers
     for (const timer of debounceTimers.values()) {
@@ -123,9 +124,9 @@ export const startWatching = async (
     debounceTimers.clear();
 
     void watcher.close().catch((error) => {
-      console.error("[watch] Failed to close watcher:", error);
+      logger.error("[watch] Failed to close watcher:", error);
     });
 
-    console.log("[watch] Stopped watching");
+    logger.log("[watch] Stopped watching");
   };
 };

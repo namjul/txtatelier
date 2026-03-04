@@ -4,6 +4,7 @@
 
 import { join, relative } from "node:path";
 import { type Evolu, sqliteTrue } from "@evolu/common";
+import { logger } from "../logger";
 import { createConflictFile, detectConflict } from "./conflicts";
 import { computeFileHash } from "./hash";
 import type { Schema } from "./schema";
@@ -54,7 +55,7 @@ export const syncFileToEvolu = async (
     const exists = fileStat ? true : await file.exists();
 
     if (!exists) {
-      console.log(
+      logger.log(
         `[loop-a] File deleted: ${relativePath} (TODO: handle deletion in Phase 4)`,
       );
       return;
@@ -83,19 +84,19 @@ export const syncFileToEvolu = async (
       const existingRecord = existing[0];
 
       if (!existingRecord) {
-        console.error(
+        logger.error(
           `[loop-a] Unexpected: record undefined after length check`,
         );
         return;
       }
 
       if (existingRecord.contentHash === contentHash) {
-        console.log(`[loop-a] No change: ${relativePath} (hash matches)`);
+        logger.log(`[loop-a] No change: ${relativePath} (hash matches)`);
         return;
       }
 
       // Hash different - update
-      console.log(`[loop-a] Updating: ${relativePath}`);
+      logger.log(`[loop-a] Updating: ${relativePath}`);
       evolu.update("file", {
         id: existingRecord.id,
         path: relativePath,
@@ -104,7 +105,7 @@ export const syncFileToEvolu = async (
       });
     } else {
       // New file - insert
-      console.log(`[loop-a] Inserting: ${relativePath}`);
+      logger.log(`[loop-a] Inserting: ${relativePath}`);
       evolu.insert("file", {
         path: relativePath,
         content: content || null,
@@ -116,7 +117,7 @@ export const syncFileToEvolu = async (
     // This prevents Loop B from echoing our own writes
     setLastAppliedHash(evolu, relativePath, contentHash);
   } catch (error) {
-    console.error(`[loop-a] Failed to sync ${absolutePath}:`, error);
+    logger.error(`[loop-a] Failed to sync ${absolutePath}:`, error);
   }
 };
 
@@ -132,7 +133,7 @@ export const startSyncEvoluToFiles = (
   evolu: EvoluDatabase,
   watchDir: string,
 ): (() => void) => {
-  console.log("[loop-b] Starting...");
+  logger.log("[loop-b] Starting...");
 
   // Query all non-deleted files
   const allFilesQuery = evolu.createQuery((db) =>
@@ -148,7 +149,7 @@ export const startSyncEvoluToFiles = (
 
   // Load existing rows immediately on startup
   evolu.loadQuery(allFilesQuery).then((rows) => {
-    console.log(`[loop-b] Initial load: ${rows.length} existing files`);
+    logger.log(`[loop-b] Initial load: ${rows.length} existing files`);
     void syncEvoluToFiles(evolu, watchDir, rows).then(() => {
       initialLoadComplete = true;
     });
@@ -162,7 +163,7 @@ export const startSyncEvoluToFiles = (
   const unsubscribe = evolu.subscribeQuery(allFilesQuery)(() => {
     // Skip if initial load hasn't completed yet
     if (!initialLoadComplete) {
-      console.log("[loop-b] Skipping subscription (initial load in progress)");
+      logger.log("[loop-b] Skipping subscription (initial load in progress)");
       return;
     }
 
@@ -173,14 +174,14 @@ export const startSyncEvoluToFiles = (
 
     // Set new timer - only process after changes settle
     debounceTimer = setTimeout(() => {
-      console.log("[loop-b] Change detected (debounced)");
+      logger.log("[loop-b] Change detected (debounced)");
       const rows = evolu.getQueryRows(allFilesQuery);
       void syncEvoluToFiles(evolu, watchDir, rows);
       debounceTimer = null;
     }, SUBSCRIPTION_DEBOUNCE_MS);
   });
 
-  console.log("[loop-b] Subscribed");
+  logger.log("[loop-b] Subscribed");
 
   return () => {
     if (debounceTimer) {
@@ -204,7 +205,7 @@ const syncEvoluToFiles = async (
   const total = rows.length;
 
   if (total > 50) {
-    console.log(`[loop-b] Processing ${total} files...`);
+    logger.log(`[loop-b] Processing ${total} files...`);
   }
 
   let processed = 0;
@@ -219,7 +220,7 @@ const syncEvoluToFiles = async (
     // Log progress every 50 files for large batches
     if (total > 50 && processed % 50 === 0) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(
+      logger.log(
         `[loop-b] Progress: ${processed}/${total} files (${elapsed}s)`,
       );
     }
@@ -227,7 +228,7 @@ const syncEvoluToFiles = async (
 
   if (total > 50) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[loop-b] Completed ${total} files in ${elapsed}s`);
+    logger.log(`[loop-b] Completed ${total} files in ${elapsed}s`);
   }
 };
 
@@ -265,13 +266,13 @@ const syncEvoluRowToFile = async (
 
     // Check for conflicts
     if (detectConflict(diskHash, lastAppliedHash, row.contentHash)) {
-      console.log(`[loop-b] Conflict detected: ${row.path}`);
+      logger.log(`[loop-b] Conflict detected: ${row.path}`);
       const conflictPath = await createConflictFile(
         absolutePath,
         row.content || "",
         row.ownerId,
       );
-      console.log(`[loop-b] Created conflict file: ${conflictPath}`);
+      logger.log(`[loop-b] Created conflict file: ${conflictPath}`);
 
       // Mark remote hash as processed for the original path.
       // This prevents repeated conflict creation when subsequent query updates
@@ -284,12 +285,12 @@ const syncEvoluRowToFile = async (
     }
 
     // No conflict - apply change
-    console.log(`[loop-b] Writing: ${row.path}`);
+    logger.log(`[loop-b] Writing: ${row.path}`);
     await writeFileAtomic(absolutePath, row.content || "");
 
     // Update state
     setLastAppliedHash(evolu, row.path, row.contentHash);
   } catch (error) {
-    console.error(`[loop-b] Failed to sync ${row.path}:`, error);
+    logger.error(`[loop-b] Failed to sync ${row.path}:`, error);
   }
 };

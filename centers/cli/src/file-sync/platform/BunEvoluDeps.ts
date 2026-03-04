@@ -11,6 +11,7 @@ import {
   type EvoluDeps,
 } from "@evolu/common";
 import { createDbWorkerForPlatform } from "@evolu/common/local-first";
+import { logger } from "../../logger";
 import { createPersistentBunSqliteDriver } from "./BunSqliteDriver";
 import type { PlatformIO } from "./PlatformIO";
 
@@ -21,15 +22,15 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
     const ws = createWebSocket(url, {
       ...options,
       onOpen: () => {
-        console.log("[evolu-sync] websocket open", url);
+        logger.log("[evolu-sync] websocket open", url);
         options?.onOpen?.();
       },
       onError: (error) => {
-        console.error("[evolu-sync] websocket error", error);
+        logger.error("[evolu-sync] websocket error", error);
         options?.onError?.(error);
       },
       onClose: (event) => {
-        console.warn("[evolu-sync] websocket close", event.code, event.reason);
+        logger.warn("[evolu-sync] websocket close", event.code, event.reason);
         options?.onClose?.(event);
       },
       onMessage: (data) => {
@@ -39,7 +40,7 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
             : data instanceof ArrayBuffer
               ? data.byteLength
               : data.size;
-        console.log("[evolu-sync] websocket message", size);
+        logger.log("[evolu-sync] websocket message", size);
         options?.onMessage?.(data);
       },
     });
@@ -55,7 +56,7 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
                 ? data.size
                 : data.byteLength;
         const result = ws.send(data);
-        console.log(
+        logger.log(
           "[evolu-sync] websocket send",
           size,
           result.ok ? "ok" : "err",
@@ -72,6 +73,8 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
 
   const createDbWorker = () =>
     createDbWorkerForPlatform({
+      // Keep Evolu internals on a fresh console instance. Reusing the shared
+      // app logger here caused startup to stall during client initialization.
       console: createConsole(),
       createSqliteDriver: sqliteDriverFactory,
       createWebSocket: createLoggedWebSocket,
@@ -81,6 +84,8 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
     });
 
   return {
+    // Same reason as above: avoid wiring the shared logger into Evolu's core
+    // deps path to prevent initialization hangs.
     console: createConsole(),
     createDbWorker,
     randomBytes: createRandomBytes(),

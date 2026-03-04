@@ -3,6 +3,7 @@
 
 import { Database } from "bun:sqlite";
 import type { CreateSqliteDriver } from "@evolu/common";
+import { logger } from "../../logger";
 import type { PlatformIO } from "./PlatformIO";
 
 const SAVE_DEBOUNCE_MS = 5_000;
@@ -11,7 +12,7 @@ export const createPersistentBunSqliteDriver = (
   io: PlatformIO,
 ): CreateSqliteDriver => {
   return async (_name, options) => {
-    console.log("[sqlite-driver] init", {
+    logger.log("[sqlite-driver] init", {
       memory: options?.memory ?? false,
     });
     // 1. Load existing database or start fresh
@@ -50,7 +51,7 @@ export const createPersistentBunSqliteDriver = (
       if (isDisposed || isFlushed) return;
       const data = db.serialize();
       io.writeFile(data).catch((e) => {
-        console.error("[txtatelier] ERROR: Failed to save database", e);
+        logger.error("[txtatelier] ERROR: Failed to save database", e);
       });
     };
 
@@ -84,7 +85,7 @@ export const createPersistentBunSqliteDriver = (
       try {
         await io.writeFile(data);
       } catch (e) {
-        console.error("[txtatelier] ERROR: Failed to save database", e);
+        logger.error("[txtatelier] ERROR: Failed to save database", e);
       }
     };
 
@@ -126,7 +127,7 @@ export const createPersistentBunSqliteDriver = (
           // Export before closing DB, then write asynchronously
           const data = db.serialize();
           io.writeFile(data).catch((e) => {
-            console.error("[txtatelier] ERROR: Failed to save database", e);
+            logger.error("[txtatelier] ERROR: Failed to save database", e);
           });
         }
         db.close(false);

@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AppOwner, Evolu } from "@evolu/common";
 import { Mnemonic, tryAsync } from "@evolu/common";
+import { logger } from "../logger";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./schema";
 import { startSyncEvoluToFiles, syncFileToEvolu } from "./sync";
@@ -28,7 +29,7 @@ let stopSyncing: (() => void) | null = null;
 let unsubscribeError: (() => void) | null = null;
 
 export const startFileSync = async (): Promise<void> => {
-  console.log("[file-sync] Initializing...");
+  logger.log("[file-sync] Initializing...");
 
   // Create Evolu client (handles owner persistence internally)
   const client = await createEvoluClient({ dbPath: DB_PATH });
@@ -39,12 +40,12 @@ export const startFileSync = async (): Promise<void> => {
   // Check for mnemonic restoration (test-only feature via environment variable)
   const restoreMnemonicStr = process.env["TXTATELIER_MNEMONIC"];
   if (restoreMnemonicStr && restoreMnemonicStr.trim() !== "") {
-    console.log("[file-sync] Restoring from provided mnemonic...");
+    logger.log("[file-sync] Restoring from provided mnemonic...");
 
     // Parse and validate mnemonic
     const mnemonicResult = Mnemonic.from(restoreMnemonicStr);
     if (!mnemonicResult.ok) {
-      console.warn(
+      logger.warn(
         "[file-sync] Invalid mnemonic format, using generated owner:",
         mnemonicResult.error,
       );
@@ -56,18 +57,18 @@ export const startFileSync = async (): Promise<void> => {
       );
 
       if (restoreResult.ok) {
-        console.log("[file-sync] Mnemonic restored to database");
+        logger.log("[file-sync] Mnemonic restored to database");
         // Let pending microtasks drain before flushing/recreating client.
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        console.log("[file-sync] Flushing database...");
+        logger.log("[file-sync] Flushing database...");
 
         // Flush the restored database state to disk
         await closeDb();
-        console.log("[file-sync] Mnemonic restore persisted");
-        console.log("[file-sync] Restart required to activate restored owner");
+        logger.log("[file-sync] Mnemonic restore persisted");
+        logger.log("[file-sync] Restart required to activate restored owner");
         process.exit(0);
       } else {
-        console.warn(
+        logger.warn(
           "[file-sync] Failed to restore mnemonic, using generated owner:",
           restoreResult.error,
         );
@@ -82,34 +83,34 @@ export const startFileSync = async (): Promise<void> => {
   const isFirstRun = !(await Bun.file(DB_PATH).exists());
 
   if (isFirstRun && !restoreMnemonic) {
-    console.log("[file-sync]");
-    console.log("[file-sync] First run detected!");
-    console.log("[file-sync]");
-    console.log("[file-sync] Your mnemonic (save this securely!):");
-    console.log(`[file-sync]   ${owner.mnemonic}`);
-    console.log("[file-sync]");
-    console.log("[file-sync] ⚠️  IMPORTANT: Save this mnemonic!");
-    console.log(
+    logger.log("[file-sync]");
+    logger.log("[file-sync] First run detected!");
+    logger.log("[file-sync]");
+    logger.log("[file-sync] Your mnemonic (save this securely!):");
+    logger.log(`[file-sync]   ${owner.mnemonic}`);
+    logger.log("[file-sync]");
+    logger.log("[file-sync] ⚠️  IMPORTANT: Save this mnemonic!");
+    logger.log(
       "[file-sync] ⚠️  You'll need it to access your data on other devices.",
     );
-    console.log(
+    logger.log(
       "[file-sync] ⚠️  Run 'txtatelier show-mnemonic' to see it again.",
     );
-    console.log("[file-sync]");
+    logger.log("[file-sync]");
   }
 
-  console.log(`[file-sync] Owner ID: ${owner.id}`);
+  logger.log(`[file-sync] Owner ID: ${owner.id}`);
 
   // Subscribe to Evolu errors
   unsubscribeError = evolu.subscribeError(() => {
     const error = evolu.getError();
     if (error) {
-      console.error("[file-sync] Evolu error:", error);
+      logger.error("[file-sync] Evolu error:", error);
     }
   });
 
   // Start Loop A: Watch filesystem and sync to Evolu
-  console.log(`[file-sync] Watching directory: ${WATCH_DIR}`);
+  logger.log(`[file-sync] Watching directory: ${WATCH_DIR}`);
   stopWatching = await startWatching(WATCH_DIR, async (filePath) => {
     await syncFileToEvolu(evolu, WATCH_DIR, filePath);
   });
@@ -117,11 +118,11 @@ export const startFileSync = async (): Promise<void> => {
   // Start Loop B: Subscribe to Evolu and sync to filesystem
   stopSyncing = startSyncEvoluToFiles(evolu, WATCH_DIR);
 
-  console.log("[file-sync] Ready");
+  logger.log("[file-sync] Ready");
 };
 
 export const stopFileSync = async (): Promise<void> => {
-  console.log("[file-sync] Shutting down...");
+  logger.log("[file-sync] Shutting down...");
 
   // Unsubscribe from error handler
   if (unsubscribeError) {
@@ -146,7 +147,7 @@ export const stopFileSync = async (): Promise<void> => {
     await closeDb();
   }
 
-  console.log("[file-sync] Stopped");
+  logger.log("[file-sync] Stopped");
 };
 
 export const showMnemonic = async (): Promise<void> => {
@@ -155,10 +156,10 @@ export const showMnemonic = async (): Promise<void> => {
     owner = client.owner;
   }
 
-  console.log("Your mnemonic:");
-  console.log(`  ${owner.mnemonic}`);
-  console.log("");
-  console.log("⚠️  Keep this secret and secure!");
+  logger.log("Your mnemonic:");
+  logger.log(`  ${owner.mnemonic}`);
+  logger.log("");
+  logger.log("⚠️  Keep this secret and secure!");
 };
 
 export { evolu };

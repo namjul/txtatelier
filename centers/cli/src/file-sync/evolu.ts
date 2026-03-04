@@ -6,6 +6,7 @@ import {
   type Evolu,
   SimpleName,
 } from "@evolu/common";
+import { logger } from "../logger";
 import { Schema } from "./schema";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -55,7 +56,7 @@ export const createEvoluClient = async ({
       const data = await evolu.exportDatabase();
       await io.writeFile(data);
     } catch (e) {
-      console.error("[txtatelier] Failed to flush database:", e);
+      logger.error("[txtatelier] Failed to flush database:", e);
     }
   };
 
