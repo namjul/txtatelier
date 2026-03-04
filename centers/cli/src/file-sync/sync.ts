@@ -22,12 +22,36 @@ export const syncFileToEvolu = async (
   absolutePath: string,
 ): Promise<void> => {
   try {
+    const fs = await import("node:fs/promises");
+
     // Compute relative path (relative to watch directory)
-    const relativePath = relative(watchDir, absolutePath);
+    const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
+
+    if (
+      relativePath === "" ||
+      relativePath === "." ||
+      relativePath.startsWith("../")
+    ) {
+      return;
+    }
+
+    let fileStat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    try {
+      fileStat = await fs.stat(absolutePath);
+    } catch {
+      fileStat = null;
+    }
+
+    if (fileStat && !fileStat.isFile()) {
+      return;
+    }
 
     // Read file content
     const file = Bun.file(absolutePath);
-    const exists = await file.exists();
+    // fs.stat already proved existence when fileStat is present, so avoid a
+    // redundant exists() call. Fall back to Bun.exists() only when stat failed
+    // (races or transient filesystem state).
+    const exists = fileStat ? true : await file.exists();
 
     if (!exists) {
       console.log(

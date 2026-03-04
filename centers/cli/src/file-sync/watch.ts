@@ -1,7 +1,8 @@
-// Filesystem watching with debounce using Bun's native watch API
+// Filesystem watching with debounce using chokidar.
 
-import { watch } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { isAbsolute, join, relative } from "node:path";
+import { watch } from "chokidar";
 
 const DEBOUNCE_MS = 100;
 const MAX_CONCURRENT = 10; // Limit concurrent file operations
@@ -15,8 +16,7 @@ export const startWatching = async (
   console.log(`[watch] Starting to watch: ${watchDir}`);
 
   // Ensure directory exists
-  const fs = await import("node:fs/promises");
-  await fs.mkdir(watchDir, { recursive: true });
+  await mkdir(watchDir, { recursive: true });
 
   // Debounce map: path -> timeout
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -62,30 +62,55 @@ export const startWatching = async (
     debounceTimers.set(path, timer);
   };
 
-  // Start watching using Node.js fs.watch (more stable than Bun.watch for now)
-  const watcher = watch(watchDir, { recursive: true });
+  const isWithinWatchDir = (absolutePath: string): boolean => {
+    // Safety boundary: chokidar events can surface different path shapes
+    // across platforms and edge cases (rename/symlink). Only accept paths
+    // that are strict descendants of watchDir.
+    const rel = relative(watchDir, absolutePath);
+    return rel !== "" && rel !== "." && !rel.startsWith("..");
+  };
 
-  // Start async iteration (runs in background)
-  void (async () => {
-    try {
-      for await (const event of watcher) {
-        if (!event.filename) continue;
+  const toAbsolutePath = (changedPath: string): string => {
+    return isAbsolute(changedPath) ? changedPath : join(watchDir, changedPath);
+  };
 
-        // Ignore temp files created during atomic writes
-        if (event.filename.includes(".tmp-")) {
-          continue;
-        }
+  const watcher = watch(watchDir, {
+    ignoreInitial: false,
+    awaitWriteFinish: {
+      stabilityThreshold: DEBOUNCE_MS,
+      pollInterval: 25,
+    },
+    ignored: (changedPath) => changedPath.includes(".tmp-"),
+  });
 
-        const absolutePath = join(watchDir, event.filename);
-        console.log(`[watch] ${event.eventType}: ${event.filename}`);
+  const handleFileEvent = (eventType: string, changedPath: string): void => {
+    const absolutePath = toAbsolutePath(changedPath);
 
-        debouncedOnChange(absolutePath);
-      }
-    } catch (_error) {
-      // Watcher was closed
-      console.log("[watch] Stopped watching");
+    if (!isWithinWatchDir(absolutePath)) {
+      return;
     }
-  })();
+
+    console.log(
+      `[watch] ${eventType}: ${relative(watchDir, absolutePath).replaceAll("\\", "/")}`,
+    );
+    debouncedOnChange(absolutePath);
+  };
+
+  watcher.on("add", (changedPath) => {
+    handleFileEvent("add", changedPath);
+  });
+
+  watcher.on("change", (changedPath) => {
+    handleFileEvent("change", changedPath);
+  });
+
+  watcher.on("unlink", (changedPath) => {
+    handleFileEvent("unlink", changedPath);
+  });
+
+  watcher.on("error", (error) => {
+    console.error("[watch] Watcher error:", error);
+  });
 
   // Return cleanup function
   return () => {
@@ -97,8 +122,10 @@ export const startWatching = async (
     }
     debounceTimers.clear();
 
-    // Close watcher (will cause watchTask to exit)
-    // Note: fs.watch AsyncIterator doesn't have explicit close,
-    // but we can just let it end naturally
+    void watcher.close().catch((error) => {
+      console.error("[watch] Failed to close watcher:", error);
+    });
+
+    console.log("[watch] Stopped watching");
   };
 };
