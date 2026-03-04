@@ -11,6 +11,7 @@
 ./test-directional-invariants.sh
 ./test-conflict-artifact-callback.sh
 ./test-startup-reconciliation.sh
+./test-startup-reconciliation-mixed.sh
 ./test-remote-delete-safe.sh
 ./test-remote-delete-conflict.sh
 ```
@@ -94,6 +95,7 @@ cat ~/.txtatelier/watched/remote.txt
 - Pre-existing filesystem-only files should be handled by explicit startup reconciliation, not by watcher side effects.
 - Temporary write artifacts (`.tmp-*`) are ignored by capture/materialization/reconciliation.
 - `test-startup-reconciliation.sh` verifies this behavior end-to-end.
+- `test-startup-reconciliation-mixed.sh` verifies startup behavior for disk-only, Evolu-only, and tombstone paths.
 
 ## Test Results
 
