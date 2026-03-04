@@ -60,7 +60,7 @@ const parseEnv = () => {
     dbPath: raw.TXTATELIER_DB_PATH ?? defaultDbPath,
     enableLogging: raw.TXTATELIER_LOGGING
       ? raw.TXTATELIER_LOGGING === "1" || raw.TXTATELIER_LOGGING === "true"
-      : true,
+      : false,
     mnemonic: raw.TXTATELIER_MNEMONIC,
     watchDir: raw.TXTATELIER_WATCH_DIR ?? defaultWatchDir,
   } as const;
