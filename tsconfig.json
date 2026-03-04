@@ -3,11 +3,12 @@
   "exclude": ["node_modules", "dist", ".git"],
   "compilerOptions": {
     // Environment setup & latest features
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
-    "jsx": "react-jsx",
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
     "allowJs": true,
 
     // Bundler mode

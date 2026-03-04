@@ -1,0 +1,25 @@
+{
+  "name": "@txtatelier/pwa",
+  "version": "0.0.0",
+  "description": "PWA editor for txtatelier",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@evolu/common": "^7.4.0",
+    "@evolu/web": "^2.4.0",
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.13",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2",
+    "vite": "^5.4.19",
+    "vite-plugin-solid": "^2.11.8"
+  }
+}
