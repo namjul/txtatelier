@@ -31,6 +31,7 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
   - Atomic file writes (temp + rename pattern)
   - Basic conflict detection (hash comparison)
   - Conflict file creation (`.conflict-{ownerId}-{timestamp}`)
+  - Conflict-file propagation fallback (direct Loop A sync after conflict creation)
   - Echo prevention (lastAppliedHash-based, not ownerId)
   - Performance optimizations (early-exit on hash match, batch progress logging)
 
@@ -366,9 +367,9 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 - Success-if: Bulk operations (>50 files) show progress logs, CPU usage remains reasonable, no missed changes
 - Failure-if: Sync delays increase, CPU spikes, or changes get lost
 - Timeline: Next bulk sync test
-- Evidence: Awaiting testing with large file sets
+- Evidence: Typecheck passes. Conflict propagation regression test passes (`tests/test-conflict-propagation.fish`)
 
-**Status:** In Progress (awaiting testing)
+**Status:** Completed
 
 ---
 
@@ -441,6 +442,7 @@ See IMPLEMENTATION_PLAN.md for full details.
 - ✅ BigInt compatibility: Disable safeIntegers in BunSqliteDriver for Evolu Protocol.js compatibility
 - ✅ Mnemonic restore: Two-stage flow (restore + exit, then start) - Evolu reload() is browser-native
 - ✅ Concurrency control: Max 10 parallel file operations prevents filesystem overload
+- ✅ Conflict-file propagation reliability: direct Loop A sync fallback after conflict creation
 
 ### Outstanding
 - File filtering strategy? (gitignore patterns? explicit allow/deny lists?)

@@ -188,7 +188,7 @@ const syncEvoluToFiles = async (
 
   for (const row of rows) {
     const absolutePath = join(watchDir, row.path);
-    await syncEvoluRowToFile(evolu, absolutePath, row);
+    await syncEvoluRowToFile(evolu, watchDir, absolutePath, row);
 
     processed++;
 
@@ -213,6 +213,7 @@ const syncEvoluToFiles = async (
  */
 const syncEvoluRowToFile = async (
   evolu: EvoluDatabase,
+  watchDir: string,
   absolutePath: string,
   // biome-ignore lint/suspicious/noExplicitAny: Row type will be refined later
   row: any,
@@ -247,6 +248,14 @@ const syncEvoluRowToFile = async (
         row.ownerId,
       );
       console.log(`[loop-b] Created conflict file: ${conflictPath}`);
+
+      // Mark remote hash as processed for the original path.
+      // This prevents repeated conflict creation when subsequent query updates
+      // (including conflict-file sync) re-run Loop B.
+      setLastAppliedHash(evolu, row.path, row.contentHash);
+
+      // Ensure conflict files propagate even if filesystem watch misses the event.
+      await syncFileToEvolu(evolu, watchDir, conflictPath);
       return;
     }
 
