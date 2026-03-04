@@ -7,6 +7,7 @@ This plan defines Phase 6 implementation for the PWA as txtatelier's web interac
 ## Scope
 
 - Browser-based file interaction workflows (discover, open, edit, resolve conflicts).
+- Dedicated settings surface for owner and mnemonic management.
 - PWA reads and writes Evolu only.
 - No direct filesystem access from browser code.
 
@@ -32,6 +33,8 @@ Data flow:
 - Browser never writes disk directly.
 - No silent overwrite on editing conflicts.
 - Conflict artifacts are first-class rows/files.
+- Mnemonic is hidden by default and revealed only through explicit user action.
+- Destructive owner reset requires explicit user confirmation.
 
 ---
 
@@ -89,6 +92,27 @@ Design boundary:
 
 - This direction governs visual language, not data architecture.
 - Evolu-only writes, conflict explicitness, and CLI filesystem boundary remain non-negotiable.
+
+---
+
+## Owner and Recovery (Mnemonic Settings)
+
+Purpose:
+
+- Make cross-device recovery and owner lifecycle actions first-class in the PWA.
+
+Capabilities:
+
+- Show/Hide Mnemonic (hidden by default).
+- Restore from Mnemonic (validate input before restore).
+- Reset local owner/data (explicit destructive confirmation).
+- Download local database backup (`exportDatabase`).
+
+Behavioral constraints:
+
+- Owner actions run through Evolu APIs only.
+- No filesystem APIs in browser code.
+- Feedback remains textual and explicit (`restoring`, `restored`, `reset complete`, `backup exported`, `error`).
 
 ---
 
@@ -162,6 +186,15 @@ Rationale:
 - PWA edit -> Evolu -> CLI -> filesystem.
 - Filesystem edit -> CLI -> Evolu -> PWA refresh.
 - Dirty-draft conflict -> explicit resolution path.
+- Restore from mnemonic -> expected rows visible after sync.
+
+### 6.6 Mnemonic Settings and Owner Actions
+
+- Add Settings page and navigation from file editing surface.
+- Implement show/hide mnemonic.
+- Implement restore flow with mnemonic validation and clear typed errors.
+- Implement reset flow with explicit confirmation guard.
+- Implement local database export flow.
 
 ---
 
@@ -172,6 +205,12 @@ Rationale:
 - No filesystem API usage in PWA code.
 - Dirty-draft remote collisions never silently overwrite local draft.
 - Conflict artifacts can be created from PWA and sync through CLI.
+- PWA exposes a dedicated settings page for mnemonic and owner actions.
+- Mnemonic is hidden by default and shown only after explicit reveal.
+- Invalid mnemonic input is rejected with clear validation feedback.
+- Restore from valid mnemonic yields expected synced dataset visibility.
+- Owner reset is confirmation-gated and clears local owner/data.
+- Local backup download succeeds as SQLite payload.
 - Existing CLI regression suite remains green.
 
 ---
@@ -183,3 +222,8 @@ Rationale:
 3. Edit file on disk and confirm PWA refreshes through Evolu.
 4. Trigger dirty-draft conflict and confirm resolution banner appears.
 5. Use "save as conflict artifact" and confirm file naming and propagation.
+6. Verify mnemonic is hidden by default; reveal/hide toggle works.
+7. Restore with invalid mnemonic and confirm validation feedback.
+8. Restore with valid mnemonic and confirm owner/data convergence.
+9. Reset owner/data requires confirmation and clears local state.
+10. Download backup and confirm file is downloaded and non-empty.

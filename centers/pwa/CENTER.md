@@ -14,6 +14,7 @@ The PWA center is the web interaction surface for txtatelier. It is responsible 
 
 **This center:**
 - Provides browser-based interfaces for creating, reading, updating, and resolving file content.
+- Provides browser-based settings for owner lifecycle and mnemonic recovery actions.
 - Reads and writes file state through Evolu queries and mutations only.
 - Preserves the system contract that filesystem writes happen through CLI synchronization loops.
 - Makes sync and conflict state legible to users through explicit UI feedback and actions.
@@ -91,6 +92,26 @@ Weak
 
 ---
 
+### 2026-03-04 - Add mnemonic settings and owner recovery workflows
+
+**Aim:** Make cross-device recovery and owner lifecycle actions explicit, safe, and discoverable in the PWA.
+
+**Claim:** A dedicated settings surface for mnemonic visibility, restore, reset, and backup export will strengthen account safety without violating architecture boundaries.
+
+**Assumptions:**
+- Evolu owner APIs are sufficient for mnemonic reveal/restore/reset and local database export.
+- Sensitive owner actions should be isolated from file editing workflows.
+
+**Contact Test:**
+- Success-if: Mnemonic is hidden by default, restore validates input, reset requires explicit confirmation, and backup export completes.
+- Failure-if: Mnemonic exposure is accidental, restore/reset behavior is ambiguous, or owner actions bypass Evolu boundaries.
+- Measurement: Manual workflow validation across settings actions and post-restore data visibility.
+- Timeline: Immediate after settings page baseline is implemented.
+
+**Status:** Planned
+
+---
+
 ## Relationships to Other Centers
 
 **Strengthens:**
@@ -113,3 +134,4 @@ Weak
 - What default save model best balances responsiveness and conflict clarity?
 - What minimum conflict interaction set is sufficient before adding advanced comparison tooling?
 - How should conflict artifacts be represented in navigation so they stay visible without overwhelming normal file workflows?
+- Should mnemonic settings remain a standalone page long-term or become part of a broader account center as observability features grow?
