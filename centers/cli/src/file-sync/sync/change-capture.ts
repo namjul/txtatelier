@@ -10,18 +10,18 @@ import {
   trySync,
 } from "@evolu/common";
 import { logger } from "../../logger";
-import type { SyncLoopAError } from "../errors";
+import type { ChangeCaptureError } from "../errors";
 import { computeFileHash } from "../hash";
 import type { Schema } from "../schema";
 import { clearLastAppliedHash, setLastAppliedHash } from "../state";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
-export const syncFileToEvolu = async (
+export const captureChange = async (
   evolu: EvoluDatabase,
   watchDir: string,
   absolutePath: string,
-): Promise<Result<void, SyncLoopAError>> => {
+): Promise<Result<void, ChangeCaptureError>> => {
   const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
 
   if (
@@ -34,7 +34,7 @@ export const syncFileToEvolu = async (
 
   const statResult = await tryAsync(
     () => stat(absolutePath),
-    (cause): SyncLoopAError => ({
+    (cause): ChangeCaptureError => ({
       type: "FileStatFailed",
       absolutePath,
       cause,
@@ -67,7 +67,7 @@ export const syncFileToEvolu = async (
     ? ok(true)
     : await tryAsync(
         () => file.exists(),
-        (cause): SyncLoopAError => ({
+        (cause): ChangeCaptureError => ({
           type: "FileReadFailed",
           absolutePath,
           cause,
@@ -95,7 +95,7 @@ export const syncFileToEvolu = async (
 
     const existingResult = await tryAsync(
       () => evolu.loadQuery(existingQuery),
-      (cause): SyncLoopAError => ({
+      (cause): ChangeCaptureError => ({
         type: "EvoluQueryFailed",
         relativePath,
         cause,
@@ -125,7 +125,7 @@ export const syncFileToEvolu = async (
         }
         clearLastAppliedHash(evolu, relativePath);
       },
-      (cause): SyncLoopAError => ({
+      (cause): ChangeCaptureError => ({
         type: "EvoluMutationFailed",
         relativePath,
         cause,
@@ -145,7 +145,7 @@ export const syncFileToEvolu = async (
 
   const contentResult = await tryAsync(
     () => file.text(),
-    (cause): SyncLoopAError => ({
+    (cause): ChangeCaptureError => ({
       type: "FileReadFailed",
       absolutePath,
       cause,
@@ -161,7 +161,7 @@ export const syncFileToEvolu = async (
 
   const contentHashResult = await tryAsync(
     () => computeFileHash(absolutePath),
-    (cause): SyncLoopAError => ({
+    (cause): ChangeCaptureError => ({
       type: "FileHashFailed",
       absolutePath,
       cause,
@@ -190,7 +190,7 @@ export const syncFileToEvolu = async (
 
   const existingResult = await tryAsync(
     () => evolu.loadQuery(existingQuery),
-    (cause): SyncLoopAError => ({
+    (cause): ChangeCaptureError => ({
       type: "EvoluQueryFailed",
       relativePath,
       cause,
@@ -242,7 +242,7 @@ export const syncFileToEvolu = async (
 
       setLastAppliedHash(evolu, relativePath, contentHash);
     },
-    (cause): SyncLoopAError => ({
+    (cause): ChangeCaptureError => ({
       type: "EvoluMutationFailed",
       relativePath,
       cause,

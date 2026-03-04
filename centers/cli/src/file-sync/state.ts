@@ -71,7 +71,7 @@ export interface SyncStateEntry {
 export const getTrackedSyncState = async (
   evolu: EvoluDatabase,
 ): Promise<ReadonlyArray<SyncStateEntry>> => {
-  // "Tracked sync state" = paths that Loop B has previously applied to disk,
+  // "Tracked sync state" = paths that state materialization previously applied to disk,
   // together with the last applied hash. This is the local memory used to
   // decide whether a missing remote row should delete safely or create a
   // conflict file because local content diverged.

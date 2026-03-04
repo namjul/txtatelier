@@ -11,7 +11,7 @@ import {
 } from "@evolu/common";
 import { logger } from "../../logger";
 import { createConflictFile, detectConflict } from "../conflicts";
-import type { SyncLoopBError } from "../errors";
+import type { StateMaterializationError } from "../errors";
 import { computeFileHash } from "../hash";
 import type { Schema } from "../schema";
 import {
@@ -28,7 +28,7 @@ export interface StateMaterializationOptions {
   readonly onConflictArtifactCreated?: (absolutePath: string) => Promise<void>;
 }
 
-export const startSyncEvoluToFiles = (
+export const startStateMaterialization = (
   evolu: EvoluDatabase,
   watchDir: string,
   options?: StateMaterializationOptions,
@@ -100,7 +100,7 @@ const syncEvoluToFiles = async (
 
   const trackedStateResult = await tryAsync(
     () => getTrackedSyncState(evolu),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "StateListReadFailed",
       cause,
     }),
@@ -195,10 +195,10 @@ const syncEvoluRowToFile = async (
   // biome-ignore lint/suspicious/noExplicitAny: Row type will be refined later
   row: any,
   options?: StateMaterializationOptions,
-): Promise<Result<void, SyncLoopBError>> => {
+): Promise<Result<void, StateMaterializationError>> => {
   const lastAppliedResult = await tryAsync(
     () => getLastAppliedHash(evolu, row.path),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "StateReadFailed",
       path: row.path,
       cause,
@@ -216,7 +216,7 @@ const syncEvoluRowToFile = async (
   const file = Bun.file(absolutePath);
   const diskExistsResult = await tryAsync(
     () => file.exists(),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "DiskHashFailed",
       absolutePath,
       cause,
@@ -229,7 +229,7 @@ const syncEvoluRowToFile = async (
   const diskHashResult = diskExistsResult.value
     ? await tryAsync(
         () => computeFileHash(absolutePath),
-        (cause): SyncLoopBError => ({
+        (cause): StateMaterializationError => ({
           type: "DiskHashFailed",
           absolutePath,
           cause,
@@ -246,7 +246,7 @@ const syncEvoluRowToFile = async (
   if (diskHash === row.contentHash) {
     const stateUpdateResult = trySync(
       () => setLastAppliedHash(evolu, row.path, row.contentHash),
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "StateWriteFailed",
         path: row.path,
         cause,
@@ -261,7 +261,7 @@ const syncEvoluRowToFile = async (
 
     const conflictFileResult = await tryAsync(
       () => createConflictFile(absolutePath, row.content || "", row.ownerId),
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "ConflictFileCreateFailed",
         absolutePath,
         cause,
@@ -277,7 +277,7 @@ const syncEvoluRowToFile = async (
 
     const stateUpdateResult = trySync(
       () => setLastAppliedHash(evolu, row.path, row.contentHash),
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "StateWriteFailed",
         path: row.path,
         cause,
@@ -294,7 +294,7 @@ const syncEvoluRowToFile = async (
           await options.onConflictArtifactCreated(conflictPath);
         }
       },
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "ConflictFileCreateFailed",
         absolutePath: conflictPath,
         cause,
@@ -310,7 +310,7 @@ const syncEvoluRowToFile = async (
   logger.log(`[materialize] Writing: ${row.path}`);
   const writeResult = await tryAsync(
     () => writeFileAtomic(absolutePath, row.content || ""),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "FileWriteFailed",
       absolutePath,
       cause,
@@ -323,7 +323,7 @@ const syncEvoluRowToFile = async (
 
   const stateUpdateResult = trySync(
     () => setLastAppliedHash(evolu, row.path, row.contentHash),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "StateWriteFailed",
       path: row.path,
       cause,
@@ -339,13 +339,13 @@ const applyRemoteDeletionToFilesystem = async (
   path: string,
   lastAppliedHash: string,
   options?: StateMaterializationOptions,
-): Promise<Result<void, SyncLoopBError>> => {
+): Promise<Result<void, StateMaterializationError>> => {
   const absolutePath = join(watchDir, path);
   const file = Bun.file(absolutePath);
 
   const existsResult = await tryAsync(
     () => file.exists(),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "FileDeleteFailed",
       absolutePath,
       cause,
@@ -359,7 +359,7 @@ const applyRemoteDeletionToFilesystem = async (
   if (!existsResult.value) {
     const stateResult = trySync(
       () => clearLastAppliedHash(evolu, path),
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "StateWriteFailed",
         path,
         cause,
@@ -371,7 +371,7 @@ const applyRemoteDeletionToFilesystem = async (
 
   const diskHashResult = await tryAsync(
     () => computeFileHash(absolutePath),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "DiskHashFailed",
       absolutePath,
       cause,
@@ -387,7 +387,7 @@ const applyRemoteDeletionToFilesystem = async (
 
     const localContentResult = await tryAsync(
       () => file.text(),
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "ConflictFileCreateFailed",
         absolutePath,
         cause,
@@ -405,7 +405,7 @@ const applyRemoteDeletionToFilesystem = async (
           localContentResult.value,
           "remote-delete",
         ),
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "ConflictFileCreateFailed",
         absolutePath,
         cause,
@@ -418,7 +418,7 @@ const applyRemoteDeletionToFilesystem = async (
 
     const stateResult = trySync(
       () => clearLastAppliedHash(evolu, path),
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "StateWriteFailed",
         path,
         cause,
@@ -435,7 +435,7 @@ const applyRemoteDeletionToFilesystem = async (
           await options.onConflictArtifactCreated(conflictResult.value);
         }
       },
-      (cause): SyncLoopBError => ({
+      (cause): StateMaterializationError => ({
         type: "ConflictFileCreateFailed",
         absolutePath: conflictResult.value,
         cause,
@@ -450,7 +450,7 @@ const applyRemoteDeletionToFilesystem = async (
 
   const deleteResult = await tryAsync(
     () => unlink(absolutePath),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "FileDeleteFailed",
       absolutePath,
       cause,
@@ -472,7 +472,7 @@ const applyRemoteDeletionToFilesystem = async (
 
   const stateResult = trySync(
     () => clearLastAppliedHash(evolu, path),
-    (cause): SyncLoopBError => ({
+    (cause): StateMaterializationError => ({
       type: "StateWriteFailed",
       path,
       cause,

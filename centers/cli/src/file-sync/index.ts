@@ -1,6 +1,6 @@
 // Bidirectional filesystem sync with Evolu
-// Phase 0: Loop A (Filesystem → Evolu)
-// Phase 1: Loop B (Evolu → Filesystem)
+// Phase 0: Change Capture (Filesystem → Evolu)
+// Phase 1: State Materialization (Evolu → Filesystem)
 
 import type { AppOwner, Evolu, Result } from "@evolu/common";
 import { tryAsync } from "@evolu/common";
@@ -9,7 +9,7 @@ import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./schema";
-import { startSyncEvoluToFiles, syncFileToEvolu } from "./sync";
+import { captureChange, startStateMaterialization } from "./sync";
 import { startWatching } from "./watch";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -93,16 +93,16 @@ export const startFileSync = async (): Promise<void> => {
     }
   });
 
-  // Start Loop A: Watch filesystem and sync to Evolu
+  // Start Change Capture: watch filesystem and reflect into Evolu
   logger.log(`[file-sync] Watching directory: ${env.watchDir}`);
   stopWatching = await startWatching(env.watchDir, async (filePath) => {
-    await syncFileToEvolu(evolu, env.watchDir, filePath);
+    await captureChange(evolu, env.watchDir, filePath);
   });
 
-  // Start Loop B: Subscribe to Evolu and sync to filesystem
-  stopSyncing = startSyncEvoluToFiles(evolu, env.watchDir, {
-    onConflictArtifactCreated: async (conflictPath) => {
-      await syncFileToEvolu(evolu, env.watchDir, conflictPath);
+  // Start State Materialization: apply replicated rows to filesystem
+  stopSyncing = startStateMaterialization(evolu, env.watchDir, {
+    onConflictArtifactCreated: async (conflictPath: string) => {
+      await captureChange(evolu, env.watchDir, conflictPath);
     },
   });
 
@@ -118,13 +118,13 @@ export const stopFileSync = async (): Promise<void> => {
     unsubscribeError = null;
   }
 
-  // Stop Loop B first (stop listening to Evolu)
+  // Stop State Materialization first (stop listening to Evolu)
   if (stopSyncing) {
     stopSyncing();
     stopSyncing = null;
   }
 
-  // Stop Loop A (stop watching filesystem)
+  // Stop Change Capture (stop watching filesystem)
   if (stopWatching) {
     stopWatching();
     stopWatching = null;

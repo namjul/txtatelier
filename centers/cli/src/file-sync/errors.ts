@@ -89,9 +89,6 @@ export type StateMaterializationError =
       readonly cause: unknown;
     };
 
-export type SyncLoopAError = ChangeCaptureError;
-export type SyncLoopBError = StateMaterializationError;
-
 export type WatchQueueTaskError = {
   readonly type: "WatchQueueTaskFailed";
   readonly path: string;

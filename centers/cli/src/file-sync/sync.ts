@@ -1,6 +1,5 @@
 export {
   captureChange,
+  type StateMaterializationOptions,
   startStateMaterialization,
-  startSyncEvoluToFiles,
-  syncFileToEvolu,
 } from "./sync/index";

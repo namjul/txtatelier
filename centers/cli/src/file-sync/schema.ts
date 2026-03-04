@@ -32,7 +32,7 @@ export const Schema = {
 
   // Local-only table for tracking filesystem sync state
   // Underscore prefix (_) prevents sync across devices
-  // Used by Loop B to track which hashes we've applied to disk
+  // Used by state materialization to track which hashes were applied to disk
   _syncState: {
     id: SyncStateId,
     // File path (matches file.path)

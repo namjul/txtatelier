@@ -1,8 +1,5 @@
+export { captureChange } from "./change-capture";
 export {
-  syncFileToEvolu as captureChange,
-  syncFileToEvolu,
-} from "./change-capture";
-export {
-  startSyncEvoluToFiles as startStateMaterialization,
-  startSyncEvoluToFiles,
+  type StateMaterializationOptions,
+  startStateMaterialization,
 } from "./state-materialization";
