@@ -5,7 +5,7 @@ import { Schema } from "./schema";
 const transports = [
   {
     type: "WebSocket" as const,
-    url: "wss://free.evoluhq.com",
+    url: "ws://localhost:4000",
   },
 ];
 

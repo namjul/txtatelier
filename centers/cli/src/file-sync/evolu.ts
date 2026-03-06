@@ -60,7 +60,7 @@ export const createEvoluClient = async ({
   const evolu = createEvolu(deps)(Schema, {
     name: SimpleName.orThrow("txtatelier"),
     // Phase 2: Enable Evolu sync via free test relay
-    transports: [{ type: "WebSocket", url: "wss://free.evoluhq.com" }],
+    transports: [{ type: "WebSocket", url: "ws://localhost:4000" }],
   });
 
   // Get owner (Evolu handles persistence internally)
