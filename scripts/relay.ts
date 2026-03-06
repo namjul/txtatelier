@@ -12,10 +12,11 @@
  *
  * Configuration:
  *   TXTATELIER_RELAY_PORT        Port to run on (default: 4000)
+ *   TXTATELIER_RELAY_QUOTA_MB    Quota per owner in MB (default: 10)
  *   TXTATELIER_RELAY_LOGGING     Enable verbose logging (set to "true")
  *
  * Example:
- *   TXTATELIER_RELAY_PORT=8080 bun relay
+ *   TXTATELIER_RELAY_PORT=8080 TXTATELIER_RELAY_QUOTA_MB=100 bun relay
  */
 
 import { createConsole } from "@evolu/common";
@@ -31,13 +32,14 @@ const relayDataDir = join(repoRoot, ".relay");
 mkdirSync(relayDataDir, { recursive: true });
 
 const port = Number(process.env["TXTATELIER_RELAY_PORT"]) || 4000;
-const maxBytes = 10 * 1024 * 1024; // 10MB quota
+const quotaMB = Number(process.env["TXTATELIER_RELAY_QUOTA_MB"]) || 10;
+const maxBytes = quotaMB * 1024 * 1024;
 const enableLogging = process.env["TXTATELIER_RELAY_LOGGING"] === "true";
 
 console.log("Starting Evolu relay server...");
 console.log(`  Port: ${port}`);
 console.log(`  Data directory: ${relayDataDir}`);
-console.log(`  Quota per owner: ${maxBytes / (1024 * 1024)}MB`);
+console.log(`  Quota per owner: ${quotaMB}MB`);
 console.log(`  Logging: ${enableLogging ? "enabled" : "disabled"}`);
 console.log();
 
