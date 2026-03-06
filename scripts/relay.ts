@@ -1,14 +1,33 @@
 #!/usr/bin/env tsx
+/**
+ * Local Evolu Relay Server
+ *
+ * Self-hosted WebSocket relay for multi-device sync during development.
+ * Stores relay database in .relay/ directory.
+ *
+ * Usage:
+ *   bun relay                    # via npm script
+ *   tsx scripts/relay.ts         # directly
+ *   ./scripts/relay.ts           # if executable
+ *
+ * Configuration:
+ *   TXTATELIER_RELAY_PORT        Port to run on (default: 4000)
+ *   TXTATELIER_RELAY_LOGGING     Enable verbose logging (set to "true")
+ *
+ * Example:
+ *   TXTATELIER_RELAY_PORT=8080 bun relay
+ */
+
 import { createConsole } from "@evolu/common";
 import { createNodeJsRelay } from "@evolu/nodejs";
 import { mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
-// Store relay database in ./data/relay/ relative to repo root
+// Store relay database in .relay/ relative to repo root
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(__dirname, "..", "..", "..");
-const relayDataDir = join(repoRoot, "data", "relay");
+const repoRoot = join(__dirname, "..");
+const relayDataDir = join(repoRoot, ".relay");
 mkdirSync(relayDataDir, { recursive: true });
 
 const port = Number(process.env["TXTATELIER_RELAY_PORT"]) || 4000;

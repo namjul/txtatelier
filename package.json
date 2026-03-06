@@ -14,11 +14,16 @@
     "lint": "bunx biome lint .",
     "lint:fix": "bunx biome check --write .",
     "typecheck": "bunx tsc --noEmit",
-    "relay": "cd centers/relay && bun run start"
+    "relay": "tsx scripts/relay.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
-    "@types/bun": "latest"
+    "@evolu/common": "^7.4.0",
+    "@evolu/nodejs": "^2.4.0",
+    "@types/bun": "latest",
+    "@types/node": "^22.10.5",
+    "better-sqlite3": "^12.6.2",
+    "tsx": "^4.21.0"
   },
   "peerDependencies": {
     "typescript": "^5"
