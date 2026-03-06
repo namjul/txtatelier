@@ -1,0 +1,19 @@
+{
+  "name": "@txtatelier/relay",
+  "version": "0.0.0",
+  "description": "Evolu relay server for multi-device sync",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@evolu/common": "^7.4.0",
+    "@evolu/nodejs": "^2.4.0",
+    "better-sqlite3": "^12.6.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.21.0"
+  }
+}

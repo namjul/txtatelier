@@ -13,7 +13,8 @@
     "format:check": "bunx biome format .",
     "lint": "bunx biome lint .",
     "lint:fix": "bunx biome check --write .",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "relay": "cd centers/relay && bun run start"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
