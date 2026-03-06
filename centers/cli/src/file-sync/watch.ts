@@ -82,7 +82,13 @@ export const startWatching = async (
   };
 
   const toAbsolutePath = (changedPath: string): string => {
-    return isAbsolute(changedPath) ? changedPath : join(watchDir, changedPath);
+    // Chokidar emits paths relative to CWD or absolute.
+    // If relative, resolve against CWD first, then normalize.
+    if (isAbsolute(changedPath)) {
+      return changedPath;
+    }
+    // Resolve relative path against CWD to get absolute path
+    return join(process.cwd(), changedPath);
   };
 
   const watcher = watch(watchDir, {
