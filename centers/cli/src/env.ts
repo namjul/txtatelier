@@ -1,3 +1,4 @@
+import envPaths from "env-paths";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,8 +10,10 @@ import {
   union,
 } from "@evolu/common";
 
-const defaultDbPath = join(homedir(), ".txtatelier", "txtatelier.db");
-const defaultWatchDir = join(homedir(), ".txtatelier", "watched");
+const paths = envPaths("txtatelier");
+
+const defaultDbPath = join(paths.data, "txtatelier.db");
+const defaultWatchDir = join(homedir(), "Documents", "Txtatelier");
 const defaultRelayUrl = "wss://free.evoluhq.com";
 
 const LoggingValue = union("0", "1", "false", "true");
