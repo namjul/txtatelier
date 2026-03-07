@@ -9,10 +9,10 @@ import {
   stopFileSync,
 } from "./file-sync/index.js";
 
-const runStart = async (): Promise<void> => {
+const runStart = async (watchDir?: string): Promise<void> => {
   console.log("[txtatelier] Starting...");
 
-  await startFileSync();
+  await startFileSync(watchDir);
 
   const shutdown = async (signal: string) => {
     console.log(`[txtatelier] Received ${signal}, shutting down gracefully...`);
@@ -34,9 +34,9 @@ bin("txtatelier", "Local-first file synchronization CLI")
     colors: false,
     autoExit: false,
   })
-  .argument("[--watch-dir]", "Override the default watched directory")
-  .action(async () => {
-    await runStart();
+  .option("--watch-dir <path>", "Override the default watched directory")
+  .action(async (options: any) => {
+    await runStart(options.watchDir);
     process.exit(0);
   })
 

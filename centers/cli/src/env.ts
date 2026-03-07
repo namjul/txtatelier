@@ -1,4 +1,3 @@
-import envPaths from "env-paths";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,12 +8,14 @@ import {
   optional,
   union,
 } from "@evolu/common";
+import envPaths from "env-paths";
 
 const paths = envPaths("txtatelier");
 
 const defaultDbPath = join(paths.data, "txtatelier.db");
-const defaultWatchDir = join(homedir(), "Documents", "Txtatelier");
 const defaultRelayUrl = "wss://free.evoluhq.com";
+
+export const defaultWatchDir = join(homedir(), "Documents", "Txtatelier");
 
 const LoggingValue = union("0", "1", "false", "true");
 
@@ -22,7 +23,6 @@ const EnvInput = object({
   TXTATELIER_DB_PATH: optional(EvoluString),
   TXTATELIER_LOGGING: optional(LoggingValue),
   TXTATELIER_MNEMONIC: optional(Mnemonic),
-  TXTATELIER_WATCH_DIR: optional(EvoluString),
   TXTATELIER_RELAY_URL: optional(EvoluString),
 });
 
@@ -34,7 +34,6 @@ const parseEnv = () => {
   const mnemonicInput = processEnv["TXTATELIER_MNEMONIC"];
   const dbPathInput = processEnv["TXTATELIER_DB_PATH"];
   const loggingInput = processEnv["TXTATELIER_LOGGING"];
-  const watchDirInput = processEnv["TXTATELIER_WATCH_DIR"];
   const relayUrlInput = processEnv["TXTATELIER_RELAY_URL"];
   // biome-ignore-end lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const mnemonic =
@@ -44,9 +43,6 @@ const parseEnv = () => {
     ...(dbPathInput !== undefined ? { TXTATELIER_DB_PATH: dbPathInput } : {}),
     ...(loggingInput !== undefined ? { TXTATELIER_LOGGING: loggingInput } : {}),
     ...(mnemonic !== undefined ? { TXTATELIER_MNEMONIC: mnemonic } : {}),
-    ...(watchDirInput !== undefined
-      ? { TXTATELIER_WATCH_DIR: watchDirInput }
-      : {}),
     ...(relayUrlInput !== undefined
       ? { TXTATELIER_RELAY_URL: relayUrlInput }
       : {}),
@@ -69,7 +65,6 @@ const parseEnv = () => {
       ? raw.TXTATELIER_LOGGING === "1" || raw.TXTATELIER_LOGGING === "true"
       : false,
     mnemonic: raw.TXTATELIER_MNEMONIC,
-    watchDir: raw.TXTATELIER_WATCH_DIR ?? defaultWatchDir,
     relayUrl: raw.TXTATELIER_RELAY_URL ?? defaultRelayUrl,
   } as const;
 };

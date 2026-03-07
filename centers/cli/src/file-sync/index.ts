@@ -10,7 +10,7 @@ import {
   type Result,
   tryAsync,
 } from "@evolu/common";
-import { env } from "../env";
+import { defaultWatchDir, env } from "../env";
 import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
@@ -33,8 +33,10 @@ let stopWatching: (() => void) | null = null;
 let stopSyncing: (() => void) | null = null;
 let unsubscribeError: (() => void) | null = null;
 
-export const startFileSync = async (): Promise<void> => {
+export const startFileSync = async (watchDir?: string): Promise<void> => {
   logger.log("[file-sync] Initializing...");
+
+  const resolvedWatchDir = watchDir ?? defaultWatchDir;
 
   // Create Evolu client (handles owner persistence internally)
   const client = await createEvoluClient({
@@ -108,18 +110,18 @@ export const startFileSync = async (): Promise<void> => {
 
   // Phase 5 startup reconciliation: reflect pre-existing filesystem files into
   // Evolu before both loops start, now that watcher ignores initial events.
-  await reconcileStartupFilesystemState(evolu, env.watchDir);
+  await reconcileStartupFilesystemState(evolu, resolvedWatchDir);
 
   // Start Change Capture: watch filesystem and reflect into Evolu
-  logger.log(`[file-sync] Watching directory: ${env.watchDir}`);
-  stopWatching = await startWatching(env.watchDir, async (filePath) => {
-    await captureChange(evolu, env.watchDir, filePath);
+  logger.log(`[file-sync] Watching directory: ${resolvedWatchDir}`);
+  stopWatching = await startWatching(resolvedWatchDir, async (filePath) => {
+    await captureChange(evolu, resolvedWatchDir, filePath);
   });
 
   // Start State Materialization: apply replicated rows to filesystem
-  stopSyncing = startStateMaterialization(evolu, env.watchDir, {
+  stopSyncing = startStateMaterialization(evolu, resolvedWatchDir, {
     onConflictArtifactCreated: async (conflictPath: string) => {
-      await captureChange(evolu, env.watchDir, conflictPath);
+      await captureChange(evolu, resolvedWatchDir, conflictPath);
     },
   });
 
@@ -177,7 +179,7 @@ export const showOwnerContext = async (): Promise<void> => {
 
   console.log("Active context:");
   console.log(`  DB path: ${env.dbPath}`);
-  console.log(`  Watch dir: ${env.watchDir}`);
+  console.log(`  Watch dir: ${defaultWatchDir}`);
   console.log(`  Owner ID: ${owner.id}`);
 };
 
@@ -225,8 +227,8 @@ export const resetOwner = async (): Promise<void> => {
     });
   }
 
-  logger.log("Owner and local data reset.");
-  logger.log("Restart required to initialize the new owner.");
+  logger.log("Owner reset.");
+  logger.log("Restart required to activate new owner.");
 };
 
 export { evolu };
