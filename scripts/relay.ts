@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+
 /**
  * Local Evolu Relay Server
  *
@@ -20,21 +21,22 @@
  *   TXTATELIER_RELAY_PORT=8080 TXTATELIER_RELAY_QUOTA_MB=100 bun relay
  */
 
+import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createConsole } from "@evolu/common";
 import { createNodeJsRelay } from "@evolu/nodejs";
-import { mkdirSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
 
-// Store relay database in ~/.txtatelier-relay (or custom location via env var)
-const relayDataDir =
-  process.env["TXTATELIER_RELAY_DATA"] || join(homedir(), ".txtatelier-relay");
-mkdirSync(relayDataDir, { recursive: true });
-
+// biome-ignore-start lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
+const relayDataDir = process.env["TXTATELIER_RELAY_DATA"] || join(homedir(), ".txtatelier-relay"); // Store relay database in ~/.txtatelier-relay (or custom location via env var)
 const port = Number(process.env["TXTATELIER_RELAY_PORT"]) || 4000;
 const quotaMB = Number(process.env["TXTATELIER_RELAY_QUOTA_MB"]) || 10;
-const maxBytes = quotaMB * 1024 * 1024;
 const enableLogging = process.env["TXTATELIER_RELAY_LOGGING"] === "true";
+// biome-ignore-end lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
+
+const maxBytes = quotaMB * 1024 * 1024;
+
+mkdirSync(relayDataDir, { recursive: true });
 
 console.log("Starting Evolu relay server...");
 console.log(`  Port: ${port}`);

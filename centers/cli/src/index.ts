@@ -48,6 +48,7 @@ const runStart = async (): Promise<void> => {
   await new Promise(() => {});
 };
 
+// biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
 if (parsed["help"]) {
   printUsage();
   process.exit(0);
@@ -82,6 +83,7 @@ if (command === "owner") {
   }
 
   if (subcommand === "reset") {
+    // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
     if (!parsed["yes"]) {
       console.error(
         "Reset is destructive. Re-run with: txtatelier owner reset --yes",

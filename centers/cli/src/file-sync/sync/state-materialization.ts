@@ -106,8 +106,11 @@ export const startStateMaterialization = (
     const latestHistory = await evolu.loadQuery(latestHistoryQuery);
     if (latestHistory.length > 0) {
       const firstRow = latestHistory[0];
-      if (firstRow && firstRow["timestamp"]) {
+
+      // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+      if (firstRow?.["timestamp"]) {
         const latestTimestamp = firstRow[
+        // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
           "timestamp"
         ] as unknown as TimestampBytes;
         saveHistoryCursor(evolu, latestTimestamp);
@@ -203,9 +206,11 @@ export const startStateMaterialization = (
       // Log which files are being processed
       if (changedRows.length === 1) {
         logger.log(
+          // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
           `[materialize] Processing changed file: ${changedRows[0]?.["path"]}`,
         );
       } else if (changedRows.length <= 5) {
+        // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
         const paths = changedRows.map((r) => r["path"]).join(", ");
         logger.log(
           `[materialize] Processing ${changedRows.length} changed files: ${paths}`,

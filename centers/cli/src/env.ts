@@ -27,16 +27,13 @@ const formatTypeError = createFormatTypeError();
 
 const parseEnv = () => {
   const processEnv = process.env as Record<string, string | undefined>;
-  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
+  // biome-ignore-start lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const mnemonicInput = processEnv["TXTATELIER_MNEMONIC"];
-  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const dbPathInput = processEnv["TXTATELIER_DB_PATH"];
-  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const loggingInput = processEnv["TXTATELIER_LOGGING"];
-  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const watchDirInput = processEnv["TXTATELIER_WATCH_DIR"];
-  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const relayUrlInput = processEnv["TXTATELIER_RELAY_URL"];
+  // biome-ignore-end lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const mnemonic =
     mnemonicInput && mnemonicInput.trim() !== "" ? mnemonicInput : undefined;
 
