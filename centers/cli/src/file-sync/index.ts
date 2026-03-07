@@ -37,7 +37,10 @@ export const startFileSync = async (): Promise<void> => {
   logger.log("[file-sync] Initializing...");
 
   // Create Evolu client (handles owner persistence internally)
-  const client = await createEvoluClient({ dbPath: env.dbPath });
+  const client = await createEvoluClient({
+    dbPath: env.dbPath,
+    relayUrl: env.relayUrl,
+  });
   evolu = client.evolu;
   owner = client.owner;
   closeDb = client.flush;
@@ -156,14 +159,20 @@ export const stopFileSync = async (): Promise<void> => {
 };
 
 export const showOwnerMnemonic = async (): Promise<void> => {
-  const client = await createEvoluClient({ dbPath: env.dbPath });
+  const client = await createEvoluClient({
+    dbPath: env.dbPath,
+    relayUrl: env.relayUrl,
+  });
   owner = client.owner;
 
   console.log(owner.mnemonic);
 };
 
 export const showOwnerContext = async (): Promise<void> => {
-  const client = await createEvoluClient({ dbPath: env.dbPath });
+  const client = await createEvoluClient({
+    dbPath: env.dbPath,
+    relayUrl: env.relayUrl,
+  });
   owner = client.owner;
 
   console.log("Active context:");
@@ -183,7 +192,10 @@ export const restoreOwnerFromMnemonic = async (
     );
   }
 
-  const client = await createEvoluClient({ dbPath: env.dbPath });
+  const client = await createEvoluClient({
+    dbPath: env.dbPath,
+    relayUrl: env.relayUrl,
+  });
 
   await client.evolu.restoreAppOwner(parsedMnemonic.value, { reload: false });
 
@@ -199,7 +211,10 @@ export const restoreOwnerFromMnemonic = async (
 };
 
 export const resetOwner = async (): Promise<void> => {
-  const client = await createEvoluClient({ dbPath: env.dbPath });
+  const client = await createEvoluClient({
+    dbPath: env.dbPath,
+    relayUrl: env.relayUrl,
+  });
 
   await client.evolu.resetAppOwner({ reload: false });
 

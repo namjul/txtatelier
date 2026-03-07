@@ -29,9 +29,11 @@ let _cached: {
 
 export const createEvoluClient = async ({
   dbPath,
+  relayUrl,
   forceNew = false,
 }: {
   dbPath: string;
+  relayUrl: string;
   forceNew?: boolean;
 }) => {
   if (_cached && !forceNew) {
@@ -59,8 +61,7 @@ export const createEvoluClient = async ({
 
   const evolu = createEvolu(deps)(Schema, {
     name: SimpleName.orThrow("txtatelier"),
-    // Phase 2: Enable Evolu sync via free test relay
-    transports: [{ type: "WebSocket", url: "ws://localhost:4000" }],
+    transports: [{ type: "WebSocket", url: relayUrl }],
   });
 
   // Get owner (Evolu handles persistence internally)
@@ -97,7 +98,7 @@ export const createEvoluClient = async ({
   return _cached;
 };
 
-export const resetEvolu = async (dbPath: string) => {
+export const resetEvolu = async (dbPath: string, relayUrl: string) => {
   if (_cached) {
     const flushResult = await _cached.flush();
     if (!flushResult.ok) {
@@ -106,5 +107,5 @@ export const resetEvolu = async (dbPath: string) => {
   }
   _cached = null;
   // This will generate a new owner on next createEvoluClient call
-  return createEvoluClient({ dbPath, forceNew: true });
+  return createEvoluClient({ dbPath, relayUrl, forceNew: true });
 };

@@ -11,6 +11,7 @@ import {
 
 const defaultDbPath = join(homedir(), ".txtatelier", "txtatelier.db");
 const defaultWatchDir = join(homedir(), ".txtatelier", "watched");
+const defaultRelayUrl = "wss://free.evoluhq.com";
 
 const LoggingValue = union("0", "1", "false", "true");
 
@@ -19,6 +20,7 @@ const EnvInput = object({
   TXTATELIER_LOGGING: optional(LoggingValue),
   TXTATELIER_MNEMONIC: optional(Mnemonic),
   TXTATELIER_WATCH_DIR: optional(EvoluString),
+  TXTATELIER_RELAY_URL: optional(EvoluString),
 });
 
 const formatTypeError = createFormatTypeError();
@@ -33,6 +35,8 @@ const parseEnv = () => {
   const loggingInput = processEnv["TXTATELIER_LOGGING"];
   // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const watchDirInput = processEnv["TXTATELIER_WATCH_DIR"];
+  // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
+  const relayUrlInput = processEnv["TXTATELIER_RELAY_URL"];
   const mnemonic =
     mnemonicInput && mnemonicInput.trim() !== "" ? mnemonicInput : undefined;
 
@@ -42,6 +46,9 @@ const parseEnv = () => {
     ...(mnemonic !== undefined ? { TXTATELIER_MNEMONIC: mnemonic } : {}),
     ...(watchDirInput !== undefined
       ? { TXTATELIER_WATCH_DIR: watchDirInput }
+      : {}),
+    ...(relayUrlInput !== undefined
+      ? { TXTATELIER_RELAY_URL: relayUrlInput }
       : {}),
   };
 
@@ -63,6 +70,7 @@ const parseEnv = () => {
       : false,
     mnemonic: raw.TXTATELIER_MNEMONIC,
     watchDir: raw.TXTATELIER_WATCH_DIR ?? defaultWatchDir,
+    relayUrl: raw.TXTATELIER_RELAY_URL ?? defaultRelayUrl,
   } as const;
 };
 
