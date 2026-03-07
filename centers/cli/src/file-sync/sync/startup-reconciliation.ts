@@ -1,6 +1,6 @@
 import { mkdir, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { Evolu } from "@evolu/common";
+import { type Evolu, sqliteTrue } from "@evolu/common";
 import { logger } from "../../logger";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
@@ -20,8 +20,13 @@ export const reconcileStartupFilesystemState = async (
     return !isIgnoredRelativePath(relativePath);
   });
 
+  // Query non-deleted files from Evolu
   const existingRowsQuery = evolu.createQuery((db) =>
-    db.selectFrom("file").select(["path"]),
+    db
+      .selectFrom("file")
+      .select(["path"])
+      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+      .where("isDeleted", "is not", sqliteTrue as any),
   );
   const existingRows = await evolu.loadQuery(existingRowsQuery);
   const existingPaths = new Set(
@@ -32,6 +37,7 @@ export const reconcileStartupFilesystemState = async (
     `[reconcile] Startup scan found ${filesToReconcile.length} filesystem files`,
   );
 
+  // Step 1: Add new files (files on disk but not in Evolu)
   let failedCount = 0;
   let insertedCount = 0;
   for (const absolutePath of filesToReconcile) {
@@ -54,6 +60,36 @@ export const reconcileStartupFilesystemState = async (
     insertedCount += 1;
   }
 
+  // Step 2: Detect offline deletions (files in Evolu but not on disk)
+  const filesystemPaths = new Set(
+    filesToReconcile.map((absolutePath) =>
+      relative(watchDir, absolutePath).replaceAll("\\", "/"),
+    ),
+  );
+
+  let deletedCount = 0;
+  for (const evolPath of existingPaths) {
+    if (filesystemPaths.has(evolPath)) {
+      continue;
+    }
+
+    // File was deleted while CLI was offline
+    const absolutePath = join(watchDir, evolPath);
+    logger.log(`[reconcile] Offline deletion detected: ${evolPath}`);
+
+    const result = await captureChange(evolu, watchDir, absolutePath);
+    if (!result.ok) {
+      failedCount += 1;
+      logger.error(
+        `[reconcile] Failed to capture offline deletion ${evolPath}:`,
+        result.error,
+      );
+      continue;
+    }
+
+    deletedCount += 1;
+  }
+
   if (failedCount > 0) {
     logger.warn(
       `[reconcile] Startup reconciliation completed with ${failedCount} failures`,
@@ -62,7 +98,7 @@ export const reconcileStartupFilesystemState = async (
   }
 
   logger.log(
-    `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount} new files)`,
+    `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount} new files, deleted ${deletedCount} offline-deleted files)`,
   );
 };
 
