@@ -3,7 +3,7 @@
  * Local Evolu Relay Server
  *
  * Self-hosted WebSocket relay for multi-device sync during development.
- * Stores relay database in .relay/ directory.
+ * Stores relay database in ~/.txtatelier-relay directory by default.
  *
  * Usage:
  *   bun relay                    # via npm script
@@ -14,6 +14,7 @@
  *   TXTATELIER_RELAY_PORT        Port to run on (default: 4000)
  *   TXTATELIER_RELAY_QUOTA_MB    Quota per owner in MB (default: 10)
  *   TXTATELIER_RELAY_LOGGING     Enable verbose logging (set to "true")
+ *   TXTATELIER_RELAY_DATA        Custom data directory (default: ~/.txtatelier-relay)
  *
  * Example:
  *   TXTATELIER_RELAY_PORT=8080 TXTATELIER_RELAY_QUOTA_MB=100 bun relay
@@ -22,13 +23,12 @@
 import { createConsole } from "@evolu/common";
 import { createNodeJsRelay } from "@evolu/nodejs";
 import { mkdirSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { homedir } from "os";
+import { join } from "path";
 
-// Store relay database in .relay/ relative to repo root
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(__dirname, "..");
-const relayDataDir = join(repoRoot, ".relay");
+// Store relay database in ~/.txtatelier-relay (or custom location via env var)
+const relayDataDir =
+  process.env["TXTATELIER_RELAY_DATA"] || join(homedir(), ".txtatelier-relay");
 mkdirSync(relayDataDir, { recursive: true });
 
 const port = Number(process.env["TXTATELIER_RELAY_PORT"]) || 4000;
