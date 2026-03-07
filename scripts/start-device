@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLI_DIR="${SCRIPT_DIR}/centers/cli"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CLI_ENTRY="${PROJECT_ROOT}/centers/cli/src/index.ts"
 LAST_DEVICE_FILE="/tmp/.txtatelier-last-device"
 
 print_usage() {
@@ -164,8 +165,8 @@ run_device() {
       output_file="$(mktemp)"
 
       (
-        cd "${CLI_DIR}"
-        TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun run start
+        cd "${PROJECT_ROOT}"
+        TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun "${CLI_ENTRY}" start
       ) 2>&1 | tee "${output_file}"
 
       if grep -Fq "[file-sync] Restart required to activate restored owner" "${output_file}"; then
@@ -173,8 +174,8 @@ run_device() {
         echo
         echo "Mnemonic restored. Restarting device..."
         (
-          cd "${CLI_DIR}"
-          TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" bun run start
+          cd "${PROJECT_ROOT}"
+          TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" bun "${CLI_ENTRY}" start
         )
         return
       fi
@@ -184,8 +185,8 @@ run_device() {
     fi
 
     (
-      cd "${CLI_DIR}"
-      TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun run start
+      cd "${PROJECT_ROOT}"
+      TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun "${CLI_ENTRY}" start
     ) 2>&1 | {
       capture_mnemonic=0
       copied_mnemonic=0
@@ -217,8 +218,8 @@ run_device() {
   fi
 
   (
-    cd "${CLI_DIR}"
-    TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" bun run start
+    cd "${PROJECT_ROOT}"
+    TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" bun "${CLI_ENTRY}" start
   )
 }
 
