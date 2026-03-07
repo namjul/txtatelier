@@ -1,4 +1,5 @@
-import { parseArgv } from "specialist";
+import { bin } from "specialist";
+import packageJson from "../package.json" with { type: "json" };
 import {
   resetOwner,
   restoreOwnerFromMnemonic,
@@ -7,28 +8,6 @@ import {
   startFileSync,
   stopFileSync,
 } from "./file-sync/index.js";
-
-const parsed = parseArgv(process.argv.slice(2), {
-  boolean: ["help", "yes"],
-  alias: {
-    help: ["h"],
-    yes: ["y"],
-  },
-});
-
-const [command, subcommand, value] = parsed._ as ReadonlyArray<string>;
-
-const printUsage = (): void => {
-  console.log("txtatelier CLI");
-  console.log("");
-  console.log("Usage:");
-  console.log("  txtatelier");
-  console.log("  txtatelier start");
-  console.log("  txtatelier owner show");
-  console.log("  txtatelier owner where");
-  console.log("  txtatelier owner restore <mnemonic>");
-  console.log("  txtatelier owner reset --yes");
-};
 
 const runStart = async (): Promise<void> => {
   console.log("[txtatelier] Starting...");
@@ -48,58 +27,61 @@ const runStart = async (): Promise<void> => {
   await new Promise(() => {});
 };
 
-// biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
-if (parsed["help"]) {
-  printUsage();
-  process.exit(0);
-}
-
-if (command === undefined || command === "start") {
-  await runStart();
-  process.exit(0);
-}
-
-if (command === "owner") {
-  if (subcommand === "show") {
-    await showOwnerMnemonic();
+bin("txtatelier", "Local-first file synchronization CLI")
+  .config({
+    package: packageJson.name,
+    version: packageJson.version,
+    colors: false,
+    autoExit: false,
+  })
+  .argument("[--watch-dir]", "Override the default watched directory")
+  .action(async () => {
+    await runStart();
     process.exit(0);
-  }
+  })
 
-  if (subcommand === "where") {
-    await showOwnerContext();
-    process.exit(0);
-  }
-
-  if (subcommand === "restore") {
-    if (!value) {
-      console.error(
-        "Missing mnemonic. Usage: txtatelier owner restore <mnemonic>",
-      );
-      process.exit(1);
+  .command("owner", "Manage owner identity")
+  .option("--show", "Show owner mnemonic")
+  .option("--where", "Show path of owner/mnemonic files")
+  .option({
+    name: "--restore <words...>",
+    description: "Restore owner from mnemonic",
+    eager: true,
+  })
+  .option("--reset", "Reset owner (destructive)")
+  .option("--yes", "Confirm destructive operation (for --reset)")
+  .action(async (options: any) => {
+    if (options.show) {
+      await showOwnerMnemonic();
+      process.exit(0);
     }
 
-    await restoreOwnerFromMnemonic(value);
-    process.exit(0);
-  }
-
-  if (subcommand === "reset") {
-    // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
-    if (!parsed["yes"]) {
-      console.error(
-        "Reset is destructive. Re-run with: txtatelier owner reset --yes",
-      );
-      process.exit(1);
+    if (options.where) {
+      await showOwnerContext();
+      process.exit(0);
     }
 
-    await resetOwner();
-    process.exit(0);
-  }
+    if (options.restore) {
+      const mnemonic = Array.isArray(options.restore)
+        ? options.restore.join(" ")
+        : options.restore;
+      await restoreOwnerFromMnemonic(mnemonic as string);
+      process.exit(0);
+    }
 
-  console.error(`Unknown owner command: ${subcommand ?? "<missing>"}`);
-  printUsage();
-  process.exit(1);
-}
+    if (options.reset) {
+      if (!options.yes) {
+        console.error(
+          "Reset is destructive. Re-run with: txtatelier owner --reset --yes",
+        );
+        process.exit(1);
+      }
+      await resetOwner();
+      process.exit(0);
+    }
 
-console.error(`Unknown command: ${command}`);
-printUsage();
-process.exit(1);
+    console.error("No action specified. Use --help to see available options.");
+    process.exit(1);
+  })
+
+  .run();
