@@ -1,14 +1,18 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  createIdFromString,
   type Evolu,
   err,
+  type IdBytes,
+  idBytesToId,
   ok,
   type Result,
   sqliteTrue,
   tryAsync,
   trySync,
 } from "@evolu/common";
+import type { TimestampBytes } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import { createConflictFile, detectConflict } from "../conflicts";
 import type { StateMaterializationError } from "../errors";
@@ -29,6 +33,38 @@ export interface StateMaterializationOptions {
   readonly onConflictArtifactCreated?: (absolutePath: string) => Promise<void>;
 }
 
+// ========== History Cursor Management ==========
+
+const ensureHistoryCursor = (evolu: EvoluDatabase): void => {
+  const cursorId = createIdFromString<"HistoryCursor">("history-cursor");
+  evolu.upsert("_historyCursor", { id: cursorId });
+};
+
+const loadHistoryCursor = async (
+  evolu: EvoluDatabase,
+): Promise<TimestampBytes | null> => {
+  const cursorId = createIdFromString<"HistoryCursor">("history-cursor");
+
+  const q = evolu.createQuery((db) =>
+    db
+      .selectFrom("_historyCursor")
+      .select(["lastTimestamp"])
+      .where("id", "=", cursorId)
+      .where("isDeleted", "is", null)
+      .limit(1),
+  );
+
+  const rows = await evolu.loadQuery(q);
+  return rows[0]?.lastTimestamp ?? null;
+};
+
+const saveHistoryCursor = (evolu: EvoluDatabase, ts: TimestampBytes): void => {
+  const cursorId = createIdFromString<"HistoryCursor">("history-cursor");
+  evolu.upsert("_historyCursor", { id: cursorId, lastTimestamp: ts });
+};
+
+// ========== State Materialization ==========
+
 export const startStateMaterialization = (
   evolu: EvoluDatabase,
   watchDir: string,
@@ -46,17 +82,61 @@ export const startStateMaterialization = (
 
   let initialLoadComplete = false;
 
-  evolu.loadQuery(allFilesQuery).then((rows) => {
+  // Ensure cursor exists before starting
+  ensureHistoryCursor(evolu);
+
+  evolu.loadQuery(allFilesQuery).then(async (rows) => {
     logger.log(`[materialize] Initial load: ${rows.length} existing files`);
-    void syncEvoluToFiles(evolu, watchDir, rows, options).then(() => {
-      initialLoadComplete = true;
-    });
+    await syncEvoluToFiles(evolu, watchDir, rows, options);
+
+    // Set cursor to current timestamp to avoid replaying old history
+    // Query latest timestamp from evolu_history
+    const latestHistoryQuery = evolu.createQuery((db) =>
+      // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+      (db as any)
+        .selectFrom("evolu_history")
+        .select(["timestamp"])
+        // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+        .where("table", "==", "file" as any)
+        // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+        .orderBy("timestamp", "desc" as any)
+        .limit(1),
+    );
+
+    const latestHistory = await evolu.loadQuery(latestHistoryQuery);
+    if (latestHistory.length > 0) {
+      const firstRow = latestHistory[0];
+      if (firstRow && firstRow["timestamp"]) {
+        const latestTimestamp = firstRow[
+          "timestamp"
+        ] as unknown as TimestampBytes;
+        saveHistoryCursor(evolu, latestTimestamp);
+        logger.log(
+          "[materialize] Cursor initialized to latest history timestamp",
+        );
+      }
+    }
+
+    initialLoadComplete = true;
   });
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const SUBSCRIPTION_DEBOUNCE_MS = 500;
+  let subscriptionFireCount = 0;
 
+  // Note: This subscription fires for ALL Evolu mutations including our own
+  // local edits (echo/self-processing). This is accepted redundancy:
+  // - Hash checks prevent actual redundant disk writes (no-op if unchanged)
+  // - Overhead is ~4ms per edit (imperceptible to users)
+  // - Alternative (tracking row IDs) adds complexity for marginal benefit
+  // See: KNOWN_REDUNDANCY_ECHO_PROCESSING.md for full analysis
   const unsubscribe = evolu.subscribeQuery(allFilesQuery)(() => {
+    subscriptionFireCount++;
+    const triggerTime = new Date().toISOString();
+    logger.log(
+      `[materialize] 🔔 Subscription fired (#${subscriptionFireCount}) at ${triggerTime}`,
+    );
+
     if (!initialLoadComplete) {
       logger.log(
         "[materialize] Skipping subscription (initial load in progress)",
@@ -65,13 +145,89 @@ export const startStateMaterialization = (
     }
 
     if (debounceTimer) {
+      logger.log("[materialize] Resetting debounce timer (rapid changes)");
       clearTimeout(debounceTimer);
     }
 
-    debounceTimer = setTimeout(() => {
+    debounceTimer = setTimeout(async () => {
       logger.log("[materialize] Change detected (debounced)");
-      const rows = evolu.getQueryRows(allFilesQuery);
-      void syncEvoluToFiles(evolu, watchDir, rows, options);
+
+      // Load cursor to find last processed timestamp
+      const cursor = await loadHistoryCursor(evolu);
+
+      // Query evolu_history for changes since cursor
+      const historyQuery = evolu.createQuery((db) => {
+        let qb = db
+          .selectFrom("evolu_history")
+          .select(["id", "timestamp"])
+          // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+          .where("table", "==", "file" as any)
+          // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+          .where("column", "==", "content" as any);
+
+        if (cursor != null) {
+          // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+          qb = qb.where("timestamp", ">", cursor as any);
+        }
+
+        // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+        return qb.orderBy("timestamp", "asc" as any);
+      });
+
+      const historyRows = await evolu.loadQuery(historyQuery);
+
+      if (historyRows.length === 0) {
+        logger.log("[materialize] No new changes to process");
+        debounceTimer = null;
+        return;
+      }
+
+      // Convert history IDs to string IDs and fetch file rows
+      const stringIds = historyRows.map((h) =>
+        idBytesToId(h.id as unknown as IdBytes),
+      );
+
+      const changedFilesQuery = evolu.createQuery((db) =>
+        // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
+        (db as any)
+          .selectFrom("file")
+          .selectAll()
+          // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
+          .where("id", "in", stringIds as any)
+          // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+          .where("isDeleted", "is not", sqliteTrue as any),
+      );
+
+      const changedRows = await evolu.loadQuery(changedFilesQuery);
+
+      // Log which files are being processed
+      if (changedRows.length === 1) {
+        logger.log(
+          `[materialize] Processing changed file: ${changedRows[0]?.["path"]}`,
+        );
+      } else if (changedRows.length <= 5) {
+        const paths = changedRows.map((r) => r["path"]).join(", ");
+        logger.log(
+          `[materialize] Processing ${changedRows.length} changed files: ${paths}`,
+        );
+      } else {
+        logger.log(
+          `[materialize] Processing ${changedRows.length} changed files`,
+        );
+      }
+
+      // Process only changed files
+      await syncEvoluToFiles(evolu, watchDir, changedRows, options);
+
+      // Update cursor to latest timestamp
+      if (historyRows.length > 0) {
+        const lastRow = historyRows[historyRows.length - 1];
+        if (lastRow?.timestamp) {
+          const lastTimestamp = lastRow.timestamp as unknown as TimestampBytes;
+          saveHistoryCursor(evolu, lastTimestamp);
+        }
+      }
+
       debounceTimer = null;
     }, SUBSCRIPTION_DEBOUNCE_MS);
   });
@@ -218,6 +374,7 @@ const syncEvoluRowToFile = async (
 
   const lastAppliedHash = lastAppliedResult.value;
   if (lastAppliedHash === row.contentHash) {
+    logger.log(`[materialize] Skipped (already processed): ${row.path}`);
     return ok();
   }
 
@@ -252,6 +409,7 @@ const syncEvoluRowToFile = async (
   const diskHash = diskHashResult.value;
 
   if (diskHash === row.contentHash) {
+    logger.log(`[materialize] Skipped (disk matches): ${row.path}`);
     const stateUpdateResult = trySync(
       () => setLastAppliedHash(evolu, row.path, row.contentHash),
       (cause): StateMaterializationError => ({

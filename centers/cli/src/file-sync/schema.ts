@@ -1,8 +1,10 @@
 // Evolu schema definition
 // Phase 0: File table (synced)
 // Phase 1: _syncState table (local-only, not synced)
+// Phase 2: _historyCursor table (local-only, incremental sync)
 
 import * as Evolu from "@evolu/common";
+import { TimestampBytes } from "@evolu/common/local-first";
 
 // Primary keys
 export const FileId = Evolu.id("File");
@@ -10,6 +12,9 @@ export type FileId = typeof FileId.Type;
 
 export const SyncStateId = Evolu.id("SyncState");
 export type SyncStateId = typeof SyncStateId.Type;
+
+export const HistoryCursorId = Evolu.id("HistoryCursor");
+export type HistoryCursorId = typeof HistoryCursorId.Type;
 
 // Schema definition
 export const Schema = {
@@ -40,6 +45,16 @@ export const Schema = {
     // Last hash we wrote to the filesystem
     // Used to detect conflicts (local changes vs remote changes)
     lastAppliedHash: Evolu.NonEmptyString100,
+  },
+
+  // Local-only table for incremental sync cursor
+  // Tracks last processed evolu_history timestamp for this device
+  // Always contains exactly 1 row (device's bookmark in history stream)
+  _historyCursor: {
+    id: HistoryCursorId,
+    // Last evolu_history timestamp we processed
+    // Used to query: WHERE timestamp > lastTimestamp
+    lastTimestamp: Evolu.nullOr(TimestampBytes),
   },
 };
 
