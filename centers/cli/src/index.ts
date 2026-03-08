@@ -6,17 +6,16 @@ import {
   showOwnerContext,
   showOwnerMnemonic,
   startFileSync,
-  stopFileSync,
 } from "./file-sync/index.js";
 
 const runStart = async (watchDir?: string): Promise<void> => {
   console.log("[txtatelier] Starting...");
 
-  await startFileSync(watchDir);
+  const session = await startFileSync(watchDir);
 
   const shutdown = async (signal: string) => {
     console.log(`[txtatelier] Received ${signal}, shutting down gracefully...`);
-    await stopFileSync();
+    await session.stop();
     process.exit(0);
   };
 

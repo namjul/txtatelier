@@ -3,18 +3,13 @@
 // Phase 1: State Materialization (Evolu → Filesystem)
 
 import {
-  type AppOwner,
   createFormatTypeError,
-  type Evolu,
   Mnemonic,
-  type Result,
   tryAsync,
 } from "@evolu/common";
 import { defaultWatchDir, env } from "../env";
 import { logger } from "../logger";
-import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
-import type { Schema } from "./schema";
 import {
   captureChange,
   reconcileStartupFilesystemState,
@@ -22,18 +17,15 @@ import {
 } from "./sync/index";
 import { startWatching } from "./watch";
 
-type EvoluDatabase = Evolu<typeof Schema>;
-
 const formatTypeError = createFormatTypeError();
 
-let evolu: EvoluDatabase;
-let owner: AppOwner;
-let closeDb: () => Promise<Result<void, FlushError>>;
-let stopWatching: (() => void) | null = null;
-let stopSyncing: (() => void) | null = null;
-let unsubscribeError: (() => void) | null = null;
+export interface FileSyncSession {
+  readonly stop: () => Promise<void>;
+}
 
-export const startFileSync = async (watchDir?: string): Promise<void> => {
+export const startFileSync = async (
+  watchDir?: string,
+): Promise<FileSyncSession> => {
   logger.log("[file-sync] Initializing...");
 
   const resolvedWatchDir = watchDir ?? defaultWatchDir;
@@ -43,9 +35,9 @@ export const startFileSync = async (watchDir?: string): Promise<void> => {
     dbPath: env.dbPath,
     relayUrl: env.relayUrl,
   });
-  evolu = client.evolu;
-  owner = client.owner;
-  closeDb = client.flush;
+  const evolu = client.evolu;
+  const owner = client.owner;
+  const closeDb = client.flush;
 
   const restoreMnemonic = env.mnemonic;
   if (restoreMnemonic) {
@@ -101,7 +93,7 @@ export const startFileSync = async (watchDir?: string): Promise<void> => {
   logger.log(`[file-sync] Owner ID: ${owner.id}`);
 
   // Subscribe to Evolu errors
-  unsubscribeError = evolu.subscribeError(() => {
+  const unsubscribeError = evolu.subscribeError(() => {
     const error = evolu.getError();
     if (error) {
       logger.error("[file-sync] Evolu error:", error);
@@ -114,50 +106,56 @@ export const startFileSync = async (watchDir?: string): Promise<void> => {
 
   // Start Change Capture: watch filesystem and reflect into Evolu
   logger.log(`[file-sync] Watching directory: ${resolvedWatchDir}`);
-  stopWatching = await startWatching(resolvedWatchDir, async (filePath) => {
-    await captureChange(evolu, resolvedWatchDir, filePath);
-  });
+  const stopWatching = await startWatching(
+    resolvedWatchDir,
+    async (filePath) => {
+      await captureChange(evolu, resolvedWatchDir, filePath);
+    },
+  );
 
   // Start State Materialization: apply replicated rows to filesystem
-  stopSyncing = startStateMaterialization(evolu, resolvedWatchDir, {
+  const stopSyncing = startStateMaterialization(evolu, resolvedWatchDir, {
     onConflictArtifactCreated: async (conflictPath: string) => {
       await captureChange(evolu, resolvedWatchDir, conflictPath);
     },
   });
 
   logger.log("[file-sync] Ready");
-};
 
-export const stopFileSync = async (): Promise<void> => {
-  logger.log("[file-sync] Shutting down...");
+  // Return session with bundled cleanup
+  return {
+    stop: async (): Promise<void> => {
+      logger.log("[file-sync] Shutting down...");
 
-  // Unsubscribe from error handler
-  if (unsubscribeError) {
-    unsubscribeError();
-    unsubscribeError = null;
-  }
+      // Unsubscribe from error handler
+      if (unsubscribeError) {
+        unsubscribeError();
+      }
 
-  // Stop State Materialization first (stop listening to Evolu)
-  if (stopSyncing) {
-    stopSyncing();
-    stopSyncing = null;
-  }
+      // Stop State Materialization first (stop listening to Evolu)
+      if (stopSyncing) {
+        stopSyncing();
+      }
 
-  // Stop Change Capture (stop watching filesystem)
-  if (stopWatching) {
-    stopWatching();
-    stopWatching = null;
-  }
+      // Stop Change Capture (stop watching filesystem)
+      if (stopWatching) {
+        stopWatching();
+      }
 
-  // Flush database
-  if (closeDb) {
-    const flushResult = await closeDb();
-    if (!flushResult.ok) {
-      logger.error("[file-sync] Failed to flush database:", flushResult.error);
-    }
-  }
+      // Flush database
+      if (closeDb) {
+        const flushResult = await closeDb();
+        if (!flushResult.ok) {
+          logger.error(
+            "[file-sync] Failed to flush database:",
+            flushResult.error,
+          );
+        }
+      }
 
-  logger.log("[file-sync] Stopped");
+      logger.log("[file-sync] Stopped");
+    },
+  };
 };
 
 export const showOwnerMnemonic = async (): Promise<void> => {
@@ -165,7 +163,7 @@ export const showOwnerMnemonic = async (): Promise<void> => {
     dbPath: env.dbPath,
     relayUrl: env.relayUrl,
   });
-  owner = client.owner;
+  const owner = client.owner;
 
   console.log(owner.mnemonic);
 };
@@ -175,7 +173,7 @@ export const showOwnerContext = async (): Promise<void> => {
     dbPath: env.dbPath,
     relayUrl: env.relayUrl,
   });
-  owner = client.owner;
+  const owner = client.owner;
 
   console.log("Active context:");
   console.log(`  DB path: ${env.dbPath}`);
@@ -231,5 +229,4 @@ export const resetOwner = async (): Promise<void> => {
   logger.log("Restart required to activate new owner.");
 };
 
-export { evolu };
 export type { Schema } from "./schema";
