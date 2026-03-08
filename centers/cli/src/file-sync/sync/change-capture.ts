@@ -14,7 +14,7 @@ import type { ChangeCaptureError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
-import { clearLastAppliedHash, setLastAppliedHash } from "../state";
+import { clearLastAppliedHash } from "../state";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -245,7 +245,8 @@ export const captureChange = async (
         });
       }
 
-      setLastAppliedHash(evolu, relativePath, contentHash);
+      // Do NOT set lastAppliedHash here - capture reads FROM disk, doesn't write TO disk
+      // Only materialize loop should set lastAppliedHash (when it writes to disk)
     },
     (cause): ChangeCaptureError => ({
       type: "EvoluMutationFailed",
