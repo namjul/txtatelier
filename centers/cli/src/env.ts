@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   createFormatTypeError,
   String as EvoluString,
@@ -8,14 +6,6 @@ import {
   optional,
   union,
 } from "@evolu/common";
-import envPaths from "env-paths";
-
-const paths = envPaths("txtatelier");
-
-const defaultDbPath = join(paths.data, "txtatelier.db");
-const defaultRelayUrl = "wss://free.evoluhq.com";
-
-export const defaultWatchDir = join(homedir(), "Documents", "Txtatelier");
 
 const LoggingValue = union("0", "1", "false", "true");
 
@@ -60,12 +50,12 @@ const parseEnv = () => {
   const raw = parsed.value;
 
   return {
-    dbPath: raw.TXTATELIER_DB_PATH ?? defaultDbPath,
+    dbPath: raw.TXTATELIER_DB_PATH,
     enableLogging: raw.TXTATELIER_LOGGING
       ? raw.TXTATELIER_LOGGING === "1" || raw.TXTATELIER_LOGGING === "true"
       : false,
     mnemonic: raw.TXTATELIER_MNEMONIC,
-    relayUrl: raw.TXTATELIER_RELAY_URL ?? defaultRelayUrl,
+    relayUrl: raw.TXTATELIER_RELAY_URL,
   } as const;
 };
 

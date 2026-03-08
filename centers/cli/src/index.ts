@@ -11,7 +11,7 @@ import {
 const runStart = async (watchDir?: string): Promise<void> => {
   console.log("[txtatelier] Starting...");
 
-  const session = await startFileSync(watchDir);
+  const session = await startFileSync({ ...(watchDir && { watchDir } )});
 
   const shutdown = async (signal: string) => {
     console.log(`[txtatelier] Received ${signal}, shutting down gracefully...`);
@@ -23,7 +23,7 @@ const runStart = async (watchDir?: string): Promise<void> => {
   process.on("SIGINT", () => shutdown("SIGINT"));
 
   console.log("[txtatelier] Running (press Ctrl+C to stop)");
-  await new Promise(() => {});
+  await new Promise(() => { });
 };
 
 bin("txtatelier", "Local-first file synchronization CLI")
@@ -34,7 +34,7 @@ bin("txtatelier", "Local-first file synchronization CLI")
     autoExit: false,
   })
   .option("--watch-dir <path>", "Override the default watched directory")
-  .action(async (options: any) => {
+  .action(async (options) => {
     await runStart(options.watchDir);
     process.exit(0);
   })
@@ -49,14 +49,17 @@ bin("txtatelier", "Local-first file synchronization CLI")
   })
   .option("--reset", "Reset owner (destructive)")
   .option("--yes", "Confirm destructive operation (for --reset)")
-  .action(async (options: any) => {
+  .action(async (options) => {
+      const session = await startFileSync({ ...(options.watchDir && { watchDir: options.watchDir } )});
     if (options.show) {
-      await showOwnerMnemonic();
+      await showOwnerMnemonic(session);
+      session.stop();
       process.exit(0);
     }
 
     if (options.where) {
-      await showOwnerContext();
+      await showOwnerContext(session);
+      session.stop();
       process.exit(0);
     }
 
@@ -64,7 +67,8 @@ bin("txtatelier", "Local-first file synchronization CLI")
       const mnemonic = Array.isArray(options.restore)
         ? options.restore.join(" ")
         : options.restore;
-      await restoreOwnerFromMnemonic(mnemonic as string);
+      await restoreOwnerFromMnemonic(session, mnemonic as string);
+      session.stop();
       process.exit(0);
     }
 
@@ -75,7 +79,10 @@ bin("txtatelier", "Local-first file synchronization CLI")
         );
         process.exit(1);
       }
-      await resetOwner();
+
+      const session = await startFileSync({ ...(options.watchDir && { watchDir: options.watchDir } )});
+      await resetOwner(session);
+      session.stop();
       process.exit(0);
     }
 
