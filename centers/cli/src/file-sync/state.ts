@@ -6,6 +6,7 @@ import {
   type Evolu,
   type Result,
   sqliteTrue,
+  tryAsync,
   trySync,
 } from "@evolu/common";
 import type { StateMaterializationError } from "./errors";
@@ -15,22 +16,31 @@ type EvoluDatabase = Evolu<typeof Schema>;
 
 /**
  * Get the last hash we applied to the filesystem for a given path.
- * Returns null if we've never applied anything for this path.
+ * Returns Result containing the hash (or null if never applied) with error handling.
  */
-export const getLastAppliedHash = async (
+export const getTrackedHash = async (
   evolu: EvoluDatabase,
   path: string,
-): Promise<string | null> => {
-  const query = evolu.createQuery((db) =>
-    db
-      .selectFrom("_syncState")
-      .select(["lastAppliedHash"])
-      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-      .where("path", "==", path as any),
-  );
+): Promise<Result<string | null, StateMaterializationError>> => {
+  return tryAsync(
+    async () => {
+      const query = evolu.createQuery((db) =>
+        db
+          .selectFrom("_syncState")
+          .select(["lastAppliedHash"])
+          // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+          .where("path", "==", path as any),
+      );
 
-  const rows = await evolu.loadQuery(query);
-  return rows[0]?.lastAppliedHash ?? null;
+      const rows = await evolu.loadQuery(query);
+      return rows[0]?.lastAppliedHash ?? null;
+    },
+    (cause): StateMaterializationError => ({
+      type: "StateReadFailed",
+      path,
+      cause,
+    }),
+  );
 };
 
 /**

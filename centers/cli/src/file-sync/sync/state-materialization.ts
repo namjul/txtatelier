@@ -18,7 +18,7 @@ import type { StateMaterializationError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
-import { clearTrackedHash, getLastAppliedHash, setTrackedHash } from "../state";
+import { clearTrackedHash, getTrackedHash, setTrackedHash } from "../state";
 import { writeFileAtomic } from "../write";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -265,18 +265,14 @@ export const startStateMaterialization = (
           const path = deletedRow["path"] as string | null | undefined;
           if (!path) continue;
 
-          const lastAppliedHashResult = await tryAsync(
-            () => getLastAppliedHash(evolu, path as string),
-            (cause): StateMaterializationError => ({
-              type: "StateReadFailed",
-              path: path as string,
-              cause,
-            }),
+          const lastAppliedHashResult = await getTrackedHash(
+            evolu,
+            path as string,
           );
 
           if (!lastAppliedHashResult.ok) {
             logger.error(
-              `[materialize] Failed to get lastAppliedHash for ${path}:`,
+              `[materialize] Failed to get tracked hash for ${path}:`,
               lastAppliedHashResult.error,
             );
             continue;
@@ -390,14 +386,7 @@ const syncEvoluRowToFile = async (
   row: any,
   options?: StateMaterializationOptions,
 ): Promise<Result<void, StateMaterializationError>> => {
-  const lastAppliedResult = await tryAsync(
-    () => getLastAppliedHash(evolu, row.path),
-    (cause): StateMaterializationError => ({
-      type: "StateReadFailed",
-      path: row.path,
-      cause,
-    }),
-  );
+  const lastAppliedResult = await getTrackedHash(evolu, row.path);
   if (!lastAppliedResult.ok) {
     return err(lastAppliedResult.error);
   }
