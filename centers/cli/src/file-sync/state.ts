@@ -1,7 +1,14 @@
 // State management for _syncState table
 // Tracks which file hashes have been applied to the filesystem
 
-import { createIdFromString, type Evolu, sqliteTrue } from "@evolu/common";
+import {
+  createIdFromString,
+  type Evolu,
+  type Result,
+  sqliteTrue,
+  trySync,
+} from "@evolu/common";
+import type { StateMaterializationError } from "./errors";
 import type { Schema } from "./schema";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -30,36 +37,51 @@ export const getLastAppliedHash = async (
  * Record that we've applied a specific hash to the filesystem.
  * Uses upsert to automatically handle insert or update.
  * Uses deterministic ID based on path to enable stable upserts.
+ * Returns a Result with standardized error handling.
  */
-export const setLastAppliedHash = (
+export const setTrackedHash = (
   evolu: EvoluDatabase,
   path: string,
   hash: string,
-): void => {
-  // Create deterministic ID from path so we can upsert
-  const id = createIdFromString(`syncstate-${path}`);
-
-  evolu.upsert("_syncState", {
-    id,
-    path,
-    lastAppliedHash: hash,
-  });
+): Result<void, StateMaterializationError> => {
+  return trySync(
+    () => {
+      const id = createIdFromString(`syncstate-${path}`);
+      evolu.upsert("_syncState", {
+        id,
+        path,
+        lastAppliedHash: hash,
+      });
+    },
+    (cause): StateMaterializationError => ({
+      type: "StateWriteFailed",
+      path,
+      cause,
+    }),
+  );
 };
 
 /**
  * Clear the state for a given path.
  * Used when files are deleted.
+ * Returns a Result with standardized error handling.
  */
-export const clearLastAppliedHash = (
+export const clearTrackedHash = (
   evolu: EvoluDatabase,
   path: string,
-): void => {
-  // Create deterministic ID from path (same as setLastAppliedHash)
-  const id = createIdFromString(`syncstate-${path}`);
-
-  evolu.update("_syncState", {
-    id,
-    isDeleted: sqliteTrue,
-  });
+): Result<void, StateMaterializationError> => {
+  return trySync(
+    () => {
+      const id = createIdFromString(`syncstate-${path}`);
+      evolu.update("_syncState", {
+        id,
+        isDeleted: sqliteTrue,
+      });
+    },
+    (cause): StateMaterializationError => ({
+      type: "StateWriteFailed",
+      path,
+      cause,
+    }),
+  );
 };
-

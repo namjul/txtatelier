@@ -14,7 +14,7 @@ import type { ChangeCaptureError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
-import { clearLastAppliedHash } from "../state";
+import { clearTrackedHash } from "../state";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -128,7 +128,6 @@ export const captureChange = async (
             isDeleted: sqliteTrue,
           });
         }
-        clearLastAppliedHash(evolu, relativePath);
       },
       (cause): ChangeCaptureError => ({
         type: "EvoluMutationFailed",
@@ -143,6 +142,19 @@ export const captureChange = async (
         deleteResult.error,
       );
       return err(deleteResult.error);
+    }
+
+    const clearResult = clearTrackedHash(evolu, relativePath);
+    if (!clearResult.ok) {
+      logger.error(
+        `[capture] Failed to clear tracked hash for ${relativePath}:`,
+        clearResult.error,
+      );
+      return err({
+        type: "EvoluMutationFailed",
+        relativePath,
+        cause: clearResult.error.cause,
+      });
     }
 
     return ok();

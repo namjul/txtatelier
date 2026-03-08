@@ -10,7 +10,6 @@ import {
   type Result,
   sqliteTrue,
   tryAsync,
-  trySync,
 } from "@evolu/common";
 import type { TimestampBytes } from "@evolu/common/local-first";
 import { logger } from "../../logger";
@@ -19,11 +18,7 @@ import type { StateMaterializationError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
-import {
-  clearLastAppliedHash,
-  getLastAppliedHash,
-  setLastAppliedHash,
-} from "../state";
+import { clearTrackedHash, getLastAppliedHash, setTrackedHash } from "../state";
 import { writeFileAtomic } from "../write";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -31,45 +26,6 @@ type EvoluDatabase = Evolu<typeof Schema>;
 export interface StateMaterializationOptions {
   readonly onConflictArtifactCreated?: (absolutePath: string) => Promise<void>;
 }
-
-// ========== State Tracking Helpers ==========
-
-/**
- * Updates _syncState to track that we successfully applied a hash to disk.
- * Wraps setLastAppliedHash with standardized error handling.
- */
-const setTrackedHash = (
-  evolu: EvoluDatabase,
-  path: string,
-  hash: string,
-): Result<void, StateMaterializationError> => {
-  return trySync(
-    () => setLastAppliedHash(evolu, path, hash),
-    (cause): StateMaterializationError => ({
-      type: "StateWriteFailed",
-      path,
-      cause,
-    }),
-  );
-};
-
-/**
- * Clears _syncState entry when a file is deleted from disk.
- * Wraps clearLastAppliedHash with standardized error handling.
- */
-const clearTrackedHash = (
-  evolu: EvoluDatabase,
-  path: string,
-): Result<void, StateMaterializationError> => {
-  return trySync(
-    () => clearLastAppliedHash(evolu, path),
-    (cause): StateMaterializationError => ({
-      type: "StateWriteFailed",
-      path,
-      cause,
-    }),
-  );
-};
 
 // ========== History Cursor Management ==========
 
