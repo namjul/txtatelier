@@ -7,14 +7,21 @@ import { writeFileAtomic } from "./write";
 /**
  * Detect if there's a conflict between disk state and remote change.
  *
- * Conflict occurs when:
+ * Implements 3-way merge conflict detection:
+ * - BASE   = lastAppliedHash (what we last wrote to disk)
+ * - LOCAL  = diskHash (current disk state, possibly user-edited)
+ * - REMOTE = remoteHash (incoming change from another device)
+ *
+ * Conflict occurs when BOTH local and remote changed from the common base:
  * 1. File exists on disk (diskHash is not null)
- * 2. We previously applied something (lastAppliedHash is not null)
+ * 2. We have a base to compare against (lastAppliedHash is not null)
  * 3. User modified the file locally (diskHash !== lastAppliedHash)
- * 4. Remote also changed (remoteHash !== diskHash)
+ * 4. Remote also changed from base (remoteHash !== lastAppliedHash)
+ *
+ * This aligns with standard 3-way merge semantics used by Git, Mercurial, etc.
  *
  * @param diskHash - Current hash of file on disk (null if doesn't exist)
- * @param lastAppliedHash - Last hash we applied to disk (null if never applied)
+ * @param lastAppliedHash - Last hash we applied to disk, the common base (null if never applied)
  * @param remoteHash - Hash from Evolu (remote change)
  * @returns true if conflict detected, false otherwise
  */
@@ -24,15 +31,21 @@ export const detectConflict = (
   remoteHash: string,
 ): boolean => {
   // No conflict if file doesn't exist on disk
-  if (!diskHash) return false;
+  if (diskHash === null) return false;
 
-  // No conflict if we never applied anything (new file)
-  if (!lastAppliedHash) return false;
+  // No conflict if we never applied anything (new file, no common base)
+  if (lastAppliedHash === null) return false;
 
-  // Conflict if:
-  // - User modified file locally (diskHash !== lastAppliedHash)
-  // - Remote also changed (remoteHash !== diskHash)
-  return diskHash !== lastAppliedHash && remoteHash !== diskHash;
+  // Optimization: If remote matches disk, no conflict regardless of base
+  // (Both sides converged to same value, or remote has no real change)
+  if (remoteHash === diskHash) return false;
+
+  // 3-way merge conflict detection:
+  // Conflict exists when BOTH local and remote diverged from the base
+  const localChanged = diskHash !== lastAppliedHash;
+  const remoteChanged = remoteHash !== lastAppliedHash;
+
+  return localChanged && remoteChanged;
 };
 
 /**
