@@ -32,6 +32,45 @@ export interface StateMaterializationOptions {
   readonly onConflictArtifactCreated?: (absolutePath: string) => Promise<void>;
 }
 
+// ========== State Tracking Helpers ==========
+
+/**
+ * Updates _syncState to track that we successfully applied a hash to disk.
+ * Wraps setLastAppliedHash with standardized error handling.
+ */
+const setTrackedHash = (
+  evolu: EvoluDatabase,
+  path: string,
+  hash: string,
+): Result<void, StateMaterializationError> => {
+  return trySync(
+    () => setLastAppliedHash(evolu, path, hash),
+    (cause): StateMaterializationError => ({
+      type: "StateWriteFailed",
+      path,
+      cause,
+    }),
+  );
+};
+
+/**
+ * Clears _syncState entry when a file is deleted from disk.
+ * Wraps clearLastAppliedHash with standardized error handling.
+ */
+const clearTrackedHash = (
+  evolu: EvoluDatabase,
+  path: string,
+): Result<void, StateMaterializationError> => {
+  return trySync(
+    () => clearLastAppliedHash(evolu, path),
+    (cause): StateMaterializationError => ({
+      type: "StateWriteFailed",
+      path,
+      cause,
+    }),
+  );
+};
+
 // ========== History Cursor Management ==========
 
 const ensureHistoryCursor = (evolu: EvoluDatabase): void => {
@@ -445,16 +484,7 @@ const syncEvoluRowToFile = async (
 
   if (diskHash === row.contentHash) {
     logger.log(`[materialize] Skipped (disk matches): ${row.path}`);
-    const stateUpdateResult = trySync(
-      () => setLastAppliedHash(evolu, row.path, row.contentHash),
-      (cause): StateMaterializationError => ({
-        type: "StateWriteFailed",
-        path: row.path,
-        cause,
-      }),
-    );
-
-    return stateUpdateResult.ok ? ok() : err(stateUpdateResult.error);
+    return setTrackedHash(evolu, row.path, row.contentHash);
   }
 
   if (detectConflict(diskHash, lastAppliedHash, row.contentHash)) {
@@ -476,15 +506,7 @@ const syncEvoluRowToFile = async (
     const conflictPath = conflictFileResult.value;
     logger.log(`[materialize] Created conflict file: ${conflictPath}`);
 
-    const stateUpdateResult = trySync(
-      () => setLastAppliedHash(evolu, row.path, row.contentHash),
-      (cause): StateMaterializationError => ({
-        type: "StateWriteFailed",
-        path: row.path,
-        cause,
-      }),
-    );
-
+    const stateUpdateResult = setTrackedHash(evolu, row.path, row.contentHash);
     if (!stateUpdateResult.ok) {
       return err(stateUpdateResult.error);
     }
@@ -522,16 +544,7 @@ const syncEvoluRowToFile = async (
     return err(writeResult.error);
   }
 
-  const stateUpdateResult = trySync(
-    () => setLastAppliedHash(evolu, row.path, row.contentHash),
-    (cause): StateMaterializationError => ({
-      type: "StateWriteFailed",
-      path: row.path,
-      cause,
-    }),
-  );
-
-  return stateUpdateResult.ok ? ok() : err(stateUpdateResult.error);
+  return setTrackedHash(evolu, row.path, row.contentHash);
 };
 
 const applyRemoteDeletionToFilesystem = async (
@@ -558,16 +571,7 @@ const applyRemoteDeletionToFilesystem = async (
   }
 
   if (!existsResult.value) {
-    const stateResult = trySync(
-      () => clearLastAppliedHash(evolu, path),
-      (cause): StateMaterializationError => ({
-        type: "StateWriteFailed",
-        path,
-        cause,
-      }),
-    );
-
-    return stateResult.ok ? ok() : err(stateResult.error);
+    return clearTrackedHash(evolu, path);
   }
 
   const diskHashResult = await tryAsync(
@@ -617,15 +621,7 @@ const applyRemoteDeletionToFilesystem = async (
       return err(conflictResult.error);
     }
 
-    const stateResult = trySync(
-      () => clearLastAppliedHash(evolu, path),
-      (cause): StateMaterializationError => ({
-        type: "StateWriteFailed",
-        path,
-        cause,
-      }),
-    );
-
+    const stateResult = clearTrackedHash(evolu, path);
     if (!stateResult.ok) {
       return err(stateResult.error);
     }
@@ -671,14 +667,5 @@ const applyRemoteDeletionToFilesystem = async (
 
   logger.log(`[materialize] Deleted: ${path}`);
 
-  const stateResult = trySync(
-    () => clearLastAppliedHash(evolu, path),
-    (cause): StateMaterializationError => ({
-      type: "StateWriteFailed",
-      path,
-      cause,
-    }),
-  );
-
-  return stateResult.ok ? ok() : err(stateResult.error);
+  return clearTrackedHash(evolu, path);
 };
