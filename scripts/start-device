@@ -166,7 +166,7 @@ run_device() {
 
       (
         cd "${PROJECT_ROOT}"
-        TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun "${CLI_ENTRY}" start
+        TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun "${CLI_ENTRY}" --watch-dir "${watch_dir}"
       ) 2>&1 | tee "${output_file}"
 
       if grep -Fq "[file-sync] Restart required to activate restored owner" "${output_file}"; then
@@ -175,7 +175,7 @@ run_device() {
         echo "Mnemonic restored. Restarting device..."
         (
           cd "${PROJECT_ROOT}"
-          TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" bun "${CLI_ENTRY}" start
+          TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" bun "${CLI_ENTRY}" --watch-dir "${watch_dir}"
         )
         return
       fi
@@ -186,7 +186,7 @@ run_device() {
 
     (
       cd "${PROJECT_ROOT}"
-      TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun "${CLI_ENTRY}" start
+      TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun "${CLI_ENTRY}" --watch-dir "${watch_dir}"
     ) 2>&1 | {
       capture_mnemonic=0
       copied_mnemonic=0
@@ -219,7 +219,7 @@ run_device() {
 
   (
     cd "${PROJECT_ROOT}"
-    TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" TXTATELIER_WATCH_DIR="${watch_dir}" bun "${CLI_ENTRY}" start
+    TXTATELIER_LOGGING=1 TXTATELIER_DB_PATH="${db_path}" bun "${CLI_ENTRY}" --watch-dir "${watch_dir}"
   )
 }
 
