@@ -6,6 +6,7 @@ import {
   createIdFromString,
   NonEmptyString100,
   NonEmptyString1000,
+  sqliteTrue,
 } from "@evolu/common";
 import { resetEvolu } from "./evolu";
 import { defaultRelayUrl, startFileSync } from "./index";
@@ -202,3 +203,65 @@ describe("File modifications", () => {
     await session.stop();
   });
 });
+
+
+describe("Deletion handling", () => {
+  test("file deletion syncs to Evolu", async () => {
+
+    const session = await startFileSync({ watchDir: tempDir });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Create file
+    await Bun.write(join(tempDir, "delete.md"), "content");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Delete file
+    await Bun.file(join(tempDir, "delete.md")).unlink();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Check Evolu marks as deleted
+    const query = session.evolu.createQuery((db) =>
+      db.selectFrom("file").selectAll().where("path", "=", NonEmptyString1000.orThrow(
+        "delete.md")),
+    );
+    const rows = await session.evolu.loadQuery(query);
+    expect(rows[0]?.isDeleted).toBe(sqliteTrue);
+
+    await session.stop();
+  })
+
+  test("remote deletion removes local file", async () => {
+    const session = await startFileSync({ watchDir: tempDir });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Create file via Evolu
+    const fileId = createIdFromString("DeleteTestFile");
+    session.evolu.upsert("file", {
+      id: fileId,
+      path: NonEmptyString1000.orThrow("remote-delete.md"),
+      content: "will be deleted",
+      contentHash: NonEmptyString100.orThrow("hash-delete"),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    // Verify file exists
+    let exists = await Bun.file(join(tempDir, "remote-delete.md")).exists();
+    expect(exists).toBe(true);
+
+    // Mark as deleted in Evolu
+    session.evolu.update("file", {
+      id: fileId,
+      isDeleted: sqliteTrue,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    // Verify file is removed
+    exists = await Bun.file(join(tempDir, "remote-delete.md")).exists();
+    expect(exists).toBe(false);
+
+    await session.stop();
+  });
+});
+
