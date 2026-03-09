@@ -61,6 +61,9 @@ describe("Startup reconciliation", () => {
 
     await session.stop();
   });
+
+  test.todo("deleted files in Evolu are removed on startup", () => { });
+  test.todo("files added to Evolu while offline sync to disk on startup", () => { });
 });
 
 describe("Capture phase (FS→Evolu) - file changes propagate to database", () => {
@@ -204,10 +207,8 @@ describe("File modifications", () => {
   });
 });
 
-
 describe("Deletion handling", () => {
   test("file deletion syncs to Evolu", async () => {
-
     const session = await startFileSync({ watchDir: tempDir });
     await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -221,14 +222,16 @@ describe("Deletion handling", () => {
 
     // Check Evolu marks as deleted
     const query = session.evolu.createQuery((db) =>
-      db.selectFrom("file").selectAll().where("path", "=", NonEmptyString1000.orThrow(
-        "delete.md")),
+      db
+        .selectFrom("file")
+        .selectAll()
+        .where("path", "=", NonEmptyString1000.orThrow("delete.md")),
     );
     const rows = await session.evolu.loadQuery(query);
     expect(rows[0]?.isDeleted).toBe(sqliteTrue);
 
     await session.stop();
-  })
+  });
 
   test("remote deletion removes local file", async () => {
     const session = await startFileSync({ watchDir: tempDir });
@@ -264,4 +267,3 @@ describe("Deletion handling", () => {
     await session.stop();
   });
 });
-
