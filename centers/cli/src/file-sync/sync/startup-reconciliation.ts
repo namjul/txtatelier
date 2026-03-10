@@ -5,6 +5,7 @@ import { logger } from "../../logger";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
 import { captureChange } from "./change-capture";
+import { applyRemoteDeletionToFilesystem } from "./state-materialization";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -100,6 +101,37 @@ export const reconcileStartupFilesystemState = async (
   logger.log(
     `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount} new files, deleted ${deletedCount} offline-deleted files)`,
   );
+
+  // Step 3: Apply remote deletions (files deleted in Evolu while offline)
+  const deletedRowsQuery = evolu.createQuery((db) =>
+    db
+      .selectFrom("file")
+      .select(["path"])
+      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+      .where("isDeleted", "is", sqliteTrue as any),
+  );
+
+  const deletedRows = await evolu.loadQuery(deletedRowsQuery);
+  let removedCount = 0;
+  for (const row of deletedRows) {
+    if (!row.path) continue;
+
+    const result = await applyRemoteDeletionToFilesystem(
+      evolu,
+      watchDir,
+      row.path as string,
+      "",
+      {},
+    );
+
+    if (!result.ok) {
+      logger.error(`[reconcile] Failed to apply deletion for ${row.path}:`, result.error);
+      continue;
+    }
+
+    removedCount += 1;
+  }
+
 };
 
 const collectFilesRecursively = async (dir: string): Promise<string[]> => {

@@ -492,7 +492,7 @@ const syncEvoluRowToFile = async (
   return setTrackedHash(evolu, row.path, row.contentHash);
 };
 
-const applyRemoteDeletionToFilesystem = async (
+export const applyRemoteDeletionToFilesystem = async (
   evolu: EvoluDatabase,
   watchDir: string,
   path: string,
