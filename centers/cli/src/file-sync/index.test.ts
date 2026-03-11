@@ -267,7 +267,22 @@ describe("GIVEN file exists in both Evolu and disk", () => {
   });
 
   describe("WHEN file is added to Evolu while offline", () => {
-    test.todo("THEN file is written to disk on startup", () => {});
+    test("THEN file is written to disk on startup", async () => {
+      session1.evolu.upsert("file", {
+        id: createIdFromString("OfflineAddTest"),
+        path: NonEmptyString1000.orThrow("offline-new.md"),
+        content: "added offline",
+        contentHash: NonEmptyString100.orThrow("hash-offline"),
+      });
+      await session1.flush();
+      await session1.stop();
+
+      const session2 = await startFileSync({ watchDir: tempDir });
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const content = await Bun.file(join(tempDir, "offline-new.md")).text();
+      expect(content).toBe("added offline");
+      await session2.stop();
+    });
   });
 
   describe("WHEN file is modified on disk while offline", () => {
