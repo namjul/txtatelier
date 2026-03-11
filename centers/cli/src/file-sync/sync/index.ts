@@ -1,5 +1,8 @@
 export { captureChange } from "./change-capture";
-export { reconcileStartupFilesystemState } from "./startup-reconciliation";
+export {
+  reconcileStartupEvoluState,
+  reconcileStartupFilesystemState,
+} from "./startup-reconciliation";
 export {
   type StateMaterializationOptions,
   startStateMaterialization,

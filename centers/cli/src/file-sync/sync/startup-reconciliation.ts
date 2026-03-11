@@ -2,8 +2,11 @@ import { mkdir, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { type Evolu, sqliteTrue } from "@evolu/common";
 import { logger } from "../../logger";
+import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
+import { getTrackedHash, setTrackedHash } from "../state";
+import { writeFileAtomic } from "../write";
 import { captureChange } from "./change-capture";
 import { applyRemoteDeletionToFilesystem } from "./state-materialization";
 
@@ -99,10 +102,17 @@ export const reconcileStartupFilesystemState = async (
   }
 
   logger.log(
-    `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount} new files, deleted ${deletedCount} offline-deleted files)`,
+    `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount}, deleted ${deletedCount})`,
   );
+};
 
-  // Step 3: Apply remote deletions (files deleted in Evolu while offline)
+export const reconcileStartupEvoluState = async (
+  evolu: EvoluDatabase,
+  watchDir: string,
+): Promise<void> => {
+  logger.log("[reconcile] Starting Evolu state reconciliation");
+
+  // Step 1: Apply remote deletions (files deleted in Evolu while offline)
   const deletedRowsQuery = evolu.createQuery((db) =>
     db
       .selectFrom("file")
@@ -112,26 +122,88 @@ export const reconcileStartupFilesystemState = async (
   );
 
   const deletedRows = await evolu.loadQuery(deletedRowsQuery);
+  logger.log(`[reconcile] Found ${deletedRows.length} deleted rows in Evolu`);
   let removedCount = 0;
   for (const row of deletedRows) {
     if (!row.path) continue;
+
+    const trackedHashResult = await getTrackedHash(evolu, row.path as string);
+    const lastAppliedHash = trackedHashResult.ok
+      ? (trackedHashResult.value ?? "")
+      : "";
 
     const result = await applyRemoteDeletionToFilesystem(
       evolu,
       watchDir,
       row.path as string,
-      "",
+      lastAppliedHash,
       {},
     );
 
     if (!result.ok) {
-      logger.error(`[reconcile] Failed to apply deletion for ${row.path}:`, result.error);
+      logger.error(
+        `[reconcile] Failed to apply deletion for ${row.path}:`,
+        result.error,
+      );
       continue;
     }
 
     removedCount += 1;
   }
 
+  logger.log(`[reconcile] Applied ${removedCount} remote deletions`);
+
+  // Step 2: Apply remote additions/updates (files added/updated in Evolu while offline)
+  const activeRowsQuery = evolu.createQuery((db) =>
+    db
+      .selectFrom("file")
+      .selectAll()
+      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+      .where("isDeleted", "is not", sqliteTrue as any),
+  );
+
+  const activeRows = await evolu.loadQuery(activeRowsQuery);
+  let syncedCount = 0;
+
+  for (const row of activeRows) {
+    if (!row.path || !row.content) continue;
+
+    const absolutePath = join(watchDir, row.path as string);
+    const trackedHashResult = await getTrackedHash(evolu, row.path as string);
+    const lastAppliedHash = trackedHashResult.ok
+      ? (trackedHashResult.value ?? "")
+      : "";
+
+    if (lastAppliedHash === row.contentHash) {
+      continue;
+    }
+
+    const file = Bun.file(absolutePath);
+    const diskExists = await file.exists();
+    const diskHash = diskExists ? await computeFileHash(absolutePath) : null;
+
+    if (diskHash === row.contentHash) {
+      await setTrackedHash(
+        evolu,
+        row.path as string,
+        row.contentHash as string,
+      );
+      continue;
+    }
+
+    if (!diskExists || diskHash === lastAppliedHash) {
+      await writeFileAtomic(absolutePath, row.content as string);
+      await setTrackedHash(
+        evolu,
+        row.path as string,
+        row.contentHash as string,
+      );
+      syncedCount += 1;
+      logger.log(`[reconcile] Synced from Evolu: ${row.path}`);
+    }
+  }
+
+  logger.log(`[reconcile] Synced ${syncedCount} files from Evolu`);
 };
 
 const collectFilesRecursively = async (dir: string): Promise<string[]> => {

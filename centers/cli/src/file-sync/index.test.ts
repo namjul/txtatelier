@@ -244,7 +244,26 @@ describe("GIVEN file exists in both Evolu and disk", () => {
   });
 
   describe("WHEN file is deleted in Evolu while offline", () => {
-    test.todo("THEN file is removed on next startup", async () => {});
+    test("THEN file is removed on next startup", async () => {
+      const query = session1.evolu.createQuery((db) =>
+        db
+          .selectFrom("file")
+          .selectAll()
+          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+      );
+      const rows = await session1.evolu.loadQuery(query);
+      const fileId = rows[0]?.id;
+
+      session1.evolu.update("file", { id: fileId!, isDeleted: sqliteTrue });
+      await session1.flush();
+      await session1.stop();
+
+      const session2 = await startFileSync({ watchDir: tempDir });
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const exists = await Bun.file(join(tempDir, "synced.md")).exists();
+      expect(exists).toBe(false);
+      await session2.stop();
+    });
   });
 
   describe("WHEN file is added to Evolu while offline", () => {

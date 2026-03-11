@@ -4,25 +4,26 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import envPaths from "env-paths";
 import {
-  createFormatTypeError,
-  Mnemonic,
-  tryAsync,
   type AppOwner,
+  createFormatTypeError,
   type Evolu,
+  Mnemonic,
   type Result,
+  tryAsync,
 } from "@evolu/common";
+import envPaths from "env-paths";
 import { logger } from "../logger";
+import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
+import type { Schema } from "./schema";
 import {
   captureChange,
+  reconcileStartupEvoluState,
   reconcileStartupFilesystemState,
   startStateMaterialization,
 } from "./sync/index";
 import { startWatching } from "./watch";
-import type { Schema } from "./schema";
-import type { FlushError } from "./errors";
 
 const paths = envPaths("txtatelier");
 
@@ -35,7 +36,7 @@ export const defaultWatchDir = join(homedir(), "Documents", "Txtatelier");
 export interface FileSyncConfig {
   readonly dbPath: string;
   readonly watchDir: string;
-  readonly relayUrl: string,
+  readonly relayUrl: string;
 }
 
 export interface FileSyncSession {
@@ -48,7 +49,7 @@ export interface FileSyncSession {
 
 export const startFileSync = async (
   config?: Partial<FileSyncConfig>,
-  restoreMnemonic?: Mnemonic
+  restoreMnemonic?: Mnemonic,
 ): Promise<FileSyncSession> => {
   logger.log("[file-sync] Initializing...");
 
@@ -125,6 +126,10 @@ export const startFileSync = async (
     }
   });
 
+  // Startup sync: apply any Evolu changes that happened while offline (deletions/additions)
+  // This must run BEFORE filesystem reconciliation to prevent re-adding deleted files
+  await reconcileStartupEvoluState(evolu, resolvedWatchDir);
+
   // Phase 5 startup reconciliation: reflect pre-existing filesystem files into
   // Evolu before both loops start, now that watcher ignores initial events.
   await reconcileStartupFilesystemState(evolu, resolvedWatchDir);
@@ -155,7 +160,7 @@ export const startFileSync = async (
     config: {
       dbPath: resolvedDbPath,
       watchDir: resolvedWatchDir,
-      relayUrl: resolvedrelayUrl
+      relayUrl: resolvedrelayUrl,
     },
     stop: async (): Promise<void> => {
       logger.log("[file-sync] Shutting down...");
@@ -191,12 +196,15 @@ export const startFileSync = async (
   };
 };
 
-export const showOwnerMnemonic = async (session: FileSyncSession): Promise<void> => {
+export const showOwnerMnemonic = async (
+  session: FileSyncSession,
+): Promise<void> => {
   console.log(session.owner.mnemonic);
 };
 
-export const showOwnerContext = async (session: FileSyncSession): Promise<void> => {
-
+export const showOwnerContext = async (
+  session: FileSyncSession,
+): Promise<void> => {
   console.log("Active context:");
   console.log(`  DB path: ${session.config.dbPath}`);
   console.log(`  Watch dir: ${session.config.watchDir}`);
@@ -229,7 +237,7 @@ export const restoreOwnerFromMnemonic = async (
   logger.log("Restart required to activate restored owner.");
 };
 
-export const resetOwner = async (session: FileSyncSession,): Promise<void> => {
+export const resetOwner = async (session: FileSyncSession): Promise<void> => {
   await session.evolu.resetAppOwner({ reload: false });
 
   const flushResult = await session.flush();
