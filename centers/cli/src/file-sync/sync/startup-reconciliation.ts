@@ -41,16 +41,13 @@ export const reconcileStartupFilesystemState = async (
     `[reconcile] Startup scan found ${filesToReconcile.length} filesystem files`,
   );
 
-  // Step 1: Add new files (files on disk but not in Evolu)
+  // Step 1: Process all files on disk (new files and content changes)
   let failedCount = 0;
   let insertedCount = 0;
   for (const absolutePath of filesToReconcile) {
     const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
 
-    if (existingPaths.has(relativePath)) {
-      continue;
-    }
-
+    // captureChange handles both new files and content updates
     const result = await captureChange(evolu, watchDir, absolutePath);
     if (!result.ok) {
       failedCount += 1;
@@ -61,7 +58,9 @@ export const reconcileStartupFilesystemState = async (
       continue;
     }
 
-    insertedCount += 1;
+    if (!existingPaths.has(relativePath)) {
+      insertedCount += 1;
+    }
   }
 
   // Step 2: Detect offline deletions (files in Evolu but not on disk)

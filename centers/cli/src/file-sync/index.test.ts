@@ -286,7 +286,24 @@ describe("GIVEN file exists in both Evolu and disk", () => {
   });
 
   describe("WHEN file is modified on disk while offline", () => {
-    test.todo("THEN changes sync to Evolu on startup", () => {});
+    test("THEN changes sync to Evolu on startup", async () => {
+      await session1.stop();
+
+      await Bun.write(join(tempDir, "synced.md"), "modified offline");
+
+      const session2 = await startFileSync({ watchDir: tempDir });
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const query = session2.evolu.createQuery((db) =>
+        db
+          .selectFrom("file")
+          .selectAll()
+          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+      );
+      const rows = await session2.evolu.loadQuery(query);
+      expect(rows[0]?.content).toBe("modified offline");
+      await session2.stop();
+    });
   });
 
   describe("WHEN file is edited in both Evolu and disk while offline", () => {
