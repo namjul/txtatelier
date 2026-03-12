@@ -339,7 +339,35 @@ describe("GIVEN file exists in both Evolu and disk", () => {
   });
 
   describe("WHEN file is deleted in Evolu and edited on disk while offline", () => {
-    test.todo("THEN conflict is detected on startup", () => {});
+    test("THEN conflict is detected on startup", async () => {
+      const query = session1.evolu.createQuery((db) =>
+        db
+          .selectFrom("file")
+          .selectAll()
+          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+      );
+      const rows = await session1.evolu.loadQuery(query);
+      const fileId = rows[0]?.id;
+
+      session1.evolu.update("file", {
+        id: fileId!,
+        isDeleted: sqliteTrue,
+      });
+      await session1.flush();
+      await session1.stop();
+
+      await Bun.write(join(tempDir, "synced.md"), "disk edit");
+
+      const session2 = await startFileSync({ watchDir: tempDir });
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const conflictFiles = await Array.fromAsync(
+        new Bun.Glob("synced.conflict*").scan(tempDir),
+      );
+      expect(conflictFiles.length).toBeGreaterThan(0);
+
+      await session2.stop();
+    });
   });
 
   describe("WHEN file is edited in Evolu and deleted on disk while offline", () => {
