@@ -371,6 +371,41 @@ describe("GIVEN file exists in both Evolu and disk", () => {
   });
 
   describe("WHEN file is edited in Evolu and deleted on disk while offline", () => {
-    test.todo("THEN remote edit is applied on startup", () => {});
+    test("THEN remote edit is applied on startup", async () => {
+      const query = session1.evolu.createQuery((db) =>
+        db
+          .selectFrom("file")
+          .selectAll()
+          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+      );
+      const rows = await session1.evolu.loadQuery(query);
+      const fileId = rows[0]?.id;
+
+      session1.evolu.upsert("file", {
+        id: fileId!,
+        path: NonEmptyString1000.orThrow("synced.md"),
+        content: "evolu edit",
+        contentHash: NonEmptyString100.orThrow("hash-conflict"),
+      });
+      await session1.flush();
+      await session1.stop();
+
+      await Bun.file(join(tempDir, "synced.md")).unlink();
+
+      const session2 = await startFileSync({ watchDir: tempDir });
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const query2 = session2.evolu.createQuery((db) =>
+        db
+          .selectFrom("file")
+          .selectAll()
+          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+      );
+      const rows2 = await session2.evolu.loadQuery(query2);
+      expect(rows2).toHaveLength(1);
+      expect(rows2[0]?.content).toBe("evolu edit");
+
+      await session2.stop();
+    });
   });
 });
