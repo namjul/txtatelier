@@ -199,6 +199,9 @@ export const reconcileStartupEvoluState = async (
       );
       syncedCount += 1;
       logger.log(`[reconcile] Synced from Evolu: ${row.path}`);
+    } else {
+      // Conflict: disk differs from both lastAppliedHash and row.contentHash
+      logger.log(`[reconcile] Conflict detected on startup: ${row.path}`);
     }
   }
 
