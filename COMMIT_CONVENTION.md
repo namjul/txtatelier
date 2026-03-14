@@ -41,8 +41,8 @@ See [ATTRACTOR_PROTOCOL.md](./ATTRACTOR_PROTOCOL.md) for foundational philosophy
 Standard conventional commit types, plus living systems additions:
 
 **Standard types:**
-- `strengthen`: Enhances an existing center
-- `create`: Introduces a new center
+- `strengthen`: Enhances an existing center (most features go here)
+- `create`: Introduces a new center (not just a feature - must demonstrate organizing power)
 - `dissolve`: Removes a center (intentionally)
 - `repair`: Fixes broken feedback loops or dead structure
 - `refactor`: Restructures without changing observable behavior
@@ -410,11 +410,16 @@ Refs: #234
 - Enhancing existing, validated centers
 - Improving feedback loops
 - Reducing friction in established patterns
+- **Most new features are "strengthen", not "create"**
+- Adding capabilities to existing centers
 
 **create:**
-- New centers with hypothesized organizing power
+- **Only for introducing new centers** (not features)
+- Must demonstrate organizing power (not just functionality)
 - Always requires strong contact test
 - Should reference evidence or user need
+- **Example:** New conflict-handler center, not "add conflict detection feature"
+- **Anti-example:** Adding settings UI to existing PWA (this is "strengthen")
 
 **dissolve:**
 - Removing failed hypotheses
