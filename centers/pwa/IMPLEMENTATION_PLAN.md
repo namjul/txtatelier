@@ -58,8 +58,7 @@ Extracted patterns to preserve:
 - Monospace-led typography with strong editorial hierarchy (bold identity, plain body copy).
 - Quiet neutral canvas (light gray background), near-black text, sparse blue underlined links.
 - High whitespace density and readable line length over compact information packing.
-- Structural clarity through alignment and spacing instead of cards, borders, or shadows.
-- Header split into identity block (left) and compact action list (right), then long-form content below.
+- Structural clarity through alignment and spacing before using cards, borders, or shadows.
 
 Translate these into implementation rules:
 
@@ -87,6 +86,14 @@ Theme support (daisyUI):
 - Default theme should reflect system preference (`prefers-color-scheme`).
 - If a manual toggle is added, it should be an explicit override of system preference.
 - Ensure conflict, save-state, and navigation affordances remain equally legible in both themes.
+
+**Implementation approach:**
+
+- Use daisyUI theme names: `light` and `dark` (or custom theme names if needed).
+- Apply theme via `data-theme` attribute on root element.
+- Detect system preference: `window.matchMedia('(prefers-color-scheme: dark)')`.
+- Store user override in localStorage: `txtatelier-theme` (`light`/`dark`/`system`).
+- Toggle UI: Simple text link "Switch to Dark" / "Switch to Light" in footer or settings.
 
 Design boundary:
 
@@ -163,41 +170,205 @@ Rationale:
 
 ### 6.1 Read Workflows
 
-- Query non-deleted files from Evolu.
-- Provide reliable selection and open flows for file content.
+**File discovery and navigation:**
+
+- Query non-deleted files from Evolu via subscription.
+- Display as simple list sorted by `updatedAt` (most recent first).
+- Show file path, last modified timestamp, file size (computed from content length).
+- Click file to open in editor view.
+
+**UI structure:**
+```
+Files (42)
+─────────────────────────────────
+notes/ideas.md          2m ago
+draft.md                5m ago
+notes.conflict-xyz-...  1h ago
+```
+
+**Performance:**
+- For >100 files, implement virtual scrolling or pagination.
+- Load first 50 files, lazy-load rest on scroll.
 
 ### 6.2 Write Workflows
 
-- Edit and save file content to Evolu.
-- Show save state (`saving`, `saved`, `error`).
+**File creation:**
+
+1. Add "New File" button/link in file list.
+2. Prompt for file path (e.g., `notes/new-idea.md`).
+3. Validate path (no leading/trailing slashes, no `..`, valid characters).
+4. Create new Evolu row with empty content.
+5. Open in editor immediately.
+
+**Editing and saving:**
+
+1. Load file content into textarea/editor.
+2. Capture `baseFingerprint` (initial `contentHash`).
+3. Track `dirty` state on every keystroke.
+4. Autosave after 2 seconds of inactivity (debounced).
+5. Show save state:
+   - `editing` (dirty but within debounce window)
+   - `saving...` (mutation in flight)
+   - `saved` (mutation confirmed)
+   - `error: <message>` (mutation failed)
+
+**Save implementation:**
+- Compute new `contentHash` from `localDraft`.
+- Mutate Evolu row with new `content`, `contentHash`, `updatedAt`.
+- Update `baseFingerprint` to new hash on success.
 
 ### 6.3 Conflict Guard
 
-- Detect dirty-draft vs remote-update collisions via `baseFingerprint`.
-- Block blind overwrite and require explicit action.
+**Detection mechanism:**
+
+1. Subscribe to Evolu changes for currently open file.
+2. On remote update, compare `remoteSnapshot.contentHash` vs `baseFingerprint`.
+3. If hashes match: safe to continue editing (no conflict).
+4. If hashes differ and `dirty = false`: update editor with remote content, reset `baseFingerprint`.
+5. If hashes differ and `dirty = true`: **conflict detected**.
+
+**Conflict state:**
+
+- Pause autosave.
+- Display conflict banner above editor:
+  ```
+  Conflict detected: This file was modified remotely.
+  [Save as conflict] [Discard local changes] [Review]
+  ```
+- Disable normal save until user resolves.
+
+**Race condition handling:**
+
+- If multiple rapid remote updates occur while in conflict state, always compare against latest `remoteSnapshot`.
+- Do not accumulate conflicts; treat as single conflict until resolved.
 
 ### 6.4 Conflict Artifact Flow
 
-- Implement "save as conflict artifact" action.
-- Verify artifact appears as normal file in list and sync pipeline.
+**"Save as conflict" action:**
+
+1. Generate conflict filename:
+   ```ts
+   const conflictPath = generateConflictPath(
+     originalPath,
+     ownerId,
+     Date.now()
+   );
+   // Example: "notes.conflict-abc123-1710412345.md"
+   ```
+
+2. Create new Evolu row with:
+   - `path`: conflict filename
+   - `content`: current `localDraft`
+   - `contentHash`: hash of `localDraft`
+   - `updatedAt`: current timestamp
+
+3. Update editor to show remote content:
+   - Set `localDraft = remoteSnapshot.content`
+   - Set `baseFingerprint = remoteSnapshot.contentHash`
+   - Set `dirty = false`
+   - Clear conflict state
+
+4. Show confirmation message:
+   ```
+   Local changes saved as: notes.conflict-abc123-1710412345.md
+   ```
+
+**Verification:**
+- Conflict file appears in file list.
+- CLI syncs conflict file to disk.
+- Can open and edit conflict file like any other file.
 
 ### 6.5 End-to-End Verification
 
-- PWA edit -> Evolu -> CLI -> filesystem.
-- Filesystem edit -> CLI -> Evolu -> PWA refresh.
-- Dirty-draft conflict -> explicit resolution path.
-- Restore from mnemonic -> expected rows visible after sync.
-- Verification protocol and preflight script live in:
-  - `centers/pwa/PHASE_6_5_VERIFICATION.md`
-  - `centers/pwa/tests/phase-6-5-preflight.sh`
+**Manual test protocol:**
+
+1. **PWA edit -> Evolu -> CLI -> filesystem:**
+   - Open file in PWA, edit, wait for "saved".
+   - Check filesystem: file content matches edit.
+   - Timeline: <5 seconds for change to materialize.
+
+2. **Filesystem edit -> CLI -> Evolu -> PWA refresh:**
+   - Edit file on disk with external editor.
+   - Check PWA: editor updates with new content within 5 seconds.
+   - Verify `baseFingerprint` updates.
+
+3. **Dirty-draft conflict -> explicit resolution path:**
+   - Open file in PWA, start editing (dirty state).
+   - Edit same file on disk before saving PWA changes.
+   - Verify conflict banner appears in PWA.
+   - Use "Save as conflict" action.
+   - Verify conflict file created and synced.
+
+4. **Restore from mnemonic -> expected rows visible after sync:**
+   - Note current mnemonic from Settings.
+   - Reset local owner/data.
+   - Restore with saved mnemonic.
+   - Wait for sync (up to 30 seconds).
+   - Verify all files reappear in PWA.
+
+**Automated verification (future):**
+- Preflight script in `centers/pwa/tests/phase-6-5-preflight.sh`.
+- Runs before phase completion.
+- Exit code 0 = pass, non-zero = fail with details.
 
 ### 6.6 Mnemonic Settings and Owner Actions
 
-- Add Settings page and navigation from file editing surface.
-- Implement show/hide mnemonic.
-- Implement restore flow with mnemonic validation and clear typed errors.
-- Implement reset flow with explicit confirmation guard.
-- Implement local database export flow.
+**Settings page structure:**
+
+- Link in main navigation: "Settings"
+- Sections: Owner Info, Mnemonic, Danger Zone
+
+**Owner Info section:**
+
+```
+Owner ID: abc123def456...
+Created: 2026-03-10
+```
+
+**Mnemonic section:**
+
+1. **Show/Hide toggle:**
+   - Default: Hidden, show as `••••••••••••••••••••••••`.
+   - Button: "Reveal Mnemonic".
+   - On click: Show full mnemonic as plain text, button changes to "Hide Mnemonic".
+   - Warning text: "Store this mnemonic securely. Anyone with it can access your data."
+
+2. **Mnemonic validation:**
+   - Evolu mnemonics are 12-word BIP39 phrases.
+   - Validate: exactly 12 words, all in BIP39 wordlist, valid checksum.
+   - Show specific errors:
+     - "Mnemonic must be 12 words" (if word count wrong)
+     - "Invalid word: '<word>'" (if not in wordlist)
+     - "Invalid mnemonic checksum" (if checksum fails)
+
+3. **Restore flow:**
+   - Textarea input for mnemonic.
+   - Button: "Restore from Mnemonic".
+   - On click:
+     - Validate mnemonic (show errors if invalid).
+     - Show confirmation modal: "This will replace your current owner. Continue?"
+     - If confirmed: call `evolu.restoreOwner(mnemonic)`.
+     - Show status: `restoring...` -> `restored` or `error: <message>`.
+     - On success: reload page to refresh Evolu subscriptions.
+
+**Danger Zone section:**
+
+1. **Reset owner/data:**
+   - Button: "Reset Local Data" (styled as dangerous/destructive).
+   - On click: Show confirmation modal with typed confirmation.
+     ```
+     Warning: This will permanently delete all local data.
+     Type "DELETE" to confirm: [input]
+     ```
+   - If input matches "DELETE": call `evolu.resetOwner()`.
+   - Show status: `resetting...` -> `reset complete`.
+   - On success: reload page.
+
+2. **Download backup:**
+   - Button: "Download Database Backup".
+   - On click: call `evolu.exportDatabase()`, trigger file download.
+   - Filename: `txtatelier-backup-<timestamp>.sqlite`.
+   - Show status: `exporting...` -> `backup exported` or `error: <message>`.
 
 ---
 
@@ -230,3 +401,92 @@ Rationale:
 8. Restore with valid mnemonic and confirm owner/data convergence.
 9. Reset owner/data requires confirmation and clears local state.
 10. Download backup and confirm file is downloaded and non-empty.
+
+---
+
+## Future Improvements
+
+The following enhancements are deferred beyond Phase 6 scope:
+
+### File Management
+
+1. **File deletion:** Add "Delete" action in file list or editor with confirmation modal.
+2. **Bulk operations:** Select multiple files for deletion, export, or tagging.
+3. **File search:** Full-text search across file content and paths with highlighting.
+4. **Recent files:** Quick access list of last 10 edited files.
+5. **Favorites/bookmarks:** Pin frequently accessed files to top of list.
+6. **Folder view:** Tree-based navigation for nested directory structures.
+7. **File metadata:** Show file size, word count, character count, line count.
+
+### Navigation and Discovery
+
+8. **Advanced filtering:** Filter files by date range, size, file extension, conflict status.
+9. **Sorting options:** Sort by name, size, modified date (ascending/descending).
+10. **Breadcrumb navigation:** Show current file path with clickable segments for parent folders.
+11. **Keyboard shortcuts:** Quick file switching (Cmd+P), new file (Cmd+N), save (Cmd+S).
+
+### Editing Experience
+
+12. **Syntax highlighting:** Code highlighting for common languages (JS, TS, Python, etc.).
+13. **Markdown preview:** Live preview pane for Markdown files.
+14. **Line numbers:** Optional line numbers in editor gutter.
+15. **Word wrap toggle:** User preference for soft wrap vs horizontal scroll.
+16. **Font size control:** Zoom in/out or font size picker.
+17. **Multiple open files:** Tab interface for switching between multiple open editors.
+18. **Unsaved changes warning:** Prompt before navigating away from dirty file.
+19. **Vim/Emacs keybindings:** Optional modal editing modes.
+
+### Conflict Resolution
+
+20. **Side-by-side diff:** Show local draft vs remote content in split view with line-by-line diff.
+21. **Three-way merge UI:** Manual merge editor for selecting chunks from each version.
+22. **Conflict history:** View past conflicts for a file with timestamps.
+23. **Auto-merge strategies:** Optional policies (prefer local, prefer remote, keep both).
+
+### Offline and Sync
+
+24. **Offline indicator:** Banner showing online/offline status and last sync time.
+25. **Service worker:** Cache app shell and assets for fully offline-capable PWA.
+26. **Sync status per file:** Show sync state (synced, syncing, conflict, error) in file list.
+27. **Manual sync trigger:** Button to force immediate sync cycle.
+28. **Sync queue visibility:** Show pending changes waiting to sync when offline.
+
+### Performance
+
+29. **Virtual scrolling:** Render only visible file list items for >1000 files.
+30. **Editor performance:** Use CodeMirror or Monaco for better performance with large files.
+31. **Query optimization:** Index Evolu database for faster file list queries.
+32. **Lazy loading:** Load file content only when opened, not on list render.
+
+### Settings and Customization
+
+33. **Theme customization:** Color picker for accent colors, background tones.
+34. **Editor preferences:** Tab size, indent type (spaces/tabs), auto-save interval.
+35. **File ignore patterns:** User-configurable patterns to hide files from PWA list.
+36. **Import/export settings:** Backup and restore PWA preferences.
+
+### Collaboration
+
+37. **Owner attribution:** Show which owner last edited each file in file list.
+38. **Edit history:** Timeline of changes with owner and timestamp.
+39. **Presence indicators:** Show which files other owners are currently editing (if multi-user).
+
+### Accessibility
+
+40. **Screen reader support:** Proper ARIA labels, semantic HTML, keyboard navigation.
+41. **High contrast mode:** Dedicated theme with WCAG AAA contrast ratios.
+42. **Keyboard-only workflow:** All actions accessible without mouse.
+43. **Focus management:** Logical focus order, visible focus indicators.
+
+### Documentation and Help
+
+44. **In-app help:** Contextual tooltips, onboarding tour for first-time users.
+45. **Keyboard shortcut reference:** Modal showing all available shortcuts.
+46. **Conflict resolution guide:** Step-by-step instructions for handling conflicts.
+
+### Testing and Quality
+
+47. **E2E test suite:** Playwright tests for all user workflows.
+48. **Visual regression tests:** Screenshot comparison to catch UI regressions.
+49. **Accessibility audit:** Automated and manual WCAG compliance testing.
+50. **Performance benchmarks:** Track bundle size, time-to-interactive, largest contentful paint.
