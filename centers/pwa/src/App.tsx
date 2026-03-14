@@ -103,6 +103,9 @@ const AppShell = () => {
     message: "ready",
     tone: "idle",
   });
+  const [transportUrl, setTransportUrl] = createSignal(
+    localStorage.getItem("transportUrl") ?? "",
+  );
 
   const [owner] = createResource(async () => evoluClient.appOwner);
 
@@ -414,6 +417,12 @@ const AppShell = () => {
     setOk("conflict artifact saved");
   };
 
+  const handleSaveTransport = () => {
+    const url = transportUrl().trim();
+    localStorage.setItem("transportUrl", url);
+    setOk("transport saved - reload page to apply");
+  };
+
   return (
     <main class="min-h-screen w-full bg-[#f2f1ee] px-4 py-8 font-mono text-[#111111] sm:px-6 lg:px-8 dark:bg-[#151617] dark:text-[#efefef]">
       <header class="mb-9 flex flex-col justify-between gap-4 md:flex-row md:items-start">
@@ -639,6 +648,27 @@ const AppShell = () => {
               value={owner()?.mnemonic ?? ""}
             />
           </Show>
+        </section>
+
+        <section class="mt-6 space-y-4 text-sm leading-6">
+          <h2 class="text-base font-bold">Sync Transport</h2>
+          <div class="max-w-lg space-y-2">
+            <div class="block text-xs">WebSocket URL</div>
+            <input
+              type="text"
+              class="w-full rounded-none border border-black/25 bg-transparent px-2.5 py-2 text-sm outline-none focus:border-black dark:border-white/25 dark:focus:border-white"
+              placeholder="wss://free.evoluhq.com (default)"
+              value={transportUrl()}
+              onInput={(e) => setTransportUrl(e.currentTarget.value)}
+            />
+            <button
+              type="button"
+              class="rounded-none border border-black/25 px-3 py-2 text-sm hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
+              onClick={handleSaveTransport}
+            >
+              apply (requires reload)
+            </button>
+          </div>
         </section>
       </Show>
     </main>
