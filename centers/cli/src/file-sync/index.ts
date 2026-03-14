@@ -3,7 +3,7 @@
 // Phase 1: State Materialization (Evolu → Filesystem)
 
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   type AppOwner,
   createFormatTypeError,
@@ -25,12 +25,15 @@ import {
   startStateMaterialization,
 } from "./sync/index";
 import { startWatching } from "./watch";
+import { createHash } from "node:crypto";
 
 const paths = envPaths("txtatelier");
 
 const formatTypeError = createFormatTypeError();
 
-export const defaultDbPath = join(paths.data, "txtatelier.db");
+const hashWatchDir = (dir: string) => createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 8)
+
+export const defaultDbPath = (watchDir: string) => join(paths.data, `txtatelier-${hashWatchDir(watchDir)}.db`);
 export const defaultRelayUrl = "wss://free.evoluhq.com";
 export const defaultWatchDir = join(homedir(), "Documents", "Txtatelier");
 
@@ -55,7 +58,7 @@ export const startFileSync = async (
   logger.log("[file-sync] Initializing...");
 
   const resolvedWatchDir = config?.watchDir ?? env.watchDir ?? defaultWatchDir;
-  const resolvedDbPath = config?.dbPath ?? env.dbPath ?? defaultDbPath;
+  const resolvedDbPath = config?.dbPath ?? env.dbPath ?? defaultDbPath(resolvedWatchDir);
   const resolvedrelayUrl = config?.relayUrl ?? env.relayUrl ?? defaultRelayUrl;
 
   // Create Evolu client (handles owner persistence internally)
