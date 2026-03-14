@@ -11,20 +11,28 @@ Goal: Filesystem <-> Evolu mirror works locally.
 ### 0.1 Define Evolu Schema
 
 ```ts
-File {
+file {
   path: string        // unique
   content: string
   contentHash: string
-  updatedAt: number
-  ownerId: string     // from Evolu
+  // + createdAt, updatedAt, isDeleted, ownerId (auto-added by Evolu)
+}
+
+_syncState {
+  path: string
+  lastAppliedHash: string
+}
+
+_historyCursor {
+  lastTimestamp: TimestampBytes | null
 }
 ```
 
 - `path` is primary identity
-- `contentHash = hash(content)`
-- No baseHash or shadow metadata
+- `contentHash = hash(content)` using xxHash64 (Bun.hash)
+- `_syncState` and `_historyCursor` are local-only (underscore prefix prevents sync)
 
-### 0.2 Build Loop A — Filesystem -> Evolu
+### 0.2 Build change-capture — Filesystem -> Evolu
 
 CLI responsibilities:
 
@@ -34,6 +42,11 @@ CLI responsibilities:
    - Compute hash
    - Compare to stored hash in Evolu
    - If different, update row
+
+**Watching mechanism:**
+- Uses chokidar with `ignoreInitial: true`
+- Debounce per-path: 100ms default
+- Concurrency limit: 10 parallel file operations
 
 ### 0.3 Add `lastAppliedHash[path]`
 
@@ -46,49 +59,60 @@ Map<string, string>
 Purpose: prevent write-back of identical content.
 
 **Storage:**
-- Persist to `~/.txtatelier/state.json` (or workspace-local `.txtatelier/state.json`)
-- JSON format: `{ "lastAppliedHash": { "path/to/file.md": "hash123..." } }`
-- Load on startup, save after each update
-- If lost/corrupted: treat as empty map, reconciliation handles recovery
+- Stored in `_syncState` table (local-only, not synced across devices)
+- Each row: `path`, `lastAppliedHash`
+- Updated after each state-materialization write
 
 ---
 
-## Phase 1 — Add Loop B (Single Device)
+## Phase 1 — Add state-materialization (Single Device)
 
 Goal: Evolu changes apply back to filesystem safely.
 
-1. Compare incoming row `contentHash` with disk hash.
-2. If identical, ignore.
-3. If different:
-   - Write file
-   - Update `lastAppliedHash[path]`
+**Mechanism:**
+- Subscribe to `file` table changes with 500ms debounce
+- Query `evolu_history` for incremental changes since `_historyCursor.lastTimestamp`
+- Process only rows with content or isDeleted column changes
+- Update cursor after processing batch
 
-Check `row.ownerId === myOwnerId` to avoid echo loops.
+**Logic per file:**
+1. Check if `lastAppliedHash === contentHash` (skip if already processed).
+2. Compare incoming row `contentHash` with disk hash.
+3. If identical, update `lastAppliedHash` and skip write.
+4. If different and no conflict:
+   - Write file atomically
+   - Update `lastAppliedHash[path]` in `_syncState` table
+5. If conflict detected: create conflict file, update `lastAppliedHash`
 
 ---
 
 ## Phase 2 — Enable Multi-Device Replication
 
 - Turn on Evolu sync between devices.
-- Loop A updates Evolu, Loop B applies remote changes to disk.
+- change-capture updates Evolu, state-materialization applies remote changes to disk.
 - Basic file replication achieved.
 
 ---
 
 ## Phase 3 — Add Conflict Detection
 
-Conflict condition on Loop B:
+Conflict condition on state-materialization:
 
-1. Read local disk file.
-2. Compare hash with `lastAppliedHash[path]` and remote `contentHash`.
-3. If conflict, create conflict file:
+**3-way merge conflict detection:**
+1. Read local disk file hash (LOCAL).
+2. Load `lastAppliedHash` from `_syncState` (BASE).
+3. Compare with remote `contentHash` (REMOTE).
+4. Conflict if: `diskHash !== lastAppliedHash` AND `remoteHash !== lastAppliedHash`
 
+**Conflict file creation:**
 ```
-<filename>.conflict-<ownerId>-<timestamp>.md
+<filename>.conflict-<ownerId>-<timestamp>.<ext>
 ```
 
 - Original file untouched.
+- Conflict file contains remote content.
 - Conflict files sync like normal files.
+- Format: `{base}.conflict-{ownerId}-{timestamp}{ext}`
 
 ---
 
@@ -96,8 +120,8 @@ Conflict condition on Loop B:
 
 ### 4.1 File Deletion
 
-- Loop A: Delete file -> remove Evolu row (soft delete with `isDeleted` flag).
-- Loop B: Remote delete -> remove file if `lastAppliedHash[path]` matches current disk hash, else create conflict file with deletion metadata.
+- change-capture: Delete file -> remove Evolu row (soft delete with `isDeleted` flag).
+- state-materialization: Remote delete -> remove file if `lastAppliedHash[path]` matches current disk hash, else create conflict file with deletion metadata.
 
 ### 4.2 Directory Deletion
 
@@ -105,12 +129,11 @@ Conflict condition on Loop B:
 - Deleting all files in a directory effectively deletes the directory.
 - Empty directories are not synced (filesystem-only concern).
 
-**Deletion conflict format:**
-```
-<filename>.conflict-<ownerId>-<timestamp>-deleted.md
-```
-
-Content: Original file content that would have been deleted.
+**Deletion conflict:**
+- If remote deletes file but disk hash differs from `lastAppliedHash`, create conflict file.
+- Conflict file contains local (disk) content that would have been lost.
+- Owner ID: `"remote-delete"` to indicate deletion conflict.
+- Format: `{base}.conflict-remote-delete-{timestamp}{ext}`
 
 ---
 
@@ -133,39 +156,41 @@ On CLI startup:
 
 **Performance:** Process files sequentially on startup. For large workspaces (>1000 files), log progress every 100 files.
 
+**Implementation:**
+- Two-phase reconciliation: filesystem-first, then Evolu-only rows
+- Uses `captureChange` for disk files
+- Uses `applyRemoteDeletionToFilesystem` for Evolu-only deleted rows
+
 ### 5.2 Write Debounce + Atomic Writes
 
 **Debouncing:**
-- Default: 100ms per file path.
-- Configurable via environment variable `TXTATELIER_DEBOUNCE_MS`.
-- Use per-path debounce timers to allow parallel processing of different files.
+- Default: 100ms per file path (hardcoded in watch.ts).
+- Per-path debounce timers to allow parallel processing of different files.
+- Chokidar also has `awaitWriteFinish` with 100ms stability threshold.
 
-**Atomic writes (Loop B):**
-1. Write content to temp file: `<target>.tmp-<randomId>`.
+**Atomic writes (state-materialization):**
+1. Write content to temp file: `<target>.tmp-<timestamp>-<randomId>`.
 2. Temp location: same directory as target file.
 3. On success: rename temp to target (atomic on POSIX, near-atomic on Windows).
 4. On failure: log error, leave temp file, retry on next sync cycle.
 5. Cleanup stale temps (`.tmp-*` older than 1 hour) on startup.
+6. Ensure parent directory exists before write.
 
 ### 5.3 Ignore Patterns
 
-Files to ignore (never sync):
+**Current implementation:**
+- Only temp files: paths containing `.tmp-`
+- Implemented in `ignore.ts`: `isIgnoredRelativePath()`
 
-- Temp files: `*.tmp-*`, `*~`, `*.swp`, `*.swo`
+**Planned (not yet implemented):**
 - System files: `.DS_Store`, `Thumbs.db`, `desktop.ini`
-- Hidden files: `.*` (except `.txtatelier/` if workspace-local)
-- State directory: `.txtatelier/`
+- Hidden files: `.*`
 - Node/build artifacts: `node_modules/`, `dist/`, `build/`, `.next/`, `.cache/`
-
-**Configuration:**
-- Default ignore list hardcoded.
-- Optional: `.txtatelier/ignore` file (gitignore-style syntax) for user overrides.
-- Use glob patterns for matching.
+- Optional: `.txtatelier/ignore` file (gitignore-style syntax)
 
 **File type filtering:**
-- Text files only (UTF-8 content).
-- Detect binary files by attempting UTF-8 decode; skip if fails.
-- Log skipped binary files at debug level.
+- Currently syncs all files (no binary detection)
+- Future: detect binary files and skip with warning
 
 ---
 
@@ -213,23 +238,21 @@ Test scenarios with expected outcomes:
 
 First-time setup when running CLI in a new workspace:
 
-1. Check for existing `.txtatelier/state.json` or `~/.txtatelier/state.json`.
+1. Check for existing Evolu database.
 2. If not found, prompt user:
    ```
    Initialize txtatelier in /path/to/workspace? (y/n)
    ```
 3. If yes:
-   - Create state directory.
    - Initialize Evolu instance (generates owner/mnemonic).
    - Display mnemonic with warning to save securely.
-   - Create empty `lastAppliedHash` map.
+   - Initialize `_syncState` and `_historyCursor` tables.
    - Run initial reconciliation (Phase 5.1).
 
 4. If Evolu already initialized (mnemonic exists): restore from mnemonic.
 
 **Configuration:**
 - Workspace path: Current directory or via `--workspace` flag.
-- State location: Workspace-local `.txtatelier/` preferred over global `~/.txtatelier/`.
 
 ---
 
@@ -276,9 +299,9 @@ draft.conflict-abc123-1234567891-deleted.md
 Manually trigger sync cycles:
 
 ```bash
-mk sync            # Run both Loop A and Loop B once
-mk sync --from-fs  # Loop A only
-mk sync --from-db  # Loop B only
+mk sync            # Run both change-capture and state-materialization once
+mk sync --from-fs  # change-capture only
+mk sync --from-db  # state-materialization only
 ```
 
 Output: Summary of files updated in each direction.
@@ -288,7 +311,7 @@ Output: Summary of files updated in each direction.
 Diagnose common issues:
 
 - Check Evolu connection.
-- Verify state file integrity.
+- Verify _syncState and _historyCursor table integrity.
 - Scan for orphaned temp files.
 - Compare disk vs Evolu counts.
 - Report ignored files count.
@@ -298,7 +321,8 @@ Output: Pass/fail with actionable suggestions.
 **Example:**
 ```
 ✓ Evolu connected
-✓ State file valid
+✓ _syncState table valid
+✓ _historyCursor table valid
 ✗ Found 3 orphaned temp files
   → Run 'mk doctor --clean' to remove
 
@@ -312,7 +336,21 @@ Output: Pass/fail with actionable suggestions.
 
 ## Summary
 
-At the end of this plan, the CLI system is:
+**Implementation status:**
+
+- ✅ Phase 0: Foundations complete (schema, change-capture, _syncState)
+- ✅ Phase 1: state-materialization complete (incremental history processing)
+- ✅ Phase 2: Multi-device replication works
+- ✅ Phase 3: Conflict detection implemented (3-way merge)
+- ✅ Phase 4: Deletion handling (file and deletion conflicts)
+- ✅ Phase 5.1: Startup reconciliation implemented
+- ✅ Phase 5.2: Atomic writes and debouncing implemented
+- ⚠️ Phase 5.3: Basic ignore (only .tmp-*), full patterns deferred
+- ❌ Phase 6: PWA integration (not started)
+- ❌ Phase 7: Edge case testing (not started)
+- ❌ Phase 8: Observability commands (not started)
+
+**Current system characteristics:**
 
 - Deterministic
 - Explicit about conflicts
@@ -351,7 +389,7 @@ The following enhancements are deferred beyond the current implementation scope:
 
 13. **Retry logic:** Automatic retry with exponential backoff for transient errors (network, filesystem locks).
 14. **Permission errors:** Graceful handling of read-only files, permission denied, etc.
-15. **Corrupted state recovery:** Detect and auto-repair corrupted `state.json` files.
+15. **Corrupted state recovery:** Detect and auto-repair corrupted `_syncState` or `_historyCursor` tables.
 16. **Evolu sync failure handling:** Queue changes locally when Evolu sync is down, replay when reconnected.
 
 ### Logging and Diagnostics
@@ -384,5 +422,13 @@ The following enhancements are deferred beyond the current implementation scope:
 ### Backwards Compatibility
 
 32. **Schema versioning:** Version Evolu schema, provide migration scripts for breaking changes.
-33. **State file versioning:** Version `state.json` format, auto-migrate on load.
+33. **Database versioning:** Version local-only table schemas (_syncState, _historyCursor), auto-migrate on load.
 34. **Compatibility matrix:** Document which CLI versions work with which Evolu schema versions.
+
+### Missing from Plan (Implemented but Undocumented)
+
+35. **Full ignore pattern system:** Expand `ignore.ts` beyond `.tmp-*` to match Phase 5.3 spec.
+36. **Binary file detection:** Add UTF-8 validation to skip binary files as specified.
+37. **Concurrency control:** Document 10-file concurrency limit in watch.ts.
+38. **Echo processing:** Document accepted redundancy (subscription fires for own edits, hash check prevents writes).
+39. **History cursor initialization:** Document cursor bootstrap to latest timestamp on first run.
