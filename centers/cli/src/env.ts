@@ -14,6 +14,7 @@ const EnvInput = object({
   TXTATELIER_LOGGING: optional(LoggingValue),
   TXTATELIER_MNEMONIC: optional(Mnemonic),
   TXTATELIER_RELAY_URL: optional(EvoluString),
+  TXTATELIER_WATCH_DIR: optional(EvoluString),
 });
 
 const formatTypeError = createFormatTypeError();
@@ -25,6 +26,7 @@ const parseEnv = () => {
   const dbPathInput = processEnv["TXTATELIER_DB_PATH"];
   const loggingInput = processEnv["TXTATELIER_LOGGING"];
   const relayUrlInput = processEnv["TXTATELIER_RELAY_URL"];
+  const watchDirInput = processEnv["TXTATELIER_WATCH_DIR"];
   // biome-ignore-end lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const mnemonic =
     mnemonicInput && mnemonicInput.trim() !== "" ? mnemonicInput : undefined;
@@ -35,6 +37,9 @@ const parseEnv = () => {
     ...(mnemonic !== undefined ? { TXTATELIER_MNEMONIC: mnemonic } : {}),
     ...(relayUrlInput !== undefined
       ? { TXTATELIER_RELAY_URL: relayUrlInput }
+      : {}),
+    ...(watchDirInput !== undefined
+      ? { TXTATELIER_WATCH_DIR: watchDirInput }
       : {}),
   };
 
@@ -56,6 +61,7 @@ const parseEnv = () => {
       : false,
     mnemonic: raw.TXTATELIER_MNEMONIC,
     relayUrl: raw.TXTATELIER_RELAY_URL,
+    watchDir: raw.TXTATELIER_WATCH_DIR,
   } as const;
 };
 

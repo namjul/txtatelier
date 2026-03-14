@@ -250,7 +250,7 @@ export const startStateMaterialization = (
         if (deletedRows.length === 1) {
           const firstRow = deletedRows[0];
           logger.log(
-             // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
             `[materialize] Processing deletion: ${firstRow?.["path"]}`,
           );
         } else if (deletedRows.length > 0) {

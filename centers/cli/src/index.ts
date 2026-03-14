@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { bin } from "specialist";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -23,7 +24,7 @@ const runStart = async (watchDir?: string): Promise<void> => {
   process.on("SIGINT", () => shutdown("SIGINT"));
 
   console.log("[txtatelier] Running (press Ctrl+C to stop)");
-  await new Promise(() => { });
+  await new Promise(() => {});
 };
 
 bin("txtatelier", "Local-first file synchronization CLI")
@@ -50,7 +51,9 @@ bin("txtatelier", "Local-first file synchronization CLI")
   .option("--reset", "Reset owner (destructive)")
   .option("--yes", "Confirm destructive operation (for --reset)")
   .action(async (options) => {
-      const session = await startFileSync({ ...(options.watchDir && { watchDir: options.watchDir } )});
+    const session = await startFileSync({
+      ...(options.watchDir && { watchDir: options.watchDir }),
+    });
     if (options.show) {
       await showOwnerMnemonic(session);
       session.stop();
@@ -80,7 +83,9 @@ bin("txtatelier", "Local-first file synchronization CLI")
         process.exit(1);
       }
 
-      const session = await startFileSync({ ...(options.watchDir && { watchDir: options.watchDir } )});
+      const session = await startFileSync({
+        ...(options.watchDir && { watchDir: options.watchDir }),
+      });
       await resetOwner(session);
       session.stop();
       process.exit(0);

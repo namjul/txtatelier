@@ -13,6 +13,7 @@ import {
   tryAsync,
 } from "@evolu/common";
 import envPaths from "env-paths";
+import { env } from "../env";
 import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
@@ -53,9 +54,9 @@ export const startFileSync = async (
 ): Promise<FileSyncSession> => {
   logger.log("[file-sync] Initializing...");
 
-  const resolvedWatchDir = config?.watchDir ?? defaultWatchDir;
-  const resolvedDbPath = config?.dbPath ?? defaultDbPath;
-  const resolvedrelayUrl = config?.relayUrl ?? defaultRelayUrl;
+  const resolvedWatchDir = config?.watchDir ?? env.watchDir ?? defaultWatchDir;
+  const resolvedDbPath = config?.dbPath ?? env.dbPath ?? defaultDbPath;
+  const resolvedrelayUrl = config?.relayUrl ?? env.relayUrl ?? defaultRelayUrl;
 
   // Create Evolu client (handles owner persistence internally)
   const client = await createEvoluClient({
