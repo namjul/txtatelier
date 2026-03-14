@@ -179,18 +179,48 @@ On CLI startup:
 ### 5.3 Ignore Patterns
 
 **Current implementation:**
-- Only temp files: paths containing `.tmp-`
-- Implemented in `ignore.ts`: `isIgnoredRelativePath()`
+- Temp files: `.tmp-*`, `.*tmp-*`
+- System files: `.DS_Store`, `Thumbs.db`, `desktop.ini`
+- Hidden files: `.*` (all dotfiles and dotdirectories)
+- Implemented in `ignore.ts` using picomatch: `isIgnoredRelativePath()`
 
 **Planned (not yet implemented):**
-- System files: `.DS_Store`, `Thumbs.db`, `desktop.ini`
-- Hidden files: `.*`
 - Node/build artifacts: `node_modules/`, `dist/`, `build/`, `.next/`, `.cache/`
 - Optional: `.txtatelier/ignore` file (gitignore-style syntax)
 
 **File type filtering:**
 - Currently syncs all files (no binary detection)
 - Future: detect binary files and skip with warning
+
+### 5.4 File Size Limits
+
+**Implementation:**
+- Maximum file size: 10MB (10,485,760 bytes, binary calculation)
+- Checked in `change-capture.ts` after `stat()`, before content read
+- Files over limit: logged as warning, not synced
+- Uses binary units (1024-based): 1KB = 1024 bytes, 1MB = 1024KB
+
+**Error handling:**
+- Error type: `FileTooLarge`
+- Logged with file path and size in human-readable format
+- Other files continue syncing normally
+- No retry - file must shrink below limit to sync
+
+**Example error message:**
+```
+[capture] File too large: /path/to/huge.bin (15.23MB > 10.00MB) - skipped
+```
+
+**Rationale:**
+- Prevents syncing large binary files accidentally
+- Protects against memory/performance issues
+- Keeps sync fast and responsive
+- SQLite practical limit: ~1GB per column, but 10MB is safer for multi-device sync
+
+**Future enhancements:**
+- Configurable limit via CLI flag or config file
+- Large file support with chunking/external storage
+- Per-directory size limits
 
 ---
 
@@ -345,7 +375,8 @@ Output: Pass/fail with actionable suggestions.
 - ✅ Phase 4: Deletion handling (file and deletion conflicts)
 - ✅ Phase 5.1: Startup reconciliation implemented
 - ✅ Phase 5.2: Atomic writes and debouncing implemented
-- ⚠️ Phase 5.3: Basic ignore (only .tmp-*), full patterns deferred
+- ✅ Phase 5.3: Ignore patterns (system files, hidden files, temp files via picomatch)
+- ✅ Phase 5.4: File size limits (10MB max, binary units)
 - ❌ Phase 6: PWA integration (not started)
 - ❌ Phase 7: Edge case testing (not started)
 - ❌ Phase 8: Observability commands (not started)

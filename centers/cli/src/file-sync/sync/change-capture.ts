@@ -10,6 +10,7 @@ import {
   trySync,
 } from "@evolu/common";
 import { logger } from "../../logger";
+import { MAX_FILE_SIZE_BYTES } from "../constants";
 import type { ChangeCaptureError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
@@ -17,6 +18,20 @@ import type { Schema } from "../schema";
 import { clearTrackedHash } from "../state";
 
 type EvoluDatabase = Evolu<typeof Schema>;
+
+/**
+ * Format bytes to human-readable size using binary units (1024-based).
+ * Examples: 1024 → "1.00KB", 10485760 → "10.00MB"
+ */
+const formatBytes = (bytes: number): string => {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
+  }
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(2)}KB`;
+  }
+  return `${bytes}B`;
+};
 
 export const captureChange = async (
   evolu: EvoluDatabase,
@@ -52,6 +67,20 @@ export const captureChange = async (
       return ok();
     }
     fileExists = true;
+
+    // Check file size limit
+    if (statResult.value.size > MAX_FILE_SIZE_BYTES) {
+      logger.warn(
+        `[capture] File too large: ${absolutePath} ` +
+          `(${formatBytes(statResult.value.size)} > ${formatBytes(MAX_FILE_SIZE_BYTES)}) - skipped`,
+      );
+      return err({
+        type: "FileTooLarge",
+        absolutePath,
+        sizeBytes: statResult.value.size,
+        maxSizeBytes: MAX_FILE_SIZE_BYTES,
+      });
+    }
   } else {
     const code =
       typeof statResult.error.cause === "object" && statResult.error.cause

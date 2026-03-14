@@ -43,6 +43,12 @@ export type ChangeCaptureError =
       readonly cause: unknown;
     }
   | {
+      readonly type: "FileTooLarge";
+      readonly absolutePath: string;
+      readonly sizeBytes: number;
+      readonly maxSizeBytes: number;
+    }
+  | {
       readonly type: "EvoluQueryFailed";
       readonly relativePath: string;
       readonly cause: unknown;
