@@ -15,6 +15,13 @@ import type { Schema } from "./schema";
 type EvoluDatabase = Evolu<typeof Schema>;
 
 /**
+ * Generate deterministic sync state ID from path (pure function).
+ */
+export const generateStateId = (path: string): string => {
+  return createIdFromString(`syncstate-${path}`);
+};
+
+/**
  * Get the last hash we applied to the filesystem for a given path.
  * Returns Result containing the hash (or null if never applied) with error handling.
  */
@@ -56,7 +63,7 @@ export const setTrackedHash = (
 ): Result<void, StateMaterializationError> => {
   return trySync(
     () => {
-      const id = createIdFromString(`syncstate-${path}`);
+      const id = generateStateId(path);
       evolu.upsert("_syncState", {
         id,
         path,
@@ -82,7 +89,7 @@ export const clearTrackedHash = (
 ): Result<void, StateMaterializationError> => {
   return trySync(
     () => {
-      const id = createIdFromString(`syncstate-${path}`);
+      const id = generateStateId(path);
       evolu.update("_syncState", {
         id,
         isDeleted: sqliteTrue,

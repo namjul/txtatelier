@@ -12,6 +12,50 @@ import { applyRemoteDeletionToFilesystem } from "./state-materialization";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
+/**
+ * Reconciliation decision for a file (pure data).
+ */
+export type ReconcileDecision =
+  | { readonly type: "SKIP"; readonly reason: string }
+  | {
+      readonly type: "WRITE_FROM_EVOLU";
+      readonly content: string;
+      readonly hash: string;
+    }
+  | {
+      readonly type: "CONFLICT";
+      readonly diskHash: string;
+      readonly evolHash: string;
+    };
+
+/**
+ * Decide what to do with a file during startup (pure function).
+ */
+export const decideReconcileAction = (
+  diskHash: string | null,
+  lastAppliedHash: string | null,
+  evolHash: string,
+  content: string,
+): ReconcileDecision => {
+  // Already processed
+  if (lastAppliedHash === evolHash) {
+    return { type: "SKIP", reason: "already-processed" };
+  }
+
+  // Disk matches Evolu
+  if (diskHash === evolHash) {
+    return { type: "SKIP", reason: "disk-matches-evolu" };
+  }
+
+  // File doesn't exist on disk OR disk unchanged from last applied
+  if (!diskHash || diskHash === lastAppliedHash) {
+    return { type: "WRITE_FROM_EVOLU", content, hash: evolHash };
+  }
+
+  // Conflict: disk differs from both lastAppliedHash and evolHash
+  return { type: "CONFLICT", diskHash, evolHash };
+};
+
 export const reconcileStartupFilesystemState = async (
   evolu: EvoluDatabase,
   watchDir: string,
@@ -173,34 +217,34 @@ export const reconcileStartupEvoluState = async (
       ? (trackedHashResult.value ?? "")
       : "";
 
-    if (lastAppliedHash === row.contentHash) {
-      continue;
-    }
-
     const file = Bun.file(absolutePath);
     const diskExists = await file.exists();
     const diskHash = diskExists ? await computeFileHash(absolutePath) : null;
 
-    if (diskHash === row.contentHash) {
-      await setTrackedHash(
-        evolu,
-        row.path as string,
-        row.contentHash as string,
-      );
+    const decision = decideReconcileAction(
+      diskHash,
+      lastAppliedHash,
+      row.contentHash as string,
+      row.content as string,
+    );
+
+    if (decision.type === "SKIP") {
+      if (decision.reason === "disk-matches-evolu") {
+        await setTrackedHash(
+          evolu,
+          row.path as string,
+          row.contentHash as string,
+        );
+      }
       continue;
     }
 
-    if (!diskExists || diskHash === lastAppliedHash) {
-      await writeFileAtomic(absolutePath, row.content as string);
-      await setTrackedHash(
-        evolu,
-        row.path as string,
-        row.contentHash as string,
-      );
+    if (decision.type === "WRITE_FROM_EVOLU") {
+      await writeFileAtomic(absolutePath, decision.content);
+      await setTrackedHash(evolu, row.path as string, decision.hash);
       syncedCount += 1;
       logger.log(`[reconcile] Synced from Evolu: ${row.path}`);
-    } else {
-      // Conflict: disk differs from both lastAppliedHash and row.contentHash
+    } else if (decision.type === "CONFLICT") {
       logger.log(`[reconcile] Conflict detected on startup: ${row.path}`);
     }
   }
