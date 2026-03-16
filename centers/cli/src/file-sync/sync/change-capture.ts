@@ -1,21 +1,16 @@
+// Change capture - filesystem → Evolu sync using plan-execute pattern
+// Refactored to use: collect state → plan → execute
+
 import { stat } from "node:fs/promises";
 import { relative } from "node:path";
-import {
-  type Evolu,
-  err,
-  ok,
-  type Result,
-  sqliteTrue,
-  tryAsync,
-  trySync,
-} from "@evolu/common";
+import { type Evolu, err, ok, type Result } from "@evolu/common";
 import { logger } from "../../logger";
 import { MAX_FILE_SIZE_BYTES } from "../constants";
 import type { ChangeCaptureError } from "../errors";
-import { computeFileHash } from "../hash";
-import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
-import { clearTrackedHash } from "../state";
+import { planChangeCapture } from "./change-capture-plan";
+import { executePlan } from "./executor";
+import { collectChangeCaptureState } from "./state-collector";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -33,6 +28,15 @@ const formatBytes = (bytes: number): string => {
   return `${bytes}B`;
 };
 
+/**
+ * Capture filesystem changes and sync to Evolu.
+ * Uses plan-execute pattern: collect state → plan actions → execute plan.
+ *
+ * @param evolu - Evolu database instance
+ * @param watchDir - Watch directory
+ * @param absolutePath - Absolute path to changed file
+ * @returns Result of sync operation
+ */
 export const captureChange = async (
   evolu: EvoluDatabase,
   watchDir: string,
@@ -40,6 +44,7 @@ export const captureChange = async (
 ): Promise<Result<void, ChangeCaptureError>> => {
   const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
 
+  // Safety checks for path validity
   if (
     relativePath === "" ||
     relativePath === "." ||
@@ -48,260 +53,71 @@ export const captureChange = async (
     return ok();
   }
 
-  if (isIgnoredRelativePath(relativePath)) {
+  // Check file size limit before collecting state
+  const statResult = await stat(absolutePath).catch((error) => {
+    const code = (error as { code?: string }).code;
+    if (code === "ENOENT") {
+      // File doesn't exist - that's ok, we'll handle deletion
+      return null;
+    }
+    throw error;
+  });
+
+  if (statResult && !statResult.isFile()) {
+    // Not a file (directory, symlink, etc.) - skip
     return ok();
   }
 
-  const statResult = await tryAsync(
-    () => stat(absolutePath),
-    (cause): ChangeCaptureError => ({
+  if (statResult && statResult.size > MAX_FILE_SIZE_BYTES) {
+    logger.warn(
+      `[capture] File too large: ${absolutePath} ` +
+        `(${formatBytes(statResult.size)} > ${formatBytes(MAX_FILE_SIZE_BYTES)}) - skipped`,
+    );
+    return err({
+      type: "FileTooLarge",
+      absolutePath,
+      sizeBytes: statResult.size,
+      maxSizeBytes: MAX_FILE_SIZE_BYTES,
+    });
+  }
+
+  // Step 1: Collect state (I/O)
+  const stateResult = await collectChangeCaptureState(
+    evolu,
+    watchDir,
+    absolutePath,
+  );
+
+  if (!stateResult.ok) {
+    logger.error(
+      `[capture] Failed to collect state for ${absolutePath}:`,
+      stateResult.error,
+    );
+    return err({
       type: "FileStatFailed",
       absolutePath,
-      cause,
-    }),
-  );
-
-  let fileExists = false;
-  if (statResult.ok) {
-    if (!statResult.value.isFile()) {
-      return ok();
-    }
-    fileExists = true;
-
-    // Check file size limit
-    if (statResult.value.size > MAX_FILE_SIZE_BYTES) {
-      logger.warn(
-        `[capture] File too large: ${absolutePath} ` +
-          `(${formatBytes(statResult.value.size)} > ${formatBytes(MAX_FILE_SIZE_BYTES)}) - skipped`,
-      );
-      return err({
-        type: "FileTooLarge",
-        absolutePath,
-        sizeBytes: statResult.value.size,
-        maxSizeBytes: MAX_FILE_SIZE_BYTES,
-      });
-    }
-  } else {
-    const code =
-      typeof statResult.error.cause === "object" && statResult.error.cause
-        ? (statResult.error.cause as { code?: string }).code
-        : undefined;
-
-    if (code !== "ENOENT") {
-      logger.error(
-        `[capture] Failed to stat ${absolutePath}:`,
-        statResult.error,
-      );
-      return err(statResult.error);
-    }
+      cause: stateResult.error,
+    });
   }
 
-  const file = Bun.file(absolutePath);
-  const existsResult = fileExists
-    ? ok(true)
-    : await tryAsync(
-        () => file.exists(),
-        (cause): ChangeCaptureError => ({
-          type: "FileReadFailed",
-          absolutePath,
-          cause,
-        }),
-      );
+  // Step 2: Plan actions (pure logic)
+  const plan = planChangeCapture(stateResult.value);
 
-  if (!existsResult.ok) {
+  // Step 3: Execute plan (I/O)
+  const results = await executePlan(evolu, watchDir, plan);
+
+  // Check for execution errors
+  const firstError = results.find((r) => !r.ok);
+  if (firstError && !firstError.ok) {
     logger.error(
-      `[capture] Failed to check existence for ${absolutePath}:`,
-      existsResult.error,
+      `[capture] Execution failed for ${absolutePath}:`,
+      firstError.error,
     );
-    return err(existsResult.error);
-  }
-
-  if (!existsResult.value) {
-    const existingQuery = evolu.createQuery((db) =>
-      db
-        .selectFrom("file")
-        .select(["id"])
-        // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-        .where("path", "==", relativePath as any)
-        // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-        .where("isDeleted", "is not", sqliteTrue as any),
-    );
-
-    const existingResult = await tryAsync(
-      () => evolu.loadQuery(existingQuery),
-      (cause): ChangeCaptureError => ({
-        type: "EvoluQueryFailed",
-        relativePath,
-        cause,
-      }),
-    );
-
-    if (!existingResult.ok) {
-      logger.error(
-        `[capture] Failed to query deleted path ${relativePath}:`,
-        existingResult.error,
-      );
-      return err(existingResult.error);
-    }
-
-    if (existingResult.value.length === 0) {
-      return ok();
-    }
-
-    logger.log(`[capture] Deleting: ${relativePath}`);
-    const deleteResult = trySync(
-      () => {
-        for (const row of existingResult.value) {
-          evolu.update("file", {
-            id: row.id,
-            isDeleted: sqliteTrue,
-          });
-        }
-      },
-      (cause): ChangeCaptureError => ({
-        type: "EvoluMutationFailed",
-        relativePath,
-        cause,
-      }),
-    );
-
-    if (!deleteResult.ok) {
-      logger.error(
-        `[capture] Failed to mark ${relativePath} as deleted:`,
-        deleteResult.error,
-      );
-      return err(deleteResult.error);
-    }
-
-    const clearResult = clearTrackedHash(evolu, relativePath);
-    if (!clearResult.ok) {
-      logger.error(
-        `[capture] Failed to clear tracked hash for ${relativePath}:`,
-        clearResult.error,
-      );
-      return err({
-        type: "EvoluMutationFailed",
-        relativePath,
-        cause: clearResult.error.cause,
-      });
-    }
-
-    return ok();
-  }
-
-  const contentResult = await tryAsync(
-    () => file.text(),
-    (cause): ChangeCaptureError => ({
-      type: "FileReadFailed",
-      absolutePath,
-      cause,
-    }),
-  );
-  if (!contentResult.ok) {
-    logger.error(
-      `[capture] Failed to read ${absolutePath}:`,
-      contentResult.error,
-    );
-    return err(contentResult.error);
-  }
-
-  const contentHashResult = await tryAsync(
-    () => computeFileHash(absolutePath),
-    (cause): ChangeCaptureError => ({
-      type: "FileHashFailed",
-      absolutePath,
-      cause,
-    }),
-  );
-  if (!contentHashResult.ok) {
-    logger.error(
-      `[capture] Failed to hash ${absolutePath}:`,
-      contentHashResult.error,
-    );
-    return err(contentHashResult.error);
-  }
-
-  const content = contentResult.value;
-  const contentHash = contentHashResult.value;
-
-  const existingQuery = evolu.createQuery((db) =>
-    db
-      .selectFrom("file")
-      .select(["id", "contentHash"])
-      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-      .where("path", "==", relativePath as any)
-      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-      .where("isDeleted", "is not", sqliteTrue as any),
-  );
-
-  const existingResult = await tryAsync(
-    () => evolu.loadQuery(existingQuery),
-    (cause): ChangeCaptureError => ({
-      type: "EvoluQueryFailed",
-      relativePath,
-      cause,
-    }),
-  );
-
-  if (!existingResult.ok) {
-    logger.error(
-      `[capture] Failed to query ${relativePath}:`,
-      existingResult.error,
-    );
-    return err(existingResult.error);
-  }
-
-  const existing = existingResult.value;
-
-  const mutationResult = trySync(
-    () => {
-      if (existing.length > 0) {
-        const existingRecord = existing[0];
-
-        if (!existingRecord) {
-          logger.error(
-            `[capture] Unexpected: record undefined after length check`,
-          );
-          return;
-        }
-
-        if (existingRecord.contentHash === contentHash) {
-          logger.log(`[capture] No change: ${relativePath} (hash matches)`);
-          return;
-        }
-
-        logger.log(`[capture] Updating: ${relativePath}`);
-        evolu.update("file", {
-          id: existingRecord.id,
-          path: relativePath,
-          content: content || null,
-          contentHash,
-        });
-      } else {
-        logger.log(`[capture] Inserting: ${relativePath}`);
-        evolu.insert("file", {
-          path: relativePath,
-          content: content || null,
-          contentHash,
-        });
-      }
-
-      // Do NOT set lastAppliedHash here - capture reads FROM disk, doesn't write TO disk
-      // Only materialize loop should set lastAppliedHash (when it writes to disk)
-    },
-    (cause): ChangeCaptureError => ({
+    return err({
       type: "EvoluMutationFailed",
       relativePath,
-      cause,
-    }),
-  );
-
-  if (!mutationResult.ok) {
-    logger.error(
-      `[capture] Failed to mutate ${relativePath}:`,
-      mutationResult.error,
-    );
-    return err(mutationResult.error);
+      cause: firstError.error,
+    });
   }
 
   return ok();

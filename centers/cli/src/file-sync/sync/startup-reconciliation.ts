@@ -2,13 +2,14 @@ import { mkdir, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { type Evolu, sqliteTrue } from "@evolu/common";
 import { logger } from "../../logger";
-import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
-import { getTrackedHash, setTrackedHash } from "../state";
-import { writeFileAtomic } from "../write";
+import { getTrackedHash } from "../state";
 import { captureChange } from "./change-capture";
+import { executePlan } from "./executor";
+import { collectMaterializationState } from "./state-collector";
 import { applyRemoteDeletionToFilesystem } from "./state-materialization";
+import { planStateMaterialization } from "./state-materialization-plan";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -197,6 +198,7 @@ export const reconcileStartupEvoluState = async (
   logger.log(`[reconcile] Applied ${removedCount} remote deletions`);
 
   // Step 2: Apply remote additions/updates (files added/updated in Evolu while offline)
+  // Use plan-execute pattern via collectMaterializationState + planStateMaterialization
   const activeRowsQuery = evolu.createQuery((db) =>
     db
       .selectFrom("file")
@@ -209,43 +211,36 @@ export const reconcileStartupEvoluState = async (
   let syncedCount = 0;
 
   for (const row of activeRows) {
-    if (!row.path || !row.content) continue;
+    if (!row.path) continue;
 
-    const absolutePath = join(watchDir, row.path as string);
-    const trackedHashResult = await getTrackedHash(evolu, row.path as string);
-    const lastAppliedHash = trackedHashResult.ok
-      ? (trackedHashResult.value ?? "")
-      : "";
-
-    const file = Bun.file(absolutePath);
-    const diskExists = await file.exists();
-    const diskHash = diskExists ? await computeFileHash(absolutePath) : null;
-
-    const decision = decideReconcileAction(
-      diskHash,
-      lastAppliedHash,
-      row.contentHash as string,
-      row.content as string,
-    );
-
-    if (decision.type === "SKIP") {
-      if (decision.reason === "disk-matches-evolu") {
-        await setTrackedHash(
-          evolu,
-          row.path as string,
-          row.contentHash as string,
-        );
-      }
+    // Step 2a: Collect state
+    const stateResult = await collectMaterializationState(evolu, watchDir, row);
+    if (!stateResult.ok) {
+      logger.error(
+        `[reconcile] Failed to collect state for ${row.path}:`,
+        stateResult.error,
+      );
       continue;
     }
 
-    if (decision.type === "WRITE_FROM_EVOLU") {
-      await writeFileAtomic(absolutePath, decision.content);
-      await setTrackedHash(evolu, row.path as string, decision.hash);
+    // Step 2b: Plan actions
+    const plan = planStateMaterialization(stateResult.value);
+
+    // Step 2c: Execute plan
+    const results = await executePlan(evolu, watchDir, plan);
+
+    // Count synced files (those with WRITE_FILE action)
+    if (plan.some((a) => a.type === "WRITE_FILE")) {
       syncedCount += 1;
-      logger.log(`[reconcile] Synced from Evolu: ${row.path}`);
-    } else if (decision.type === "CONFLICT") {
-      logger.log(`[reconcile] Conflict detected on startup: ${row.path}`);
+    }
+
+    // Check for errors
+    const firstError = results.find((r) => !r.ok);
+    if (firstError && !firstError.ok) {
+      logger.error(
+        `[reconcile] Failed to apply changes for ${row.path}:`,
+        firstError.error,
+      );
     }
   }
 

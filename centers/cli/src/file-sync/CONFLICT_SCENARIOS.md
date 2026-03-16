@@ -19,15 +19,15 @@ This document maps all possible conflict scenarios in the file sync system.
 |---|-------------|---------------|--------------|----------------|---------------|---------|--------|--------|
 | 1 | No | - | No | - | - | Startup | No action | ✅ |
 | 2 | Yes | - | No | - | - | Startup | Insert to Evolu | ✅ |
-| 3 | No | - | Yes | - | No | Startup | Write to disk | ❌ |
+| 3 | No | - | Yes | - | No | Startup | Write to disk | ✅ |
 | 4 | No | - | Yes | - | Yes | Startup | No action (already deleted) | ✅ |
 | 5 | Yes | No | Yes | No | No | Startup | No action (in sync) | ✅ |
-| 6 | Yes | Yes | Yes | No | No | Startup | Update Evolu | ❌ |
-| 7 | Yes | No | Yes | Yes | No | Startup | Update disk | ❌ |
-| 8 | Yes | Yes | Yes | Yes | No | Startup | **CONFLICT** - create conflict file | ❌ |
-| 9 | Yes | No | Yes | - | Yes | Startup | Delete from disk | ❌ |
-| 10 | Yes | Yes | Yes | - | Yes | Startup | **CONFLICT** - local edit vs remote delete | ❌ |
-| 11 | No | - | Yes | Yes | No | Startup | Write to disk (remote created offline) | ❌ |
+| 6 | Yes | Yes | Yes | No | No | Startup | Update Evolu | ✅ |
+| 7 | Yes | No | Yes | Yes | No | Startup | Update disk | ✅ |
+| 8 | Yes | Yes | Yes | Yes | No | Startup | **CONFLICT** - create conflict file | ✅ |
+| 9 | Yes | No | Yes | - | Yes | Startup | Delete from disk | ✅ |
+| 10 | Yes | Yes | Yes | - | Yes | Startup | **CONFLICT** - local edit vs remote delete | ✅ |
+| 11 | No | - | Yes | Yes | No | Startup | Write to disk (remote created offline) | ✅ |
 | 12 | Yes | No | Yes | No | No | Runtime | No action (in sync) | ✅ |
 | 13 | Yes | No | Yes | Yes | No | Runtime | Update disk | ✅ |
 | 14 | Yes | Yes | Yes | Yes | No | Runtime | **CONFLICT** - create conflict file | ✅ |
@@ -46,43 +46,43 @@ This document maps all possible conflict scenarios in the file sync system.
 - **State**: File exists in Evolu but not on disk
 - **Cause**: File created in Evolu (from another device) while CLI offline
 - **Action**: Write to disk (materialize)
-- **Status**: ❌ **MISSING** - Need to implement Loop B during reconciliation
+- **Status**: ✅ Implemented (test: line 269-285)
 
 ### Scenario 6: Disk modified offline (Startup)
 - **State**: File exists in both, disk hash ≠ Evolu hash, lastApplied = Evolu hash
 - **Cause**: User edited file on disk while CLI offline
 - **Action**: Update Evolu with disk content
-- **Status**: ❌ **MISSING** - Currently skips if path exists (line 47-50)
+- **Status**: ✅ Implemented (test: line 288-306)
 
 ### Scenario 7: Evolu modified offline (Startup)
 - **State**: File exists in both, disk hash = lastApplied, Evolu hash ≠ lastApplied
 - **Cause**: File edited on another device while CLI offline
 - **Action**: Update disk with Evolu content
-- **Status**: ❌ **MISSING** - Need to implement Loop B during reconciliation
+- **Status**: ✅ Implemented (test: line 373-409)
 
 ### Scenario 8: Both modified offline (Startup)
 - **State**: File exists in both, disk hash ≠ lastApplied, Evolu hash ≠ lastApplied, disk ≠ Evolu
 - **Cause**: File edited on disk AND on another device while CLI offline
 - **Action**: Create conflict file with Evolu content, leave disk untouched
-- **Status**: ❌ **MISSING** - Need conflict detection in reconciliation
+- **Status**: ✅ Implemented (test: line 309-338)
 
 ### Scenario 9: Remote delete, local unchanged (Startup)
 - **State**: File exists on disk, marked deleted in Evolu, disk hash = lastApplied
 - **Cause**: File deleted on another device while CLI offline
 - **Action**: Delete from disk
-- **Status**: ❌ **MISSING** - Currently being implemented
+- **Status**: ✅ Implemented (test: line 246-266)
 
 ### Scenario 10: Remote delete, local modified (Startup)
 - **State**: File exists on disk, marked deleted in Evolu, disk hash ≠ lastApplied
 - **Cause**: File deleted remotely AND edited locally while CLI offline
 - **Action**: Create conflict file (or keep local file and mark conflict)
-- **Status**: ❌ **MISSING** - Need delete conflict detection
+- **Status**: ✅ Implemented (test: line 341-370)
 
 ### Scenario 11: Remote created offline (Startup)
 - **State**: File in Evolu but not on disk, not in lastApplied tracking
 - **Cause**: File created on another device while CLI offline
 - **Action**: Write to disk
-- **Status**: ❌ **MISSING** - Same as Scenario 3
+- **Status**: ✅ Implemented (same as Scenario 3)
 
 ### Scenario 13: Remote edit during runtime (Runtime)
 - **State**: File exists in both, remote edit arrives
@@ -110,13 +110,13 @@ This document maps all possible conflict scenarios in the file sync system.
 
 ## Implementation Checklist
 
-### Startup Reconciliation Missing Features
-- [ ] Scenario 3/11: Materialize Evolu-only files to disk
-- [ ] Scenario 6: Detect and sync disk modifications to Evolu
-- [ ] Scenario 7: Detect and apply Evolu modifications to disk
-- [ ] Scenario 8: Detect and handle offline concurrent edits (conflict)
-- [ ] Scenario 9: Apply remote deletions to disk (in progress)
-- [ ] Scenario 10: Detect and handle delete vs edit conflicts
+### Startup Reconciliation (Complete)
+- [✅] Scenario 3/11: Materialize Evolu-only files to disk
+- [✅] Scenario 6: Detect and sync disk modifications to Evolu
+- [✅] Scenario 7: Detect and apply Evolu modifications to disk
+- [✅] Scenario 8: Detect and handle offline concurrent edits (conflict)
+- [✅] Scenario 9: Apply remote deletions to disk
+- [✅] Scenario 10: Detect and handle delete vs edit conflicts
 
 ### Runtime Features (Complete)
 - [✅] Scenario 13: Remote edits

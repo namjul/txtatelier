@@ -13,13 +13,12 @@ import {
 } from "@evolu/common";
 import type { TimestampBytes } from "@evolu/common/local-first";
 import { logger } from "../../logger";
-import { createConflictFile, detectConflict } from "../conflicts";
+import { createConflictFile } from "../conflicts";
 import type { StateMaterializationError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
-import { clearTrackedHash, getTrackedHash, setTrackedHash } from "../state";
-import { writeFileAtomic } from "../write";
+import { clearTrackedHash, getTrackedHash } from "../state";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -342,8 +341,7 @@ const syncEvoluToFiles = async (
       continue;
     }
 
-    const absolutePath = join(watchDir, row.path);
-    const result = await syncEvoluRowToFile(evolu, absolutePath, row, options);
+    const result = await syncEvoluRowToFile(evolu, watchDir, row, options);
     if (!result.ok) {
       failedCount += 1;
       failedByType.set(
@@ -381,115 +379,62 @@ const syncEvoluToFiles = async (
 
 const syncEvoluRowToFile = async (
   evolu: EvoluDatabase,
-  absolutePath: string,
+  watchDir: string,
   // biome-ignore lint/suspicious/noExplicitAny: Row type will be refined later
   row: any,
   options?: StateMaterializationOptions,
 ): Promise<Result<void, StateMaterializationError>> => {
-  const lastAppliedResult = await getTrackedHash(evolu, row.path);
-  if (!lastAppliedResult.ok) {
-    return err(lastAppliedResult.error);
-  }
+  // Import plan-execute infrastructure
+  const { collectMaterializationState } = await import("./state-collector");
+  const { planStateMaterialization } = await import(
+    "./state-materialization-plan"
+  );
+  const { executePlan } = await import("./executor");
 
-  const lastAppliedHash = lastAppliedResult.value;
-  if (lastAppliedHash === row.contentHash) {
-    logger.log(`[materialize] Skipped (already processed): ${row.path}`);
-    return ok();
-  }
+  // Step 1: Collect state (I/O)
+  const stateResult = await collectMaterializationState(evolu, watchDir, row);
 
-  const file = Bun.file(absolutePath);
-  const diskExistsResult = await tryAsync(
-    () => file.exists(),
-    (cause): StateMaterializationError => ({
+  if (!stateResult.ok) {
+    logger.error(
+      `[materialize] Failed to collect state for ${row.path}:`,
+      stateResult.error,
+    );
+    return err({
       type: "DiskHashFailed",
-      absolutePath,
-      cause,
-    }),
-  );
-  if (!diskExistsResult.ok) {
-    return err(diskExistsResult.error);
+      absolutePath: `${watchDir}/${row.path}`,
+      cause: stateResult.error,
+    });
   }
 
-  const diskHashResult = diskExistsResult.value
-    ? await tryAsync(
-        () => computeFileHash(absolutePath),
-        (cause): StateMaterializationError => ({
-          type: "DiskHashFailed",
-          absolutePath,
-          cause,
-        }),
-      )
-    : ok(null);
+  // Step 2: Plan actions (pure logic)
+  const plan = planStateMaterialization(stateResult.value);
 
-  if (!diskHashResult.ok) {
-    return err(diskHashResult.error);
+  // Step 3: Execute plan (I/O)
+  const results = await executePlan(evolu, watchDir, plan);
+
+  // Step 4: Handle conflict notification if needed
+  const conflictAction = plan.find((a) => a.type === "CREATE_CONFLICT");
+  if (conflictAction && conflictAction.type === "CREATE_CONFLICT") {
+    if (options?.onConflictArtifactCreated) {
+      await options.onConflictArtifactCreated(conflictAction.conflictPath);
+    }
   }
 
-  const diskHash = diskHashResult.value;
-
-  if (diskHash === row.contentHash) {
-    logger.log(`[materialize] Skipped (disk matches): ${row.path}`);
-    return setTrackedHash(evolu, row.path, row.contentHash);
-  }
-
-  if (detectConflict(diskHash, lastAppliedHash, row.contentHash)) {
-    logger.log(`[materialize] Conflict detected: ${row.path}`);
-
-    const conflictFileResult = await tryAsync(
-      () => createConflictFile(absolutePath, row.content || "", row.ownerId),
-      (cause): StateMaterializationError => ({
-        type: "ConflictFileCreateFailed",
-        absolutePath,
-        cause,
-      }),
+  // Check for execution errors
+  const firstError = results.find((r) => !r.ok);
+  if (firstError && !firstError.ok) {
+    logger.error(
+      `[materialize] Execution failed for ${row.path}:`,
+      firstError.error,
     );
-
-    if (!conflictFileResult.ok) {
-      return err(conflictFileResult.error);
-    }
-
-    const conflictPath = conflictFileResult.value;
-    logger.log(`[materialize] Created conflict file: ${conflictPath}`);
-
-    const stateUpdateResult = setTrackedHash(evolu, row.path, row.contentHash);
-    if (!stateUpdateResult.ok) {
-      return err(stateUpdateResult.error);
-    }
-
-    const notifyResult = await tryAsync(
-      async () => {
-        if (options?.onConflictArtifactCreated) {
-          await options.onConflictArtifactCreated(conflictPath);
-        }
-      },
-      (cause): StateMaterializationError => ({
-        type: "ConflictFileCreateFailed",
-        absolutePath: conflictPath,
-        cause,
-      }),
-    );
-    if (!notifyResult.ok) {
-      return err(notifyResult.error);
-    }
-
-    return ok();
-  }
-
-  logger.log(`[materialize] Writing: ${row.path}`);
-  const writeResult = await tryAsync(
-    () => writeFileAtomic(absolutePath, row.content || ""),
-    (cause): StateMaterializationError => ({
+    return err({
       type: "FileWriteFailed",
-      absolutePath,
-      cause,
-    }),
-  );
-
-  if (!writeResult.ok) {
-    return err(writeResult.error);
+      absolutePath: `${watchDir}/${row.path}`,
+      cause: firstError.error,
+    });
   }
 
-  return setTrackedHash(evolu, row.path, row.contentHash);
+  return ok();
 };
 
 export const applyRemoteDeletionToFilesystem = async (

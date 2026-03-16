@@ -2,7 +2,7 @@
 
 **Status:** Strong
 **Created:** 2026-03-01
-**Last Updated:** 2026-03-03
+**Last Updated:** 2026-03-16
 
 ---
 
@@ -395,6 +395,72 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 ## Architecture Notes
 
+### Data-Oriented Programming Pattern (Plan-Execute)
+
+**Status:** Refactored 2026-03-16
+
+The sync center uses a **plan-execute pattern** that separates decision logic from I/O operations:
+
+```
+State Collection (I/O)  →  Planning (Pure)  →  Execution (I/O)
+      ↓                        ↓                      ↓
+  Read disk/Evolu       Decide what to do      Write disk/Evolu
+  (Result types)        (Action arrays)        (Result types)
+```
+
+**Three-layer architecture:**
+
+1. **Data Structures** (`actions.ts`, `state-types.ts`)
+   - Discriminated unions for all sync operations (FileSystemAction, EvoluAction, StateAction, MetaAction)
+   - Readonly interfaces for state snapshots (ChangeCaptureState, MaterializationState)
+   - Pure data - no functions, no side effects
+
+2. **Pure Planning Functions** (`*-plan.ts`)
+   - Input: State snapshot (from collectors)
+   - Output: Array of actions to execute
+   - No I/O, no side effects, deterministic
+   - Trivially testable (<10ms per test)
+   - Examples: `planChangeCapture()`, `planStateMaterialization()`
+
+3. **Execution Layer** (`state-collector.ts`, `executor.ts`)
+   - State collectors: Gather filesystem + Evolu state (Result-based error handling)
+   - Executor: Dispatch actions using switch statements
+   - All I/O isolated here
+
+**Benefits:**
+- **Testability:** Planning logic tested without I/O infrastructure (15 tests run in 24ms)
+- **Maintainability:** Sync decisions visible as pure functions
+- **Debuggability:** Action arrays show exactly what will happen before execution
+- **Refactorability:** Change I/O implementation without touching logic
+
+**Example flow (Change Capture):**
+
+```typescript
+// 1. Collect state
+const state = await collectChangeCaptureState(evolu, watchDir, path);
+
+// 2. Plan actions (pure function)
+const actions = planChangeCapture(state);
+// Result: [
+//   { type: "LOG", level: "log", message: "[capture] Updating: foo.md" },
+//   { type: "UPDATE_EVOLU", id: "...", path: "foo.md", content: "...", hash: "..." }
+// ]
+
+// 3. Execute plan
+const results = await executePlan(evolu, watchDir, actions);
+```
+
+**Implementation files:**
+- `sync/actions.ts` - Action type definitions
+- `sync/state-types.ts` - State structure definitions
+- `sync/change-capture-plan.ts` - Planning for Filesystem → Evolu
+- `sync/state-materialization-plan.ts` - Planning for Evolu → Filesystem
+- `sync/state-collector.ts` - I/O for gathering state
+- `sync/executor.ts` - I/O for executing actions
+- `sync/*.test.ts` - Fast unit tests (no I/O)
+
+---
+
 ### Phase 0: Change Capture (Filesystem → Evolu)
 
 ```
@@ -402,11 +468,11 @@ Filesystem change detected
   ↓
 Debounce (50-200ms)
   ↓
-Compute content hash
+Collect state (disk + Evolu)
   ↓
-Compare with Evolu row hash
+Plan actions (pure function)
   ↓
-If different: Update Evolu row
+Execute plan (I/O)
 ```
 
 **Key principles:**
@@ -415,6 +481,7 @@ If different: Update Evolu row
 - Echo prevention (lastAppliedHash-based, supports same-mnemonic multi-device)
 - Atomic operations (temp-file + rename pattern)
 - Performance-aware (early-exit optimizations, concurrency control, subscription debouncing)
+- Plan-execute separation (testable without I/O)
 
 ### Completed Phases
 
