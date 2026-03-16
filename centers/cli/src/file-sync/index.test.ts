@@ -30,6 +30,8 @@ describe("GIVEN clean workspace", () => {
       expect(session.stop).toBeFunction();
       expect(session.evolu).toBeDefined();
       expect(session.flush).toBeFunction();
+      expect(session.failedSyncs).toBeDefined();
+      expect(session.failedSyncs.size).toBe(0);
       await session.stop();
     });
   });

@@ -54,6 +54,7 @@ export interface OwnerSession {
 
 export interface FileSyncSession extends OwnerSession {
   readonly stop: () => Promise<void>;
+  readonly failedSyncs: ReadonlySet<string>;
 }
 
 /**
@@ -167,19 +168,34 @@ export const startFileSync = async (
   // Evolu before both loops start, now that watcher ignores initial events.
   await reconcileStartupFilesystemState(evolu, resolvedWatchDir);
 
+  // Track failed sync operations for observability
+  // Future: Expose via status command or error reporting
+  const failedSyncs = new Set<string>();
+
   // Start Change Capture: watch filesystem and reflect into Evolu
   logger.log(`[file-sync] Watching directory: ${resolvedWatchDir}`);
   const stopWatching = await startWatching(
     resolvedWatchDir,
     async (filePath) => {
-      await captureChange(evolu, resolvedWatchDir, filePath);
+      const result = await captureChange(evolu, resolvedWatchDir, filePath);
+      if (!result.ok) {
+        failedSyncs.add(filePath);
+        logger.error(`[sync] Failed to capture ${filePath}:`, result.error);
+      }
     },
   );
 
   // Start State Materialization: apply replicated rows to filesystem
   const stopSyncing = startStateMaterialization(evolu, resolvedWatchDir, {
     onConflictArtifactCreated: async (conflictPath: string) => {
-      await captureChange(evolu, resolvedWatchDir, conflictPath);
+      const result = await captureChange(evolu, resolvedWatchDir, conflictPath);
+      if (!result.ok) {
+        failedSyncs.add(conflictPath);
+        logger.error(
+          `[sync] Failed to capture conflict file ${conflictPath}:`,
+          result.error,
+        );
+      }
     },
   });
 
@@ -190,6 +206,7 @@ export const startFileSync = async (
     evolu,
     owner,
     flush: closeDb,
+    failedSyncs,
     config: {
       dbPath: resolvedDbPath,
       watchDir: resolvedWatchDir,
