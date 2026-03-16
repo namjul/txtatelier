@@ -20,7 +20,9 @@ afterEach(async () => {
 });
 
 test("does not sync file over size limit by 1 byte", async () => {
-  const session = await startFileSync({ watchDir: tempDir });
+  const result = await startFileSync({ watchDir: tempDir });
+  if (!result.ok) throw new Error('Failed to start');
+  const session = result.value;
 
   const content = "a".repeat(MAX_FILE_SIZE_BYTES + 1); // 10MB + 1 byte
   await Bun.write(join(tempDir, "overlimit.txt"), content);
@@ -40,7 +42,9 @@ test("does not sync file over size limit by 1 byte", async () => {
 });
 
 test("does not sync file way over size limit (50MB)", async () => {
-  const session = await startFileSync({ watchDir: tempDir });
+  const result = await startFileSync({ watchDir: tempDir });
+  if (!result.ok) throw new Error('Failed to start');
+  const session = result.value;
 
   const content = "a".repeat(50 * 1024 * 1024); // 50MB
   await Bun.write(join(tempDir, "huge.txt"), content);

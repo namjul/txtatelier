@@ -1,7 +1,8 @@
 import { mkdir, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { type Evolu, sqliteTrue } from "@evolu/common";
+import { type Evolu, err, ok, type Result, sqliteTrue } from "@evolu/common";
 import { logger } from "../../logger";
+import type { ChangeCaptureError } from "../errors";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
 import { getTrackedHash } from "../state";
@@ -12,6 +13,55 @@ import { applyRemoteDeletionToFilesystem } from "./state-materialization";
 import { planStateMaterialization } from "./state-materialization-plan";
 
 type EvoluDatabase = Evolu<typeof Schema>;
+
+/**
+ * Fatal errors that prevent reconciliation from proceeding.
+ *
+ * These represent systematic failures where the operation cannot continue at all:
+ * - Watch directory doesn't exist or is inaccessible
+ * - Database is unavailable or corrupted
+ *
+ * Per-file failures (permission denied, file too large, etc.) are NOT fatal -
+ * they are tracked in ReconcileStats.errors and processing continues.
+ */
+export type ReconcileFatalError =
+  | {
+      readonly type: "WatchDirNotFound";
+      readonly path: string;
+    }
+  | {
+      readonly type: "WatchDirUnreadable";
+      readonly path: string;
+      readonly cause: Error;
+    }
+  | {
+      readonly type: "WatchDirUnwritable";
+      readonly path: string;
+      readonly cause: Error;
+    }
+  | {
+      readonly type: "DatabaseUnavailable";
+      readonly cause: Error;
+    };
+
+/**
+ * Statistics about a reconciliation operation.
+ *
+ * Returned on success (ok()) even when some files fail. Use failedCount
+ * to check for partial failures, and errors array for details.
+ *
+ * @property processedCount - Total number of items attempted
+ * @property failedCount - Number of items that failed
+ * @property errors - Details of each failure (path + error)
+ */
+export interface ReconcileStats {
+  readonly processedCount: number;
+  readonly failedCount: number;
+  readonly errors: ReadonlyArray<{
+    readonly path: string;
+    readonly error: ChangeCaptureError;
+  }>;
+}
 
 /**
  * Reconciliation decision for a file (pure data).
@@ -60,10 +110,44 @@ export const decideReconcileAction = (
 export const reconcileStartupFilesystemState = async (
   evolu: EvoluDatabase,
   watchDir: string,
-): Promise<void> => {
-  await mkdir(watchDir, { recursive: true });
+): Promise<Result<ReconcileStats, ReconcileFatalError>> => {
+  // Fatal check: ensure watchDir exists and is accessible
+  try {
+    await mkdir(watchDir, { recursive: true });
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "EACCES" || nodeError.code === "EPERM") {
+      return err({
+        type: "WatchDirUnwritable",
+        path: watchDir,
+        cause: nodeError,
+      });
+    }
+    throw error;
+  }
 
-  const allFiles = await collectFilesRecursively(watchDir);
+  // Fatal check: ensure we can read watchDir
+  let allFiles: string[];
+  try {
+    allFiles = await collectFilesRecursively(watchDir);
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ENOENT") {
+      return err({
+        type: "WatchDirNotFound",
+        path: watchDir,
+      });
+    }
+    if (nodeError.code === "EACCES" || nodeError.code === "EPERM") {
+      return err({
+        type: "WatchDirUnreadable",
+        path: watchDir,
+        cause: nodeError,
+      });
+    }
+    throw error;
+  }
+
   const filesToReconcile = allFiles.filter((absolutePath) => {
     const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
     return !isIgnoredRelativePath(relativePath);
@@ -86,16 +170,22 @@ export const reconcileStartupFilesystemState = async (
     `[reconcile] Startup scan found ${filesToReconcile.length} filesystem files`,
   );
 
-  // Step 1: Process all files on disk (new files and content changes)
-  let failedCount = 0;
+  // Track stats for observability
+  let processedCount = 0;
+  const errors: Array<{ path: string; error: ChangeCaptureError }> = [];
   let insertedCount = 0;
+
+  // Step 1: Process all files on disk (new files and content changes)
+  // RESILIENT: Continue processing even if individual files fail
   for (const absolutePath of filesToReconcile) {
+    processedCount += 1;
     const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
 
     // captureChange handles both new files and content updates
     const result = await captureChange(evolu, watchDir, absolutePath);
     if (!result.ok) {
-      failedCount += 1;
+      // Per-file error: NOT fatal, add to stats and continue
+      errors.push({ path: absolutePath, error: result.error });
       logger.error(
         `[reconcile] Failed to capture ${absolutePath}:`,
         result.error,
@@ -121,13 +211,16 @@ export const reconcileStartupFilesystemState = async (
       continue;
     }
 
+    processedCount += 1;
+
     // File was deleted while CLI was offline
     const absolutePath = join(watchDir, evolPath);
     logger.log(`[reconcile] Offline deletion detected: ${evolPath}`);
 
     const result = await captureChange(evolu, watchDir, absolutePath);
     if (!result.ok) {
-      failedCount += 1;
+      // Per-file error: NOT fatal, add to stats and continue
+      errors.push({ path: absolutePath, error: result.error });
       logger.error(
         `[reconcile] Failed to capture offline deletion ${evolPath}:`,
         result.error,
@@ -138,38 +231,63 @@ export const reconcileStartupFilesystemState = async (
     deletedCount += 1;
   }
 
-  if (failedCount > 0) {
+  // Return stats (ok even with partial failures)
+  const stats: ReconcileStats = {
+    processedCount,
+    failedCount: errors.length,
+    errors,
+  };
+
+  if (stats.failedCount > 0) {
     logger.warn(
-      `[reconcile] Startup reconciliation completed with ${failedCount} failures`,
+      `[reconcile] Startup reconciliation completed with ${stats.failedCount} failures`,
     );
-    return;
+  } else {
+    logger.log(
+      `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount}, deleted ${deletedCount})`,
+    );
   }
 
-  logger.log(
-    `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount}, deleted ${deletedCount})`,
-  );
+  return ok(stats);
 };
 
 export const reconcileStartupEvoluState = async (
   evolu: EvoluDatabase,
   watchDir: string,
-): Promise<void> => {
+): Promise<Result<ReconcileStats, ReconcileFatalError>> => {
   logger.log("[reconcile] Starting Evolu state reconciliation");
 
-  // Step 1: Apply remote deletions (files deleted in Evolu while offline)
-  const deletedRowsQuery = evolu.createQuery((db) =>
-    db
-      .selectFrom("file")
-      .select(["path"])
-      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-      .where("isDeleted", "is", sqliteTrue as any),
-  );
+  // Track stats for observability
+  let processedCount = 0;
+  const errors: Array<{ path: string; error: ChangeCaptureError }> = [];
 
-  const deletedRows = await evolu.loadQuery(deletedRowsQuery);
+  // Step 1: Apply remote deletions (files deleted in Evolu while offline)
+  // Fatal check: ensure we can query database
+  let deletedRows: ReadonlyArray<{ path: string | null }>;
+  try {
+    const deletedRowsQuery = evolu.createQuery((db) =>
+      db
+        .selectFrom("file")
+        .select(["path"])
+        // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+        .where("isDeleted", "is", sqliteTrue as any),
+    );
+    deletedRows = await evolu.loadQuery(deletedRowsQuery);
+  } catch (error) {
+    return err({
+      type: "DatabaseUnavailable",
+      cause: error as Error,
+    });
+  }
+
   logger.log(`[reconcile] Found ${deletedRows.length} deleted rows in Evolu`);
   let removedCount = 0;
+
+  // RESILIENT: Continue processing even if individual deletions fail
   for (const row of deletedRows) {
     if (!row.path) continue;
+
+    processedCount += 1;
 
     const trackedHashResult = await getTrackedHash(evolu, row.path as string);
     const lastAppliedHash = trackedHashResult.ok
@@ -185,6 +303,15 @@ export const reconcileStartupEvoluState = async (
     );
 
     if (!result.ok) {
+      // Per-file error: NOT fatal, add to stats and continue
+      errors.push({
+        path: row.path as string,
+        error: {
+          type: "FileStatFailed",
+          absolutePath: row.path as string,
+          cause: result.error,
+        },
+      });
       logger.error(
         `[reconcile] Failed to apply deletion for ${row.path}:`,
         result.error,
@@ -198,24 +325,45 @@ export const reconcileStartupEvoluState = async (
   logger.log(`[reconcile] Applied ${removedCount} remote deletions`);
 
   // Step 2: Apply remote additions/updates (files added/updated in Evolu while offline)
-  // Use plan-execute pattern via collectMaterializationState + planStateMaterialization
-  const activeRowsQuery = evolu.createQuery((db) =>
-    db
-      .selectFrom("file")
-      .selectAll()
-      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-      .where("isDeleted", "is not", sqliteTrue as any),
-  );
+  // Fatal check: ensure we can query database
+  // biome-ignore lint/suspicious/noExplicitAny: Row type from Evolu query
+  let activeRows: ReadonlyArray<any>;
+  try {
+    const activeRowsQuery = evolu.createQuery((db) =>
+      db
+        .selectFrom("file")
+        .selectAll()
+        // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+        .where("isDeleted", "is not", sqliteTrue as any),
+    );
+    activeRows = await evolu.loadQuery(activeRowsQuery);
+  } catch (error) {
+    return err({
+      type: "DatabaseUnavailable",
+      cause: error as Error,
+    });
+  }
 
-  const activeRows = await evolu.loadQuery(activeRowsQuery);
   let syncedCount = 0;
 
+  // RESILIENT: Continue processing even if individual files fail
   for (const row of activeRows) {
     if (!row.path) continue;
+
+    processedCount += 1;
 
     // Step 2a: Collect state
     const stateResult = await collectMaterializationState(evolu, watchDir, row);
     if (!stateResult.ok) {
+      // Per-file error: NOT fatal, add to stats and continue
+      errors.push({
+        path: row.path as string,
+        error: {
+          type: "FileStatFailed",
+          absolutePath: row.path as string,
+          cause: stateResult.error,
+        },
+      });
       logger.error(
         `[reconcile] Failed to collect state for ${row.path}:`,
         stateResult.error,
@@ -237,6 +385,15 @@ export const reconcileStartupEvoluState = async (
     // Check for errors
     const firstError = results.find((r) => !r.ok);
     if (firstError && !firstError.ok) {
+      // Per-file error: NOT fatal, add to stats and continue
+      errors.push({
+        path: row.path as string,
+        error: {
+          type: "FileStatFailed",
+          absolutePath: row.path as string,
+          cause: firstError.error,
+        },
+      });
       logger.error(
         `[reconcile] Failed to apply changes for ${row.path}:`,
         firstError.error,
@@ -245,6 +402,15 @@ export const reconcileStartupEvoluState = async (
   }
 
   logger.log(`[reconcile] Synced ${syncedCount} files from Evolu`);
+
+  // Return stats (ok even with partial failures)
+  const stats: ReconcileStats = {
+    processedCount,
+    failedCount: errors.length,
+    errors,
+  };
+
+  return ok(stats);
 };
 
 const collectFilesRecursively = async (dir: string): Promise<string[]> => {

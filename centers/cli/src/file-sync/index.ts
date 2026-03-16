@@ -9,7 +9,9 @@ import {
   type AppOwner,
   createFormatTypeError,
   type Evolu,
+  err,
   Mnemonic,
+  ok,
   type Result,
   tryAsync,
 } from "@evolu/common";
@@ -21,6 +23,8 @@ import { createEvoluClient } from "./evolu";
 import type { Schema } from "./schema";
 import {
   captureChange,
+  type ReconcileFatalError,
+  type ReconcileStats,
   reconcileStartupEvoluState,
   reconcileStartupFilesystemState,
   startStateMaterialization,
@@ -45,6 +49,15 @@ export interface FileSyncConfig {
   readonly relayUrl: string;
 }
 
+/**
+ * Fatal error during file sync startup.
+ * Wraps reconciliation fatal errors.
+ */
+export type StartupFatalError = {
+  readonly type: "StartupFailed";
+  readonly cause: ReconcileFatalError;
+};
+
 export interface OwnerSession {
   readonly evolu: Evolu<typeof Schema>;
   readonly flush: () => Promise<Result<void, FlushError>>;
@@ -55,6 +68,10 @@ export interface OwnerSession {
 export interface FileSyncSession extends OwnerSession {
   readonly stop: () => Promise<void>;
   readonly failedSyncs: ReadonlySet<string>;
+  readonly startupReconciliation: {
+    readonly filesystem: ReconcileStats;
+    readonly evolu: ReconcileStats;
+  };
 }
 
 /**
@@ -90,7 +107,7 @@ export const createOwnerSession = async (
 export const startFileSync = async (
   config?: Partial<FileSyncConfig>,
   restoreMnemonic?: Mnemonic,
-): Promise<FileSyncSession> => {
+): Promise<Result<FileSyncSession, StartupFatalError>> => {
   logger.log("[file-sync] Initializing...");
 
   // Create base owner session
@@ -162,11 +179,44 @@ export const startFileSync = async (
 
   // Startup sync: apply any Evolu changes that happened while offline (deletions/additions)
   // This must run BEFORE filesystem reconciliation to prevent re-adding deleted files
-  await reconcileStartupEvoluState(evolu, resolvedWatchDir);
+  const evolResult = await reconcileStartupEvoluState(evolu, resolvedWatchDir);
+
+  if (!evolResult.ok) {
+    // Fatal error in Evolu reconciliation - cannot proceed
+    logger.error(
+      "[file-sync] Fatal error during Evolu reconciliation:",
+      evolResult.error,
+    );
+    return err({ type: "StartupFailed", cause: evolResult.error });
+  }
+
+  if (evolResult.value.failedCount > 0) {
+    logger.warn(
+      `[file-sync] Evolu reconciliation completed with ${evolResult.value.failedCount} partial failures`,
+    );
+  }
 
   // Phase 5 startup reconciliation: reflect pre-existing filesystem files into
   // Evolu before both loops start, now that watcher ignores initial events.
-  await reconcileStartupFilesystemState(evolu, resolvedWatchDir);
+  const fsResult = await reconcileStartupFilesystemState(
+    evolu,
+    resolvedWatchDir,
+  );
+
+  if (!fsResult.ok) {
+    // Fatal error in filesystem reconciliation - cannot proceed
+    logger.error(
+      "[file-sync] Fatal error during filesystem reconciliation:",
+      fsResult.error,
+    );
+    return err({ type: "StartupFailed", cause: fsResult.error });
+  }
+
+  if (fsResult.value.failedCount > 0) {
+    logger.warn(
+      `[file-sync] Filesystem reconciliation completed with ${fsResult.value.failedCount} partial failures`,
+    );
+  }
 
   // Track failed sync operations for observability
   // Future: Expose via status command or error reporting
@@ -202,11 +252,15 @@ export const startFileSync = async (
   logger.log("[file-sync] Ready");
 
   // Return session with bundled cleanup
-  return {
+  return ok({
     evolu,
     owner,
     flush: closeDb,
     failedSyncs,
+    startupReconciliation: {
+      filesystem: fsResult.value,
+      evolu: evolResult.value,
+    },
     config: {
       dbPath: resolvedDbPath,
       watchDir: resolvedWatchDir,
@@ -243,7 +297,7 @@ export const startFileSync = async (
 
       logger.log("[file-sync] Stopped");
     },
-  };
+  });
 };
 
 export const showOwnerMnemonic = async (

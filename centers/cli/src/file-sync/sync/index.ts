@@ -1,5 +1,7 @@
 export { captureChange } from "./change-capture";
 export {
+  type ReconcileFatalError,
+  type ReconcileStats,
   reconcileStartupEvoluState,
   reconcileStartupFilesystemState,
 } from "./startup-reconciliation";

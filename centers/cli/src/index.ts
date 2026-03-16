@@ -13,7 +13,15 @@ import {
 const runStart = async (watchDir?: string): Promise<void> => {
   console.log("[txtatelier] Starting...");
 
-  const session = await startFileSync({ ...(watchDir && { watchDir }) });
+  const result = await startFileSync({ ...(watchDir && { watchDir }) });
+
+  if (!result.ok) {
+    console.error("[txtatelier] Fatal error during startup:");
+    console.error(result.error);
+    process.exit(1);
+  }
+
+  const session = result.value;
 
   const shutdown = async (signal: string) => {
     console.log(`[txtatelier] Received ${signal}, shutting down gracefully...`);
