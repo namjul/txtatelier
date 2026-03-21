@@ -219,6 +219,76 @@ function invariant(condition: boolean, message: string): asserts condition {
 }
 ```
 
+### Fatal vs Recoverable Errors
+
+**Critical distinction:** Differentiate between errors that prevent an operation from proceeding (fatal) vs errors affecting individual items (recoverable).
+
+**Fatal errors** - Return `err()` in Result type:
+- System resources unavailable (watchDir missing, database unavailable)
+- Configuration invalid (cannot proceed without fixing)
+- Systematic failures where continuing would be meaningless
+
+**Recoverable errors** - Track in stats, continue processing:
+- Individual file failures (permission denied, file too large)
+- Partial network failures (one sync failed, others succeeded)
+- Item-level validation errors
+
+**Pattern for orchestration functions:**
+```typescript
+interface OperationStats {
+  readonly processedCount: number;
+  readonly failedCount: number;
+  readonly errors: ReadonlyArray<{
+    readonly path: string;
+    readonly error: ItemError;
+  }>;
+}
+
+type FatalError = 
+  | { readonly type: "SystemResourceUnavailable"; readonly cause: Error }
+  | { readonly type: "InvalidConfiguration"; readonly message: string };
+
+// Return Result<Stats, FatalError> - only fail on systematic issues
+const processItems = async (
+  items: ReadonlyArray<Item>
+): Promise<Result<OperationStats, FatalError>> => {
+  // Check preconditions - fatal if missing
+  if (!systemResourceAvailable) {
+    return err({ type: "SystemResourceUnavailable", cause: error });
+  }
+
+  // Process items - continue on per-item failures
+  const errors: Array<{ path: string; error: ItemError }> = [];
+  let processedCount = 0;
+
+  for (const item of items) {
+    processedCount += 1;
+    const result = await processItem(item);
+    if (!result.ok) {
+      // NOT fatal - track error and continue
+      errors.push({ path: item.path, error: result.error });
+      logger.error(`Failed to process ${item.path}:`, result.error);
+      continue;
+    }
+  }
+
+  // Return ok() even with partial failures
+  return ok({
+    processedCount,
+    failedCount: errors.length,
+    errors,
+  });
+};
+```
+
+**Guidelines:**
+- Use `Result<Stats, FatalError>` for operations that process collections
+- Fatal errors should have narrow, specific types (not generic Error)
+- Always document the fatal/recoverable boundary in JSDoc
+- Stats should include counts and error details for observability
+- Log recoverable errors but continue processing
+- Callers must explicitly unwrap Results - no silent failures
+
 ### Comments
 
 - **Avoid redundant comments** - code should be self-documenting
