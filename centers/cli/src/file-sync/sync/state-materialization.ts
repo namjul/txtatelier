@@ -63,7 +63,7 @@ export const startStateMaterialization = (
   watchDir: string,
   options?: StateMaterializationOptions,
 ): (() => void) => {
-  logger.debug("[materialize] Starting...");
+  logger.debug("[materialize:evolu→fs] Starting state materialization");
 
   const allFilesQuery = evolu.createQuery((db) =>
     db
@@ -79,7 +79,9 @@ export const startStateMaterialization = (
   ensureHistoryCursor(evolu);
 
   evolu.loadQuery(allFilesQuery).then(async (rows) => {
-    logger.debug(`[materialize] Initial load: ${rows.length} existing files`);
+    logger.debug(
+      `[state:subscription] Initial load: ${rows.length} existing files`,
+    );
     await syncEvoluToFiles(evolu, watchDir, rows, options);
 
     // Set cursor to current timestamp to avoid replaying old history
@@ -108,7 +110,7 @@ export const startStateMaterialization = (
         ] as unknown as TimestampBytes;
         saveHistoryCursor(evolu, latestTimestamp);
         logger.debug(
-          "[materialize] Cursor initialized to latest history timestamp",
+          "[state:subscription] Cursor initialized to latest history timestamp",
         );
       }
     }
@@ -130,23 +132,23 @@ export const startStateMaterialization = (
     subscriptionFireCount++;
     const triggerTime = new Date().toISOString();
     logger.debug(
-      `[materialize] 🔔 Subscription fired (#${subscriptionFireCount}) at ${triggerTime}`,
+      `[state:subscription] 🔔 Subscription fired (#${subscriptionFireCount}) at ${triggerTime}`,
     );
 
     if (!initialLoadComplete) {
       logger.debug(
-        "[materialize] Skipping subscription (initial load in progress)",
+        "[state:subscription] Skipping subscription (initial load in progress)",
       );
       return;
     }
 
     if (debounceTimer) {
-      logger.debug("[materialize] Resetting debounce timer (rapid changes)");
+      logger.debug("[state:debounce] Resetting debounce timer (rapid changes)");
       clearTimeout(debounceTimer);
     }
 
     debounceTimer = setTimeout(async () => {
-      logger.debug("[materialize] Change detected (debounced)");
+      logger.debug("[state:debounce] Change detected (debounced)");
 
       // Load cursor to find last processed timestamp
       const cursor = await loadHistoryCursor(evolu);
@@ -173,7 +175,7 @@ export const startStateMaterialization = (
       const historyRows = await evolu.loadQuery(historyQuery);
 
       if (historyRows.length === 0) {
-        logger.debug("[materialize] No new changes to process");
+        logger.debug("[state:debounce] No new changes to process");
         debounceTimer = null;
         return;
       }
@@ -213,17 +215,17 @@ export const startStateMaterialization = (
         if (changedRows.length === 1) {
           logger.debug(
             // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-            `[materialize] Processing changed file: ${changedRows[0]?.["path"]}`,
+            `[materialize:evolu→fs] Processing changed file: ${changedRows[0]?.["path"]}`,
           );
         } else if (changedRows.length <= 5) {
           // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
           const paths = changedRows.map((r) => r["path"]).join(", ");
           logger.debug(
-            `[materialize] Processing ${changedRows.length} changed files: ${paths}`,
+            `[materialize:evolu→fs] Processing ${changedRows.length} changed files: ${paths}`,
           );
         } else {
           logger.debug(
-            `[materialize] Processing ${changedRows.length} changed files`,
+            `[materialize:evolu→fs] Processing ${changedRows.length} changed files`,
           );
         }
 
@@ -250,11 +252,11 @@ export const startStateMaterialization = (
           const firstRow = deletedRows[0];
           logger.debug(
             // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-            `[materialize] Processing deletion: ${firstRow?.["path"]}`,
+            `[materialize:evolu→fs] Processing deletion: ${firstRow?.["path"]}`,
           );
         } else if (deletedRows.length > 0) {
           logger.debug(
-            `[materialize] Processing ${deletedRows.length} deletions`,
+            `[materialize:evolu→fs] Processing ${deletedRows.length} deletions`,
           );
         }
 
@@ -271,7 +273,7 @@ export const startStateMaterialization = (
 
           if (!lastAppliedHashResult.ok) {
             logger.error(
-              `[materialize] Failed to get tracked hash for ${path}:`,
+              `[materialize:evolu→fs] Failed to get tracked hash for ${path}:`,
               lastAppliedHashResult.error,
             );
             continue;
@@ -287,7 +289,7 @@ export const startStateMaterialization = (
 
           if (!deleteResult.ok) {
             logger.error(
-              `[materialize] Failed to apply deletion for ${path}:`,
+              `[materialize:evolu→fs] Failed to apply deletion for ${path}:`,
               deleteResult.error,
             );
           }
@@ -307,7 +309,7 @@ export const startStateMaterialization = (
     }, SUBSCRIPTION_DEBOUNCE_MS);
   });
 
-  logger.debug("[materialize] Subscribed");
+  logger.debug("[state:subscription] Subscribed");
 
   return () => {
     if (debounceTimer) {
@@ -330,7 +332,7 @@ const syncEvoluToFiles = async (
   let failedCount = 0;
 
   if (total > 50) {
-    logger.debug(`[materialize] Processing ${total} files...`);
+    logger.debug(`[materialize:evolu→fs] Processing ${total} files...`);
   }
 
   let processed = 0;
@@ -348,7 +350,10 @@ const syncEvoluToFiles = async (
         result.error.type,
         (failedByType.get(result.error.type) ?? 0) + 1,
       );
-      logger.error(`[materialize] Failed to sync ${row.path}:`, result.error);
+      logger.error(
+        `[materialize:evolu→fs] Failed to sync ${row.path}:`,
+        result.error,
+      );
     }
 
     processed++;
@@ -356,19 +361,21 @@ const syncEvoluToFiles = async (
     if (total > 50 && processed % 50 === 0) {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       logger.debug(
-        `[materialize] Progress: ${processed}/${total} files (${elapsed}s)`,
+        `[materialize:evolu→fs] Progress: ${processed}/${total} files (${elapsed}s)`,
       );
     }
   }
 
   if (total > 50) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    logger.info(`[materialize] Completed ${total} files in ${elapsed}s`);
+    logger.info(
+      `[materialize:evolu→fs] Completed ${total} files in ${elapsed}s`,
+    );
   }
 
   if (failedCount > 0) {
     logger.warn(
-      `[materialize] Failed rows: ${failedCount}/${total} (${Array.from(
+      `[materialize:evolu→fs] Failed rows: ${failedCount}/${total} (${Array.from(
         failedByType.entries(),
       )
         .map(([type, count]) => `${type}=${count}`)
@@ -396,7 +403,7 @@ const syncEvoluRowToFile = async (
 
   if (!stateResult.ok) {
     logger.error(
-      `[materialize] Failed to collect state for ${row.path}:`,
+      `[materialize:evolu→fs] Failed to collect state for ${row.path}:`,
       stateResult.error,
     );
     return err({
@@ -424,7 +431,7 @@ const syncEvoluRowToFile = async (
   const firstError = results.find((r) => !r.ok);
   if (firstError && !firstError.ok) {
     logger.error(
-      `[materialize] Execution failed for ${row.path}:`,
+      `[materialize:evolu→fs] Execution failed for ${row.path}:`,
       firstError.error,
     );
     return err({
@@ -478,7 +485,7 @@ export const applyRemoteDeletionToFilesystem = async (
   }
 
   if (diskHashResult.value !== lastAppliedHash) {
-    logger.info(`[materialize] Deletion conflict detected: ${path}`);
+    logger.info(`[materialize:evolu→fs] Deletion conflict detected: ${path}`);
 
     const localContentResult = await tryAsync(
       () => file.text(),
@@ -555,7 +562,7 @@ export const applyRemoteDeletionToFilesystem = async (
     }
   }
 
-  logger.debug(`[materialize] Deleted: ${path}`);
+  logger.debug(`[materialize:evolu→fs] Deleted: ${path}`);
 
   return clearTrackedHash(evolu, path);
 };

@@ -167,7 +167,7 @@ export const reconcileStartupFilesystemState = async (
   );
 
   logger.info(
-    `[reconcile] Startup scan found ${filesToReconcile.length} filesystem files`,
+    `[reconcile:fs→evolu] Startup scan found ${filesToReconcile.length} filesystem files`,
   );
 
   // Track stats for observability
@@ -187,7 +187,7 @@ export const reconcileStartupFilesystemState = async (
       // Per-file error: NOT fatal, add to stats and continue
       errors.push({ path: absolutePath, error: result.error });
       logger.error(
-        `[reconcile] Failed to capture ${absolutePath}:`,
+        `[reconcile:fs→evolu] Failed to capture ${absolutePath}:`,
         result.error,
       );
       continue;
@@ -215,14 +215,14 @@ export const reconcileStartupFilesystemState = async (
 
     // File was deleted while CLI was offline
     const absolutePath = join(watchDir, evolPath);
-    logger.debug(`[reconcile] Offline deletion detected: ${evolPath}`);
+    logger.debug(`[reconcile:fs→evolu] Offline deletion detected: ${evolPath}`);
 
     const result = await captureChange(evolu, watchDir, absolutePath);
     if (!result.ok) {
       // Per-file error: NOT fatal, add to stats and continue
       errors.push({ path: absolutePath, error: result.error });
       logger.error(
-        `[reconcile] Failed to capture offline deletion ${evolPath}:`,
+        `[reconcile:fs→evolu] Failed to capture offline deletion ${evolPath}:`,
         result.error,
       );
       continue;
@@ -240,11 +240,11 @@ export const reconcileStartupFilesystemState = async (
 
   if (stats.failedCount > 0) {
     logger.warn(
-      `[reconcile] Startup reconciliation completed with ${stats.failedCount} failures`,
+      `[reconcile:fs→evolu] Startup reconciliation completed with ${stats.failedCount} failures`,
     );
   } else {
     logger.info(
-      `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount}, deleted ${deletedCount})`,
+      `[reconcile:fs→evolu] Startup filesystem reconciliation complete (inserted ${insertedCount}, deleted ${deletedCount})`,
     );
   }
 
@@ -255,7 +255,7 @@ export const reconcileStartupEvoluState = async (
   evolu: EvoluDatabase,
   watchDir: string,
 ): Promise<Result<ReconcileStats, ReconcileFatalError>> => {
-  logger.debug("[reconcile] Starting Evolu state reconciliation");
+  logger.debug("[reconcile:evolu→fs] Starting Evolu state reconciliation");
 
   // Track stats for observability
   let processedCount = 0;
@@ -280,7 +280,9 @@ export const reconcileStartupEvoluState = async (
     });
   }
 
-  logger.debug(`[reconcile] Found ${deletedRows.length} deleted rows in Evolu`);
+  logger.debug(
+    `[reconcile:evolu→fs] Found ${deletedRows.length} deleted rows in Evolu`,
+  );
   let removedCount = 0;
 
   // RESILIENT: Continue processing even if individual deletions fail
@@ -313,7 +315,7 @@ export const reconcileStartupEvoluState = async (
         },
       });
       logger.error(
-        `[reconcile] Failed to apply deletion for ${row.path}:`,
+        `[reconcile:evolu→fs] Failed to apply deletion for ${row.path}:`,
         result.error,
       );
       continue;
@@ -322,7 +324,7 @@ export const reconcileStartupEvoluState = async (
     removedCount += 1;
   }
 
-  logger.debug(`[reconcile] Applied ${removedCount} remote deletions`);
+  logger.debug(`[reconcile:evolu→fs] Applied ${removedCount} remote deletions`);
 
   // Step 2: Apply remote additions/updates (files added/updated in Evolu while offline)
   // Fatal check: ensure we can query database
@@ -365,7 +367,7 @@ export const reconcileStartupEvoluState = async (
         },
       });
       logger.error(
-        `[reconcile] Failed to collect state for ${row.path}:`,
+        `[reconcile:evolu→fs] Failed to collect state for ${row.path}:`,
         stateResult.error,
       );
       continue;
@@ -395,13 +397,13 @@ export const reconcileStartupEvoluState = async (
         },
       });
       logger.error(
-        `[reconcile] Failed to apply changes for ${row.path}:`,
+        `[reconcile:evolu→fs] Failed to apply changes for ${row.path}:`,
         firstError.error,
       );
     }
   }
 
-  logger.info(`[reconcile] Synced ${syncedCount} files from Evolu`);
+  logger.info(`[reconcile:evolu→fs] Synced ${syncedCount} files from Evolu`);
 
   // Return stats (ok even with partial failures)
   const stats: ReconcileStats = {

@@ -129,7 +129,7 @@ export const startWatching = async (
     }
 
     logger.debug(
-      `[watch] ${eventType}: ${relative(watchDir, absolutePath).replaceAll("\\", "/")}`,
+      `[watch:${eventType}] ${relative(watchDir, absolutePath).replaceAll("\\", "/")}`,
     );
     debouncedOnChange(absolutePath);
   };

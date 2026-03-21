@@ -22,15 +22,15 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
     const ws = createWebSocket(url, {
       ...options,
       onOpen: () => {
-        logger.debug("[evolu-sync] websocket open", url);
+        logger.debug("[net:websocket:open]", url);
         options?.onOpen?.();
       },
       onError: (error) => {
-        logger.error("[evolu-sync] websocket error", error);
+        logger.error("[net:websocket:error]", error);
         options?.onError?.(error);
       },
       onClose: (event) => {
-        logger.warn("[evolu-sync] websocket close", event.code, event.reason);
+        logger.warn("[net:websocket:close]", event.code, event.reason);
         options?.onClose?.(event);
       },
       onMessage: (data) => {
@@ -40,7 +40,7 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
             : data instanceof ArrayBuffer
               ? data.byteLength
               : data.size;
-        logger.debug("[evolu-sync] websocket message", size);
+        logger.debug("[net:websocket:message]", size);
         options?.onMessage?.(data);
       },
     });
@@ -56,11 +56,7 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
                 ? data.size
                 : data.byteLength;
         const result = ws.send(data);
-        logger.debug(
-          "[evolu-sync] websocket send",
-          size,
-          result.ok ? "ok" : "err",
-        );
+        logger.debug("[net:websocket:send]", size, result.ok ? "ok" : "err");
         return result;
       },
       getReadyState: ws.getReadyState,

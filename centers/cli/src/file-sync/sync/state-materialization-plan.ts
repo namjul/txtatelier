@@ -31,7 +31,10 @@ export const planStateMaterialization = (
   // Already processed?
   if (state.lastAppliedHash === evolHash) {
     return [
-      log("debug", `[materialize] Skipped (already processed): ${state.path}`),
+      log(
+        "debug",
+        `[materialize:evolu→fs] Skipped (already processed): ${state.path}`,
+      ),
       skip("already-processed", state.path),
     ];
   }
@@ -39,7 +42,10 @@ export const planStateMaterialization = (
   // Disk matches Evolu? Just update tracking
   if (state.diskHash === evolHash) {
     return [
-      log("debug", `[materialize] Skipped (disk matches): ${state.path}`),
+      log(
+        "debug",
+        `[materialize:evolu→fs] Skipped (disk matches): ${state.path}`,
+      ),
       setTrackedHash(state.path, evolHash),
     ];
   }
@@ -48,16 +54,19 @@ export const planStateMaterialization = (
   if (detectConflict(state.diskHash, state.lastAppliedHash, evolHash)) {
     const conflictPath = generateConflictPath(state.path, state.ownerId);
     return [
-      log("debug", `[materialize] Conflict detected: ${state.path}`),
+      log("debug", `[materialize:evolu→fs] Conflict detected: ${state.path}`),
       createConflict(state.path, conflictPath, evolContent, state.ownerId),
-      log("debug", `[materialize] Created conflict file: ${conflictPath}`),
+      log(
+        "debug",
+        `[materialize:evolu→fs] Created conflict file: ${conflictPath}`,
+      ),
       setTrackedHash(state.path, evolHash),
     ];
   }
 
   // Safe to apply
   return [
-    log("debug", `[materialize] Writing: ${state.path}`),
+    log("debug", `[materialize:evolu→fs] Writing: ${state.path}`),
     writeFile(state.path, evolContent, evolHash),
     setTrackedHash(state.path, evolHash),
   ];

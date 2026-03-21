@@ -13,13 +13,13 @@ export const createPersistentBunSqliteDriver = (
   io: PlatformIO,
 ): CreateSqliteDriver => {
   return async (_name, options) => {
-    logger.debug("[sqlite-driver] init", {
+    logger.debug("[db:sqlite:init]", {
       memory: options?.memory ?? false,
     });
     // 1. Load existing database or start fresh
     const readResult = await io.readFile();
     if (!readResult.ok) {
-      logger.error("[sqlite-driver] Failed to read database", readResult.error);
+      logger.error("[error] Failed to read database", readResult.error);
       throw new Error("Failed to read sqlite database", {
         cause: readResult.error,
       });
@@ -40,7 +40,7 @@ export const createPersistentBunSqliteDriver = (
 
       if (!deserializeResult.ok) {
         logger.error(
-          "[sqlite-driver] Failed to deserialize existing database",
+          "[error] Failed to deserialize existing database",
           deserializeResult.error,
         );
         throw new Error("Failed to deserialize sqlite database", {
@@ -74,10 +74,7 @@ export const createPersistentBunSqliteDriver = (
       void (async () => {
         const writeResult = await io.writeFile(data);
         if (!writeResult.ok) {
-          logger.error(
-            "[txtatelier] ERROR: Failed to save database",
-            writeResult.error,
-          );
+          logger.error("[error] Failed to save database", writeResult.error);
         }
       })();
     };

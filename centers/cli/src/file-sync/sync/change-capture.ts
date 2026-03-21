@@ -70,7 +70,7 @@ export const captureChange = async (
 
   if (statResult && statResult.size > MAX_FILE_SIZE_BYTES) {
     logger.warn(
-      `[capture] File too large: ${absolutePath} ` +
+      `[capture:fs→evolu] File too large: ${absolutePath} ` +
         `(${formatBytes(statResult.size)} > ${formatBytes(MAX_FILE_SIZE_BYTES)}) - skipped`,
     );
     return err({
@@ -90,7 +90,7 @@ export const captureChange = async (
 
   if (!stateResult.ok) {
     logger.error(
-      `[capture] Failed to collect state for ${absolutePath}:`,
+      `[capture:fs→evolu] Failed to collect state for ${absolutePath}:`,
       stateResult.error,
     );
     return err({
@@ -110,7 +110,7 @@ export const captureChange = async (
   const firstError = results.find((r) => !r.ok);
   if (firstError && !firstError.ok) {
     logger.error(
-      `[capture] Execution failed for ${absolutePath}:`,
+      `[capture:fs→evolu] Execution failed for ${absolutePath}:`,
       firstError.error,
     );
     return err({

@@ -32,7 +32,7 @@ export const planChangeCapture = (
   if (state.diskHash === null) {
     if (state.evolId !== null) {
       return [
-        log("debug", `[capture] Deleting: ${state.path}`),
+        log("debug", `[capture:fs→evolu] Deleting: ${state.path}`),
         markDeletedEvolu(state.evolId, state.path),
         clearTrackedHash(state.path),
       ];
@@ -50,7 +50,10 @@ export const planChangeCapture = (
   // File exists - check if changed
   if (diskHash === state.evolHash) {
     return [
-      log("debug", `[capture] No change: ${state.path} (hash matches)`),
+      log(
+        "debug",
+        `[capture:fs→evolu] No change: ${state.path} (hash matches)`,
+      ),
       skip("hash-matches", state.path),
     ];
   }
@@ -59,14 +62,14 @@ export const planChangeCapture = (
   if (state.evolId !== null) {
     // Update existing record
     return [
-      log("debug", `[capture] Updating: ${state.path}`),
+      log("debug", `[capture:fs→evolu] Updating: ${state.path}`),
       updateEvolu(state.evolId, state.path, diskContent, diskHash),
     ];
   }
 
   // Insert new record
   return [
-    log("debug", `[capture] Inserting: ${state.path}`),
+    log("debug", `[capture:fs→evolu] Inserting: ${state.path}`),
     insertEvolu(state.path, diskContent, diskHash),
   ];
 };

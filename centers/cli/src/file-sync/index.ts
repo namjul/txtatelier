@@ -108,7 +108,7 @@ export const startFileSync = async (
   config?: Partial<FileSyncConfig>,
   restoreMnemonic?: Mnemonic,
 ): Promise<Result<FileSyncSession, StartupFatalError>> => {
-  logger.info("[file-sync] Initializing...");
+  logger.info("[lifecycle] Initializing...");
 
   // Create base owner session
   const ownerSession = await createOwnerSession(config);
@@ -118,7 +118,7 @@ export const startFileSync = async (
   const resolvedrelayUrl = resolvedConfig.relayUrl;
 
   if (restoreMnemonic) {
-    logger.debug("[file-sync] Restoring from provided mnemonic...");
+    logger.debug("[lifecycle] Restoring from provided mnemonic...");
 
     const restoreResult = await tryAsync(
       () => evolu.restoreAppOwner(restoreMnemonic, { reload: false }),
@@ -126,24 +126,24 @@ export const startFileSync = async (
     );
 
     if (restoreResult.ok) {
-      logger.debug("[file-sync] Mnemonic restored to database");
+      logger.debug("[lifecycle] Mnemonic restored to database");
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      logger.debug("[file-sync] Flushing database...");
+      logger.debug("[lifecycle] Flushing database...");
 
       const flushResult = await closeDb();
       if (!flushResult.ok) {
         logger.error(
-          "[file-sync] Failed to flush restored mnemonic:",
+          "[error] Failed to flush restored mnemonic:",
           flushResult.error,
         );
       } else {
-        logger.debug("[file-sync] Mnemonic restore persisted");
+        logger.debug("[lifecycle] Mnemonic restore persisted");
       }
-      logger.info("[file-sync] Restart required to activate restored owner");
+      logger.info("[lifecycle] Restart required to activate restored owner");
       process.exit(flushResult.ok ? 0 : 1);
     } else {
       logger.warn(
-        "[file-sync] Failed to restore mnemonic, using generated owner:",
+        "[lifecycle] Failed to restore mnemonic, using generated owner:",
         restoreResult.error,
       );
     }
@@ -153,27 +153,27 @@ export const startFileSync = async (
   const isFirstRun = !(await Bun.file(resolvedDbPath).exists());
 
   if (isFirstRun && !restoreMnemonic) {
-    logger.info("[file-sync]");
-    logger.info("[file-sync] First run detected!");
-    logger.info("[file-sync]");
-    logger.info("[file-sync] Your mnemonic (save this securely!):");
-    logger.info(`[file-sync]   ${owner.mnemonic}`);
-    logger.info("[file-sync]");
-    logger.info("[file-sync] ⚠️  IMPORTANT: Save this mnemonic!");
+    logger.info("[lifecycle]");
+    logger.info("[lifecycle] First run detected!");
+    logger.info("[lifecycle]");
+    logger.info("[lifecycle] Your mnemonic (save this securely!):");
+    logger.info(`[lifecycle]   ${owner.mnemonic}`);
+    logger.info("[lifecycle]");
+    logger.info("[lifecycle] ⚠️  IMPORTANT: Save this mnemonic!");
     logger.info(
-      "[file-sync] ⚠️  You'll need it to access your data on other devices.",
+      "[lifecycle] ⚠️  You'll need it to access your data on other devices.",
     );
-    logger.info("[file-sync] ⚠️  Run 'txtatelier owner show' to see it again.");
-    logger.info("[file-sync]");
+    logger.info("[lifecycle] ⚠️  Run 'txtatelier owner show' to see it again.");
+    logger.info("[lifecycle]");
   }
 
-  logger.info(`[file-sync] Owner ID: ${owner.id}`);
+  logger.info(`[lifecycle] Owner ID: ${owner.id}`);
 
   // Subscribe to Evolu errors
   const unsubscribeError = evolu.subscribeError(() => {
     const error = evolu.getError();
     if (error) {
-      logger.error("[file-sync] Evolu error:", error);
+      logger.error("[error] Evolu error:", error);
     }
   });
 
@@ -184,7 +184,7 @@ export const startFileSync = async (
   if (!evolResult.ok) {
     // Fatal error in Evolu reconciliation - cannot proceed
     logger.error(
-      "[file-sync] Fatal error during Evolu reconciliation:",
+      "[error] Fatal error during Evolu reconciliation:",
       evolResult.error,
     );
     return err({ type: "StartupFailed", cause: evolResult.error });
@@ -192,7 +192,7 @@ export const startFileSync = async (
 
   if (evolResult.value.failedCount > 0) {
     logger.warn(
-      `[file-sync] Evolu reconciliation completed with ${evolResult.value.failedCount} partial failures`,
+      `[lifecycle] Evolu reconciliation completed with ${evolResult.value.failedCount} partial failures`,
     );
   }
 
@@ -206,7 +206,7 @@ export const startFileSync = async (
   if (!fsResult.ok) {
     // Fatal error in filesystem reconciliation - cannot proceed
     logger.error(
-      "[file-sync] Fatal error during filesystem reconciliation:",
+      "[error] Fatal error during filesystem reconciliation:",
       fsResult.error,
     );
     return err({ type: "StartupFailed", cause: fsResult.error });
@@ -214,7 +214,7 @@ export const startFileSync = async (
 
   if (fsResult.value.failedCount > 0) {
     logger.warn(
-      `[file-sync] Filesystem reconciliation completed with ${fsResult.value.failedCount} partial failures`,
+      `[lifecycle] Filesystem reconciliation completed with ${fsResult.value.failedCount} partial failures`,
     );
   }
 
@@ -223,14 +223,17 @@ export const startFileSync = async (
   const failedSyncs = new Set<string>();
 
   // Start Change Capture: watch filesystem and reflect into Evolu
-  logger.info(`[file-sync] Watching directory: ${resolvedWatchDir}`);
+  logger.info(`[lifecycle] Watching directory: ${resolvedWatchDir}`);
   const stopWatching = await startWatching(
     resolvedWatchDir,
     async (filePath) => {
       const result = await captureChange(evolu, resolvedWatchDir, filePath);
       if (!result.ok) {
         failedSyncs.add(filePath);
-        logger.error(`[sync] Failed to capture ${filePath}:`, result.error);
+        logger.error(
+          `[capture:fs→evolu] Failed to capture ${filePath}:`,
+          result.error,
+        );
       }
     },
   );
@@ -242,14 +245,14 @@ export const startFileSync = async (
       if (!result.ok) {
         failedSyncs.add(conflictPath);
         logger.error(
-          `[sync] Failed to capture conflict file ${conflictPath}:`,
+          `[capture:fs→evolu] Failed to capture conflict file ${conflictPath}:`,
           result.error,
         );
       }
     },
   });
 
-  logger.info("[file-sync] Ready");
+  logger.info("[lifecycle] Ready");
 
   // Return session with bundled cleanup
   return ok({
@@ -267,7 +270,7 @@ export const startFileSync = async (
       relayUrl: resolvedrelayUrl,
     },
     stop: async (): Promise<void> => {
-      logger.info("[file-sync] Shutting down...");
+      logger.info("[lifecycle] Shutting down...");
 
       // Unsubscribe from error handler
       if (unsubscribeError) {
@@ -288,14 +291,11 @@ export const startFileSync = async (
       if (closeDb) {
         const flushResult = await closeDb();
         if (!flushResult.ok) {
-          logger.error(
-            "[file-sync] Failed to flush database:",
-            flushResult.error,
-          );
+          logger.error("[error] Failed to flush database:", flushResult.error);
         }
       }
 
-      logger.info("[file-sync] Stopped");
+      logger.info("[lifecycle] Stopped");
     },
   });
 };
