@@ -29,18 +29,22 @@
 - [ ] 4.5 `[reconcile] Synced N files...` → `[reconcile:evolu→fs] Synced N files from Evolu`
 
 ### 5. Update watch.ts
-- [ ] 5.1 Keep `[watch] Starting to watch...` (no change needed)
-- [ ] 5.2 Keep `[watch] add/change/unlink: path` (no change needed)
-- [ ] 5.3 `[watch] Stopped watching` → Keep `[watch]` or use `[lifecycle]` (decide)
+- [ ] 5.1 `[watch] Starting to watch...` → Keep `[watch]` (lifecycle message, no event type)
+- [ ] 5.2 `[watch] add: path` → `[watch:add] path` (with event type)
+- [ ] 5.3 `[watch] change: path` → `[watch:change] path` (with event type)
+- [ ] 5.4 `[watch] unlink: path` → `[watch:unlink] path` (with event type)
+- [ ] 5.5 `[watch] Stopped watching` → `[watch] Stopped watching` (lifecycle message, no event type)
 
 ## Phase 3: Update Platform Layer
 
 ### 6. Update BunEvoluDeps.ts
-- [ ] 6.1 `[evolu-sync] websocket open` → `[net:websocket] websocket open`
-- [ ] 6.2 Other evolu-sync logs → `[net:websocket]`
+- [ ] 6.1 `[evolu-sync] websocket open` → `[net:websocket:open]`
+- [ ] 6.2 `[evolu-sync] websocket message` → `[net:websocket:message]`
+- [ ] 6.3 `[evolu-sync] websocket send` → `[net:websocket:send]`
+- [ ] 6.4 `[evolu-sync] websocket close` → `[net:websocket:close]`
 
 ### 7. Update BunSqliteDriver.ts
-- [ ] 7.1 `[sqlite-driver] init` → `[db:sqlite] init`
+- [ ] 7.1 `[sqlite-driver] init` → `[db:sqlite:init]`
 
 ## Phase 4: Update Lifecycle Logs
 
@@ -57,12 +61,14 @@
 
 ### 9. Test filtering
 - [ ] 9.1 Run with DEBUG and create a file
-- [ ] 9.2 Verify `grep "capture:"` shows capture operations
-- [ ] 9.3 Verify `grep "materialize:"` shows materialize operations
-- [ ] 9.4 Verify `grep "reconcile:"` shows reconciliation operations
-- [ ] 9.5 Verify `grep "→evolu"` shows all fs→evolu (capture + reconcile:fs→evolu)
-- [ ] 9.6 Verify `grep "→fs"` shows all evolu→fs (materialize + reconcile:evolu→fs)
-- [ ] 9.7 Verify `grep "lifecycle"` shows startup/shutdown
+- [ ] 9.2 Verify `grep "watch:add"` shows file additions
+- [ ] 9.3 Verify `grep "watch:change"` shows file changes
+- [ ] 9.4 Verify `grep "capture:"` shows capture operations
+- [ ] 9.5 Verify `grep "materialize:"` shows materialize operations
+- [ ] 9.6 Verify `grep "→evolu"` shows all fs→evolu (capture + reconcile:fs→evolu)
+- [ ] 9.7 Verify `grep "→fs"` shows all evolu→fs (materialize + reconcile:evolu→fs)
+- [ ] 9.8 Verify `grep "net:websocket:message"` shows incoming WebSocket messages
+- [ ] 9.9 Verify `grep "lifecycle"` shows startup/shutdown
 
 ### 10. Final review
 - [ ] 10.1 No old prefixes remain (`[materialize]`, `[capture]`, `[reconcile]`, `[evolu-sync]`, `[sqlite-driver]`, `[file-sync]`)

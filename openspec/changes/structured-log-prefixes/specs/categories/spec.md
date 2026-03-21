@@ -7,7 +7,7 @@ Structured hybrid prefixes (component + direction) for all DEBUG level log messa
 ## Prefix Definitions
 
 ### [lifecycle]
-**Purpose:** System lifecycle events visible to users
+**Purpose:** System lifecycle events visible to users (no event type)
 **Level:** INFO
 **When to use:** Startup, shutdown, ready states, owner changes
 
@@ -19,18 +19,23 @@ Examples:
 [lifecycle] Owner restored. Restart required.
 ```
 
-### [watch]
-**Purpose:** Filesystem watcher events
+**Note:** No event types - the message context is sufficient.
+
+### [watch:*]
+**Purpose:** Filesystem watcher events (with event type)
 **Level:** DEBUG
-**When to use:** Any filesystem add/change/unlink events
+**When to use:** Filesystem add/change/unlink events
 
 Examples:
 ```
+[watch:add] notes/test.md
+[watch:change] notes/test.md
+[watch:unlink] notes/test.md
 [watch] Starting watcher: /path/to/dir
-[watch] add: notes/test.md
-[watch] change: notes/test.md
-[watch] unlink: notes/test.md
+[watch] Stopped watcher
 ```
+
+**Note:** Event types (`:add`, `:change`, `:unlink`) for actual file operations. Simple `[watch]` for lifecycle messages.
 
 ### [capture:fs→evolu]
 **Purpose:** Change capture: filesystem TO Evolu database
@@ -84,7 +89,7 @@ Examples:
 ```
 
 ### [state:subscription]
-**Purpose:** Subscription and initial load operations
+**Purpose:** Subscription and initial load operations (no event type)
 **Level:** DEBUG
 **When to use:** Subscription events, query results, cursor management
 
@@ -95,8 +100,10 @@ Examples:
 [state:subscription] Cursor initialized to latest history timestamp
 ```
 
+**Note:** No event types - single concern, message context is sufficient.
+
 ### [state:debounce]
-**Purpose:** Debounce and batching operations
+**Purpose:** Debounce and batching operations (no event type)
 **Level:** DEBUG
 **When to use:** Timer resets, batch processing
 
@@ -107,28 +114,34 @@ Examples:
 [state:debounce] No new changes to process
 ```
 
-### [net:websocket]
-**Purpose:** Network/WebSocket layer events
+**Note:** No event types - single concern, message context is sufficient.
+
+### [net:websocket:*]
+**Purpose:** Network/WebSocket layer events (with event type)
 **Level:** DEBUG
 **When to use:** Connection open/close, message send/receive
 
 Examples:
 ```
-[net:websocket] websocket open wss://free.evoluhq.com
-[net:websocket] websocket message 1024
-[net:websocket] websocket send 512 ok
-[net:websocket] websocket close 1000 Normal closure
+[net:websocket:open] wss://free.evoluhq.com
+[net:websocket:message] 1024 bytes
+[net:websocket:send] 512 bytes ok
+[net:websocket:close] 1000 Normal closure
 ```
 
-### [db:sqlite]
-**Purpose:** SQLite database operations
+**Note:** Event types for all WebSocket lifecycle phases.
+
+### [db:sqlite:*]
+**Purpose:** SQLite database operations (with event type)
 **Level:** DEBUG
 **When to use:** Database initialization, serialization
 
 Examples:
 ```
-[db:sqlite] init { memory: false }
+[db:sqlite:init] { memory: false }
 ```
+
+**Note:** Event types for different database operations.
 
 ### [error]
 **Purpose:** Error conditions (all categories)
@@ -182,6 +195,11 @@ DEBUG | grep "→fs"     # All evolu→fs (materialize + reconcile:evolu→fs)
 # Show specific component + direction
 DEBUG | grep "capture:fs→evolu"
 DEBUG | grep "materialize:evolu→fs"
+
+# Show specific event types
+DEBUG | grep "watch:add"       # Only file additions
+DEBUG | grep "watch:change"   # Only file changes
+DEBUG | grep "net:websocket:message"  # Only incoming messages
 
 # Exclude noisy categories
 DEBUG | grep -v "state:debounce"
