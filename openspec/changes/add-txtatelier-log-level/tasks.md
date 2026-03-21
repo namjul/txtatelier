@@ -49,10 +49,10 @@
 
 ### 5. Verify implementation
 - [x] 5.1 Run TypeScript type check
-- [ ] 5.2 Test ERROR level (should only show errors)
-- [ ] 5.3 Test INFO level (should show minimal lifecycle)
-- [ ] 5.4 Test DEBUG level (should show all including file operations)
-- [ ] 5.5 Test invalid values default to ERROR
+- [x] 5.2 Test ERROR level (should only show errors)
+- [x] 5.3 Test INFO level (should show minimal lifecycle)
+- [x] 5.4 Test DEBUG level (should show all including file operations)
+- [x] 5.5 Test invalid values default to ERROR
 
 ## Phase 2: DEBUG Refinement (After 1 Week Usage)
 
