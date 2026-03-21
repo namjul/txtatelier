@@ -12,12 +12,6 @@ const LoggingValue = union("0", "1", "false", "true");
 export const LogLevel = union("DEBUG", "INFO", "ERROR");
 export type LogLevel = typeof LogLevel.Type;
 
-export const LogLevelPriority: Record<LogLevel, number> = {
-  DEBUG: 0,
-  INFO: 1,
-  ERROR: 2,
-};
-
 const EnvInput = object({
   TXTATELIER_DB_PATH: optional(EvoluString),
   TXTATELIER_LOGGING: optional(LoggingValue),
