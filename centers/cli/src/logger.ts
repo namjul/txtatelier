@@ -2,7 +2,7 @@ import { createConsole } from "@evolu/common";
 import { env, type LogLevel, LogLevelPriority } from "./env";
 
 const evoluLogger = createConsole({
-  enableLogging: env.logLevel === "DEBUG" || env.enableLogging,
+  enableLogging: true, // We handle level filtering via shouldLog()
 });
 
 const shouldLog = (messageLevel: LogLevel): boolean => {
