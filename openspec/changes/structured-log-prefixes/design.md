@@ -1,27 +1,29 @@
 # Design: structured-log-prefixes
 
-## Decision: Category-Based System (Option C1)
+## Decision: Hybrid System (Option C3)
 
-We will use **functional categories with directional arrows** rather than component names.
+We will use **component names with directional suffixes** where data flow matters.
 
 **Rationale:**
-- **Data flow is the primary concern** when debugging sync issues
-- **Categories group by intent** not implementation (one category may span multiple files)
-- **Arrows show directionality** without verbose "to" / "from" text
-- **Better grep ergonomics** - single token per category
+- **Component names map to source files** - easy to find where log originates
+- **Direction suffixes show data flow** - `:fs→evolu` vs `:evolu→fs`
+- **Maximum grep flexibility** - can filter by component OR direction
+- **Best of both worlds** - structure of components + clarity of direction
 
-## Category Definitions
+## Prefix Definitions
 
-| Category | Meaning | Log Level | Files |
-|----------|---------|-----------|-------|
+| Prefix | Meaning | Log Level | Files |
+|--------|---------|-----------|-------|
 | `[lifecycle]` | Startup, shutdown, major state changes | INFO | index.ts |
-| `[file:watch]` | Filesystem watcher events | DEBUG | watch.ts |
-| `[sync:fs→evolu]` | Filesystem change being synced TO Evolu | DEBUG | change-capture*.ts |
-| `[sync:evolu→fs]` | Evolu change being synced TO filesystem | DEBUG | state-materialization*.ts |
-| `[state:load]` | Initial data load, subscription setup | DEBUG | state-materialization.ts |
-| `[state:debounce]` | Debounce timers, batching operations | DEBUG | state-materialization.ts |
+| `[watch]` | Filesystem watcher events | DEBUG | watch.ts |
+| `[capture:fs→evolu]` | Filesystem change being captured TO Evolu | DEBUG | change-capture*.ts |
+| `[materialize:evolu→fs]` | Evolu change being materialized TO filesystem | DEBUG | state-materialization*.ts |
+| `[reconcile:fs→evolu]` | Startup reconciliation (filesystem TO Evolu) | DEBUG | startup-reconciliation.ts |
+| `[reconcile:evolu→fs]` | Startup reconciliation (Evolu TO filesystem) | DEBUG | startup-reconciliation.ts |
+| `[state:subscription]` | Subscription events, initial loads | DEBUG | state-materialization.ts |
+| `[state:debounce]` | Debounce timers, batching | DEBUG | state-materialization.ts |
 | `[net:websocket]` | WebSocket connection events | DEBUG | BunEvoluDeps.ts |
-| `[db:init]` | Database initialization | DEBUG | BunSqliteDriver.ts |
+| `[db:sqlite]` | SQLite operations | DEBUG | BunSqliteDriver.ts |
 | `[error]` | Error conditions | ERROR | All files |
 
 ## Implementation Pattern
@@ -32,8 +34,10 @@ We will use **functional categories with directional arrows** rather than compon
 // Current
 logger.debug(`[materialize] Writing: ${path}`);
 
-// New
-logger.debug(`[sync:evolu→fs] Writing: ${path}`);
+// New (Hybrid: component + direction)
+logger.debug(`[materialize:evolu→fs] Writing: ${path}`);
+logger.debug(`[capture:fs→evolu] Inserting: ${path}`);
+logger.debug(`[reconcile:fs→evolu] Startup scan found ${count} files`);
 ```
 
 ### LogAction Changes (Optional Enhancement)
@@ -59,41 +63,49 @@ log("sync:evolu→fs", "debug", `Writing: ${path}`);
 ## Migration Strategy
 
 ### Phase 1: Update DEBUG logs in planning functions
-- change-capture-plan.ts: `[capture] → [sync:fs→evolu]`
-- state-materialization-plan.ts: `[materialize] → [sync:evolu→fs]`
+- change-capture-plan.ts: `[capture] → [capture:fs→evolu]`
+- state-materialization-plan.ts: `[materialize] → [materialize:evolu→fs]`
 
 ### Phase 2: Update DEBUG logs in sync infrastructure
-- state-materialization.ts: Split between `[state:*]` and `[sync:evolu→fs]`
-- watch.ts: `[watch] → [file:watch]`
-- startup-reconciliation.ts: `[reconcile] → [sync:*]`
+- state-materialization.ts: 
+  - Sync operations → `[materialize:evolu→fs]`
+  - State operations → `[state:subscription]` or `[state:debounce]`
+- watch.ts: Keep `[watch]` (no direction, just filesystem events)
+- startup-reconciliation.ts: `[reconcile] → [reconcile:fs→evolu]` or `[reconcile:evolu→fs]`
 
 ### Phase 3: Update platform layer
 - BunEvoluDeps.ts: `[evolu-sync] → [net:websocket]`
-- BunSqliteDriver.ts: `[sqlite-driver] → [db:init]`
+- BunSqliteDriver.ts: `[sqlite-driver] → [db:sqlite]`
 
-### Phase 4: Verify INFO logs are minimal
+### Phase 4: Update lifecycle logs
+- file-sync/index.ts: `[file-sync] → [lifecycle]`
+
+### Phase 5: Verify INFO logs are minimal
 - Keep `[lifecycle]` for startup/shutdown (INFO level)
-- Ensure no other categories appear at INFO level
+- Ensure no direction-suffix logs appear at INFO level
 
 ## Verification Plan
 
 1. Run with `TXTATELIER_LOG_LEVEL=DEBUG` and create a test file
 2. Verify output shows:
-   - `[file:watch] add: test.md`
-   - `[sync:fs→evolu] Inserting: test.md`
-   - `[sync:evolu→fs] Writing: test.md` (echo from subscription)
+   - `[watch] add: test.md`
+   - `[capture:fs→evolu] Inserting: test.md`
+   - `[materialize:evolu→fs] Writing: test.md` (echo from subscription)
 3. Test filtering:
-   - `grep "sync:"` → shows both direction lines
-   - `grep "→evolu"` → shows only fs→evolu
-   - `grep "→fs"` → shows only evolu→fs
+   - `grep "capture:"` → shows capture operations
+   - `grep "materialize:"` → shows materialize operations
+   - `grep "reconcile:"` → shows reconciliation
+   - `grep "→evolu"` → shows all fs→evolu operations
+   - `grep "→fs"` → shows all evolu→fs operations
 
 ## Open Questions
 
-1. **Should we keep `[lifecycle]` for INFO level or use `[startup]`?**
-   - Preference: `[lifecycle]` - more general
+1. **Should we keep `[watch]` or change to `[file:watch]`?**
+   - Preference: `[watch]` - shorter, maps directly to watch.ts
 
-2. **What about `[reconcile]` logs?**
-   - Split: Startup reconciliation → `[sync:fs→evolu]`, Evolu reconciliation → `[sync:evolu→fs]`
+2. **Direction arrows in all sync components or just materialize/capture?**
+   - Decision: All sync operations that have directionality get arrows
+   - `[capture:fs→evolu]`, `[materialize:evolu→fs]`, `[reconcile:fs→evolu]`, `[reconcile:evolu→fs]`
 
 3. **Should we add timestamps to prefixes?**
    - No - Evolu's console already handles timestamps if enabled

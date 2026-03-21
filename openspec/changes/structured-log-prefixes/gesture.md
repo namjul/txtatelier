@@ -18,33 +18,31 @@ DEBUG logs exist but use inconsistent prefixes:
 This makes filtering difficult. You can't easily see "all sync operations" or "all filesystem activity" without complex grep patterns.
 
 ## Claim
-Adding structured category prefixes will enable:
-1. **Targeted debugging** - `DEBUG | grep "sync:evolu→fs"` shows only Evolu→filesystem sync
-2. **Clear data flow** - Directional arrows show which way data moves
-3. **Noise reduction** - Can exclude noisy categories like `[state:debounce]`
-4. **Documentation through structure** - The prefix system documents the architecture
+Adding structured hybrid prefixes (component + direction) will enable:
+1. **Targeted debugging** - `DEBUG | grep "capture:"` shows only capture operations
+2. **Direction filtering** - `DEBUG | grep "→evolu"` shows all filesystem→Evolu flow
+3. **Component mapping** - Prefixes map to source files for easy navigation
+4. **Maximum flexibility** - Filter by component OR direction or both
 
-## Categories (Option C1 - Recommended)
+## Selected: Option C3 (Hybrid)
+
+Combines component names with directional suffixes where data flow matters:
 
 ```
-[lifecycle]      - Startup, shutdown, ready states
-[file:watch]     - Filesystem watch events (add/change/unlink)
-[sync:fs→evolu]  - Filesystem changes syncing TO Evolu
-[sync:evolu→fs]  - Evolu changes syncing TO filesystem
-[state:load]     - Initial loads, subscriptions, cursors
-[state:debounce] - Debounce timers, batching
-[net:websocket]  - WebSocket open/close/messages
-[db:init]        - Database initialization, migrations
-[error]          - Errors (all levels)
+[lifecycle]                - Startup, shutdown, ready states
+[watch]                    - Filesystem watch events (add/change/unlink)
+[capture:fs→evolu]         - Filesystem changes being captured TO Evolu
+[materialize:evolu→fs]     - Evolu changes being materialized TO filesystem
+[reconcile:fs→evolu]        - Startup reconciliation (fs→Evolu)
+[reconcile:evolu→fs]        - Startup reconciliation (Evolu→fs)
+[state:subscription]       - Subscription events, initial loads
+[state:debounce]           - Debounce timers, batching
+[net:websocket]            - WebSocket open/close/messages
+[db:sqlite]                - SQLite operations
+[error]                    - Errors (all levels)
 ```
 
-## Alternative: Option C2 (Component-Based)
-
-Keep existing `[materialize]`, `[capture]`, etc. but make them consistent and add subcategories:
-```
-[materialize:write]    vs [materialize:skip]
-[capture:plan]         vs [capture:execute]
-```
+**Rationale:** Best of both worlds - component names map to source files, directional suffixes show data flow.
 
 ## What are our load-bearing assumptions?
 1. Users will actually use grep filtering (not just scroll through all DEBUG output)

@@ -9,19 +9,21 @@ DEBUG level logs currently use inconsistent, component-specific prefixes like `[
 
 ## Solution
 
-Implement a **category-based prefix system** with directional indicators for sync operations.
+Implement a **hybrid prefix system** combining component names with directional suffixes.
 
-### Category Schema
+### Prefix Schema
 
 ```
-[lifecycle]      - System lifecycle events
-[file:watch]     - Filesystem watch events  
-[sync:fs→evolu]  - Sync: filesystem TO Evolu
-[sync:evolu→fs]  - Sync: Evolu TO filesystem
-[state:load]     - State loading operations
-[state:debounce] - Debounce/batching
-[net:websocket]  - Network layer
-[db:init]        - Database initialization
+[lifecycle]                - System lifecycle events
+[watch]                    - Filesystem watch events  
+[capture:fs→evolu]         - Capture: filesystem TO Evolu
+[materialize:evolu→fs]     - Materialize: Evolu TO filesystem
+[reconcile:fs→evolu]        - Reconcile: filesystem TO Evolu
+[reconcile:evolu→fs]        - Reconcile: Evolu TO filesystem
+[state:subscription]       - State loading/subscriptions
+[state:debounce]           - Debounce/batching
+[net:websocket]            - Network layer
+[db:sqlite]                - SQLite operations
 ```
 
 ### Examples
@@ -35,9 +37,9 @@ Implement a **category-based prefix system** with directional indicators for syn
 
 **After:**
 ```
-[state:load] 🔔 Subscription fired (#1) at 2026-03-21T10:00:00.000Z
-[sync:fs→evolu] Inserting: notes/test.md
-[sync:evolu→fs] Writing: notes/test.md
+[state:subscription] 🔔 Subscription fired (#1) at 2026-03-21T10:00:00.000Z
+[capture:fs→evolu] Inserting: notes/test.md
+[materialize:evolu→fs] Writing: notes/test.md
 ```
 
 ## Scope
@@ -54,10 +56,11 @@ Implement a **category-based prefix system** with directional indicators for syn
 
 ## Success Criteria
 
-1. `DEBUG | grep "sync:"` shows all sync operations (both directions)
-2. `DEBUG | grep "→evolu"` shows all filesystem→Evolu operations
-3. `DEBUG | grep -v "state:debounce"` hides debounce noise
-4. New developers can understand data flow from reading DEBUG logs
+1. `DEBUG | grep "capture:"` shows capture operations
+2. `DEBUG | grep "materialize:"` shows materialize operations
+3. `DEBUG | grep "→evolu"` shows all filesystem→Evolu operations (across components)
+4. `DEBUG | grep -v "state:debounce"` hides debounce noise
+5. New developers can map prefixes to source files
 
 ## Dependencies
 

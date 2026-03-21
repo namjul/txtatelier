@@ -1,10 +1,10 @@
-# Spec: Log Categories
+# Spec: Log Prefixes (Hybrid System)
 
 ## What behavior is being added?
 
-Structured category prefixes for all DEBUG level log messages in the file-sync system.
+Structured hybrid prefixes (component + direction) for all DEBUG level log messages in the file-sync system.
 
-## Category Definitions
+## Prefix Definitions
 
 ### [lifecycle]
 **Purpose:** System lifecycle events visible to users
@@ -19,57 +19,80 @@ Examples:
 [lifecycle] Owner restored. Restart required.
 ```
 
-### [file:watch]
+### [watch]
 **Purpose:** Filesystem watcher events
 **Level:** DEBUG
 **When to use:** Any filesystem add/change/unlink events
 
 Examples:
 ```
-[file:watch] add: notes/test.md
-[file:watch] change: notes/test.md
-[file:watch] unlink: notes/test.md
+[watch] Starting watcher: /path/to/dir
+[watch] add: notes/test.md
+[watch] change: notes/test.md
+[watch] unlink: notes/test.md
 ```
 
-### [sync:fs→evolu]
-**Purpose:** Changes flowing FROM filesystem TO Evolu database
+### [capture:fs→evolu]
+**Purpose:** Change capture: filesystem TO Evolu database
 **Level:** DEBUG
 **When to use:** Any operation that writes filesystem state into Evolu
 
 Examples:
 ```
-[sync:fs→evolu] Inserting: notes/test.md
-[sync:fs→evolu] Updating: notes/test.md
-[sync:fs→evolu] Deleting: notes/test.md
-[sync:fs→evolu] No change: notes/test.md (hash matches)
+[capture:fs→evolu] Inserting: notes/test.md
+[capture:fs→evolu] Updating: notes/test.md
+[capture:fs→evolu] Deleting: notes/test.md
+[capture:fs→evolu] No change: notes/test.md (hash matches)
 ```
 
-### [sync:evolu→fs]
-**Purpose:** Changes flowing FROM Evolu database TO filesystem
+### [materialize:evolu→fs]
+**Purpose:** State materialization: Evolu database TO filesystem
 **Level:** DEBUG
 **When to use:** Any operation that writes Evolu state to filesystem
 
 Examples:
 ```
-[sync:evolu→fs] Writing: notes/test.md
-[sync:evolu→fs] Skipped (already processed): notes/test.md
-[sync:evolu→fs] Skipped (disk matches): notes/test.md
-[sync:evolu→fs] Conflict detected: notes/test.md
-[sync:evolu→fs] Created conflict file: notes/test.conflict-xxx.md
-[sync:evolu→fs] Deleted: notes/test.md
+[materialize:evolu→fs] Writing: notes/test.md
+[materialize:evolu→fs] Skipped (already processed): notes/test.md
+[materialize:evolu→fs] Skipped (disk matches): notes/test.md
+[materialize:evolu→fs] Conflict detected: notes/test.md
+[materialize:evolu→fs] Created conflict file: notes/test.conflict-xxx.md
+[materialize:evolu→fs] Deleted: notes/test.md
 ```
 
-### [state:load]
-**Purpose:** State loading operations
+### [reconcile:fs→evolu]
+**Purpose:** Startup reconciliation: filesystem TO Evolu
 **Level:** DEBUG
-**When to use:** Initial data loads, query results, subscription setup
+**When to use:** Startup scan finding new/changed files
 
 Examples:
 ```
-[state:load] Initial load: 42 existing files
-[state:load] 🔔 Subscription fired (#1) at 2026-03-21T10:00:00.000Z
-[state:load] Cursor initialized to latest history timestamp
-[state:load] Processing 5 changed files: a.md, b.md, c.md, d.md, e.md
+[reconcile:fs→evolu] Startup scan found 42 filesystem files
+[reconcile:fs→evolu] Offline deletion detected: notes/old.md
+```
+
+### [reconcile:evolu→fs]
+**Purpose:** Startup reconciliation: Evolu TO filesystem
+**Level:** DEBUG
+**When to use:** Applying remote deletions and updates on startup
+
+Examples:
+```
+[reconcile:evolu→fs] Found 3 deleted rows in Evolu
+[reconcile:evolu→fs] Applied 3 remote deletions
+[reconcile:evolu→fs] Synced 15 files from Evolu
+```
+
+### [state:subscription]
+**Purpose:** Subscription and initial load operations
+**Level:** DEBUG
+**When to use:** Subscription events, query results, cursor management
+
+Examples:
+```
+[state:subscription] Initial load: 42 existing files
+[state:subscription] 🔔 Subscription fired (#1) at 2026-03-21T10:00:00.000Z
+[state:subscription] Cursor initialized to latest history timestamp
 ```
 
 ### [state:debounce]
@@ -97,14 +120,14 @@ Examples:
 [net:websocket] websocket close 1000 Normal closure
 ```
 
-### [db:init]
-**Purpose:** Database initialization
+### [db:sqlite]
+**Purpose:** SQLite database operations
 **Level:** DEBUG
-**When to use:** Database setup, deserialization, WAL mode
+**When to use:** Database initialization, serialization
 
 Examples:
 ```
-[db:init] init { memory: false }
+[db:sqlite] init { memory: false }
 ```
 
 ### [error]
@@ -125,12 +148,12 @@ Existing log prefixes are being replaced:
 
 | Current Prefix | New Prefix |
 |----------------|------------|
-| `[materialize]` | `[sync:evolu→fs]`, `[state:*]` |
-| `[capture]` | `[sync:fs→evolu]` |
-| `[reconcile]` | `[sync:fs→evolu]`, `[sync:evolu→fs]` |
-| `[watch]` | `[file:watch]` |
+| `[materialize]` | `[materialize:evolu→fs]`, `[state:subscription]`, `[state:debounce]` |
+| `[capture]` | `[capture:fs→evolu]` |
+| `[reconcile]` | `[reconcile:fs→evolu]`, `[reconcile:evolu→fs]` |
+| `[watch]` | `[watch]` |
 | `[evolu-sync]` | `[net:websocket]` |
-| `[sqlite-driver]` | `[db:init]` |
+| `[sqlite-driver]` | `[db:sqlite]` |
 | `[file-sync]` | `[lifecycle]` |
 
 ## What behavior is being removed?
@@ -147,28 +170,41 @@ Nothing removed - only prefixes changed.
 ## Filtering Examples
 
 ```bash
-# Show all sync operations (both directions)
-DEBUG | grep "sync:"
+# Show specific component operations
+DEBUG | grep "capture:"
+DEBUG | grep "materialize:"
+DEBUG | grep "reconcile:"
 
-# Show only filesystem → Evolu sync
-DEBUG | grep "→evolu"
+# Show all operations in one direction
+DEBUG | grep "→evolu"  # All fs→evolu (capture + reconcile:fs→evolu)
+DEBUG | grep "→fs"     # All evolu→fs (materialize + reconcile:evolu→fs)
 
-# Show only Evolu → filesystem sync
-DEBUG | grep "→fs"
+# Show specific component + direction
+DEBUG | grep "capture:fs→evolu"
+DEBUG | grep "materialize:evolu→fs"
 
-# Exclude debounce noise
+# Exclude noisy categories
 DEBUG | grep -v "state:debounce"
+DEBUG | grep -v "state:subscription"
 
 # Show only lifecycle and errors
 DEBUG | grep -E "(lifecycle|error)"
 
-# Show everything except state internals
-DEBUG | grep -v "state:"
+# Show only state management (not sync operations)
+DEBUG | grep "state:"
+
+# Show only network layer
+DEBUG | grep "net:websocket"
+
+# Show only database operations
+DEBUG | grep "db:sqlite"
 ```
 
 ## Implementation Notes
 
-1. Use template literals with category prefix: `` `[category] message` ``
+1. Use template literals with prefix: `` `[component:direction] message` ``
 2. Keep message content unchanged (don't over-format)
 3. Direction arrows should use Unicode: → (U+2192)
-4. Categories use lowercase with hyphens
+4. Components use lowercase, match source file names where possible
+5. Direction suffix only for operations with data flow (capture, materialize, reconcile)
+6. No direction suffix for: watch, lifecycle, state:*, net:*, db:*
