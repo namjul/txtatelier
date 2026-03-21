@@ -21,7 +21,7 @@ afterEach(async () => {
 
 test("does not sync file over size limit by 1 byte", async () => {
   const result = await startFileSync({ watchDir: tempDir });
-  if (!result.ok) throw new Error('Failed to start');
+  if (!result.ok) throw new Error("Failed to start");
   const session = result.value;
 
   const content = "a".repeat(MAX_FILE_SIZE_BYTES + 1); // 10MB + 1 byte
@@ -43,7 +43,7 @@ test("does not sync file over size limit by 1 byte", async () => {
 
 test("does not sync file way over size limit (50MB)", async () => {
   const result = await startFileSync({ watchDir: tempDir });
-  if (!result.ok) throw new Error('Failed to start');
+  if (!result.ok) throw new Error("Failed to start");
   const session = result.value;
 
   const content = "a".repeat(50 * 1024 * 1024); // 50MB

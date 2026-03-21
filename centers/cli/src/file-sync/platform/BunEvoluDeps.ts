@@ -22,7 +22,7 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
     const ws = createWebSocket(url, {
       ...options,
       onOpen: () => {
-        logger.log("[evolu-sync] websocket open", url);
+        logger.debug("[evolu-sync] websocket open", url);
         options?.onOpen?.();
       },
       onError: (error) => {
@@ -40,7 +40,7 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
             : data instanceof ArrayBuffer
               ? data.byteLength
               : data.size;
-        logger.log("[evolu-sync] websocket message", size);
+        logger.debug("[evolu-sync] websocket message", size);
         options?.onMessage?.(data);
       },
     });
@@ -56,7 +56,7 @@ export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
                 ? data.size
                 : data.byteLength;
         const result = ws.send(data);
-        logger.log(
+        logger.debug(
           "[evolu-sync] websocket send",
           size,
           result.ok ? "ok" : "err",

@@ -87,7 +87,7 @@ export interface SkipAction {
 
 export interface LogAction {
   readonly type: "LOG";
-  readonly level: "log" | "warn" | "error";
+  readonly level: "debug" | "info" | "warn" | "error";
   readonly message: string;
 }
 
@@ -187,7 +187,7 @@ export const skip = (reason: string, path: string): SkipAction => ({
 });
 
 export const log = (
-  level: "log" | "warn" | "error",
+  level: "debug" | "info" | "warn" | "error",
   message: string,
 ): LogAction => ({
   type: "LOG",

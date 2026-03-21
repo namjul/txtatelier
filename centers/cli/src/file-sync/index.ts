@@ -108,7 +108,7 @@ export const startFileSync = async (
   config?: Partial<FileSyncConfig>,
   restoreMnemonic?: Mnemonic,
 ): Promise<Result<FileSyncSession, StartupFatalError>> => {
-  logger.log("[file-sync] Initializing...");
+  logger.info("[file-sync] Initializing...");
 
   // Create base owner session
   const ownerSession = await createOwnerSession(config);
@@ -118,7 +118,7 @@ export const startFileSync = async (
   const resolvedrelayUrl = resolvedConfig.relayUrl;
 
   if (restoreMnemonic) {
-    logger.log("[file-sync] Restoring from provided mnemonic...");
+    logger.debug("[file-sync] Restoring from provided mnemonic...");
 
     const restoreResult = await tryAsync(
       () => evolu.restoreAppOwner(restoreMnemonic, { reload: false }),
@@ -126,9 +126,9 @@ export const startFileSync = async (
     );
 
     if (restoreResult.ok) {
-      logger.log("[file-sync] Mnemonic restored to database");
+      logger.debug("[file-sync] Mnemonic restored to database");
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      logger.log("[file-sync] Flushing database...");
+      logger.debug("[file-sync] Flushing database...");
 
       const flushResult = await closeDb();
       if (!flushResult.ok) {
@@ -137,9 +137,9 @@ export const startFileSync = async (
           flushResult.error,
         );
       } else {
-        logger.log("[file-sync] Mnemonic restore persisted");
+        logger.debug("[file-sync] Mnemonic restore persisted");
       }
-      logger.log("[file-sync] Restart required to activate restored owner");
+      logger.info("[file-sync] Restart required to activate restored owner");
       process.exit(flushResult.ok ? 0 : 1);
     } else {
       logger.warn(
@@ -153,21 +153,21 @@ export const startFileSync = async (
   const isFirstRun = !(await Bun.file(resolvedDbPath).exists());
 
   if (isFirstRun && !restoreMnemonic) {
-    logger.log("[file-sync]");
-    logger.log("[file-sync] First run detected!");
-    logger.log("[file-sync]");
-    logger.log("[file-sync] Your mnemonic (save this securely!):");
-    logger.log(`[file-sync]   ${owner.mnemonic}`);
-    logger.log("[file-sync]");
-    logger.log("[file-sync] ⚠️  IMPORTANT: Save this mnemonic!");
-    logger.log(
+    logger.info("[file-sync]");
+    logger.info("[file-sync] First run detected!");
+    logger.info("[file-sync]");
+    logger.info("[file-sync] Your mnemonic (save this securely!):");
+    logger.info(`[file-sync]   ${owner.mnemonic}`);
+    logger.info("[file-sync]");
+    logger.info("[file-sync] ⚠️  IMPORTANT: Save this mnemonic!");
+    logger.info(
       "[file-sync] ⚠️  You'll need it to access your data on other devices.",
     );
-    logger.log("[file-sync] ⚠️  Run 'txtatelier owner show' to see it again.");
-    logger.log("[file-sync]");
+    logger.info("[file-sync] ⚠️  Run 'txtatelier owner show' to see it again.");
+    logger.info("[file-sync]");
   }
 
-  logger.log(`[file-sync] Owner ID: ${owner.id}`);
+  logger.info(`[file-sync] Owner ID: ${owner.id}`);
 
   // Subscribe to Evolu errors
   const unsubscribeError = evolu.subscribeError(() => {
@@ -223,7 +223,7 @@ export const startFileSync = async (
   const failedSyncs = new Set<string>();
 
   // Start Change Capture: watch filesystem and reflect into Evolu
-  logger.log(`[file-sync] Watching directory: ${resolvedWatchDir}`);
+  logger.info(`[file-sync] Watching directory: ${resolvedWatchDir}`);
   const stopWatching = await startWatching(
     resolvedWatchDir,
     async (filePath) => {
@@ -249,7 +249,7 @@ export const startFileSync = async (
     },
   });
 
-  logger.log("[file-sync] Ready");
+  logger.info("[file-sync] Ready");
 
   // Return session with bundled cleanup
   return ok({
@@ -267,7 +267,7 @@ export const startFileSync = async (
       relayUrl: resolvedrelayUrl,
     },
     stop: async (): Promise<void> => {
-      logger.log("[file-sync] Shutting down...");
+      logger.info("[file-sync] Shutting down...");
 
       // Unsubscribe from error handler
       if (unsubscribeError) {
@@ -295,7 +295,7 @@ export const startFileSync = async (
         }
       }
 
-      logger.log("[file-sync] Stopped");
+      logger.info("[file-sync] Stopped");
     },
   });
 };
@@ -337,8 +337,8 @@ export const restoreOwnerFromMnemonic = async (
     });
   }
 
-  logger.log("Owner restored.");
-  logger.log("Restart required to activate restored owner.");
+  logger.info("Owner restored.");
+  logger.info("Restart required to activate restored owner.");
 };
 
 export const resetOwner = async (session: OwnerSession): Promise<void> => {
@@ -351,8 +351,8 @@ export const resetOwner = async (session: OwnerSession): Promise<void> => {
     });
   }
 
-  logger.log("Owner reset.");
-  logger.log("Restart required to activate new owner.");
+  logger.info("Owner reset.");
+  logger.info("Restart required to activate new owner.");
 };
 
 export type { Schema } from "./schema";

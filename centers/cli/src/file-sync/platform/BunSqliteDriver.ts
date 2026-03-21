@@ -13,7 +13,7 @@ export const createPersistentBunSqliteDriver = (
   io: PlatformIO,
 ): CreateSqliteDriver => {
   return async (_name, options) => {
-    logger.log("[sqlite-driver] init", {
+    logger.debug("[sqlite-driver] init", {
       memory: options?.memory ?? false,
     });
     // 1. Load existing database or start fresh

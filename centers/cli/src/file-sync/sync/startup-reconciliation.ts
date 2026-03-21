@@ -166,7 +166,7 @@ export const reconcileStartupFilesystemState = async (
     existingRows.flatMap((row) => (row.path ? [row.path as string] : [])),
   );
 
-  logger.log(
+  logger.info(
     `[reconcile] Startup scan found ${filesToReconcile.length} filesystem files`,
   );
 
@@ -215,7 +215,7 @@ export const reconcileStartupFilesystemState = async (
 
     // File was deleted while CLI was offline
     const absolutePath = join(watchDir, evolPath);
-    logger.log(`[reconcile] Offline deletion detected: ${evolPath}`);
+    logger.debug(`[reconcile] Offline deletion detected: ${evolPath}`);
 
     const result = await captureChange(evolu, watchDir, absolutePath);
     if (!result.ok) {
@@ -243,7 +243,7 @@ export const reconcileStartupFilesystemState = async (
       `[reconcile] Startup reconciliation completed with ${stats.failedCount} failures`,
     );
   } else {
-    logger.log(
+    logger.info(
       `[reconcile] Startup filesystem reconciliation complete (inserted ${insertedCount}, deleted ${deletedCount})`,
     );
   }
@@ -255,7 +255,7 @@ export const reconcileStartupEvoluState = async (
   evolu: EvoluDatabase,
   watchDir: string,
 ): Promise<Result<ReconcileStats, ReconcileFatalError>> => {
-  logger.log("[reconcile] Starting Evolu state reconciliation");
+  logger.debug("[reconcile] Starting Evolu state reconciliation");
 
   // Track stats for observability
   let processedCount = 0;
@@ -280,7 +280,7 @@ export const reconcileStartupEvoluState = async (
     });
   }
 
-  logger.log(`[reconcile] Found ${deletedRows.length} deleted rows in Evolu`);
+  logger.debug(`[reconcile] Found ${deletedRows.length} deleted rows in Evolu`);
   let removedCount = 0;
 
   // RESILIENT: Continue processing even if individual deletions fail
@@ -322,7 +322,7 @@ export const reconcileStartupEvoluState = async (
     removedCount += 1;
   }
 
-  logger.log(`[reconcile] Applied ${removedCount} remote deletions`);
+  logger.debug(`[reconcile] Applied ${removedCount} remote deletions`);
 
   // Step 2: Apply remote additions/updates (files added/updated in Evolu while offline)
   // Fatal check: ensure we can query database
@@ -401,7 +401,7 @@ export const reconcileStartupEvoluState = async (
     }
   }
 
-  logger.log(`[reconcile] Synced ${syncedCount} files from Evolu`);
+  logger.info(`[reconcile] Synced ${syncedCount} files from Evolu`);
 
   // Return stats (ok even with partial failures)
   const stats: ReconcileStats = {

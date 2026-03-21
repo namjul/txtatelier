@@ -77,6 +77,23 @@ bun run cli sync         # Manually trigger sync
 bun run cli doctor       # Diagnose issues
 ```
 
+### Environment Variables
+
+**Logging:**
+```bash
+TXTATELIER_LOG_LEVEL=DEBUG    # Show all logs including file operations
+TXTATELIER_LOG_LEVEL=INFO     # Show minimal lifecycle logs (default)
+TXTATELIER_LOG_LEVEL=ERROR      # Show only errors
+```
+
+**Other variables:**
+```bash
+TXTATELIER_WATCH_DIR=<path>   # Directory to watch for changes
+TXTATELIER_DB_PATH=<path>     # Database file path
+TXTATELIER_MNEMONIC=<words>   # 12 or 24-word mnemonic for owner restore
+TXTATELIER_RELAY_URL=<url>    # WebSocket relay URL (default: wss://free.evoluhq.com)
+```
+
 ---
 
 ## Code Style Guidelines

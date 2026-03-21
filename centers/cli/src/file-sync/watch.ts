@@ -17,7 +17,7 @@ export const startWatching = async (
   watchDir: string,
   onChange: FileChangeCallback,
 ): Promise<() => void> => {
-  logger.log(`[watch] Starting to watch: ${watchDir}`);
+  logger.info(`[watch] Starting to watch: ${watchDir}`);
 
   // Ensure directory exists
   await mkdir(watchDir, { recursive: true });
@@ -128,7 +128,7 @@ export const startWatching = async (
       return;
     }
 
-    logger.log(
+    logger.debug(
       `[watch] ${eventType}: ${relative(watchDir, absolutePath).replaceAll("\\", "/")}`,
     );
     debouncedOnChange(absolutePath);
@@ -152,7 +152,7 @@ export const startWatching = async (
 
   // Return cleanup function
   return () => {
-    logger.log("[watch] Stopping watcher...");
+    logger.debug("[watch] Stopping watcher...");
 
     // Clear all debounce timers
     for (const timer of debounceTimers.values()) {
@@ -174,6 +174,6 @@ export const startWatching = async (
       }
     })();
 
-    logger.log("[watch] Stopped watching");
+    logger.info("[watch] Stopped watching");
   };
 };
