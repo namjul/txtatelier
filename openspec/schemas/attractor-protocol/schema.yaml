@@ -1,0 +1,82 @@
+# openspec/schemas/attractor-protocol/schema.yaml
+name: attractor-protocol
+version: 1
+description: >
+  Living systems intervention workflow.
+  Changes are hypotheses. Implementation is testing.
+  Learning is the goal, not shipping.
+
+artifacts:
+  - id: explore
+    generates: explore.md
+    description: >
+      Pre-claim investigation. For when you notice something
+      but can't yet make a falsifiable claim.
+      Optional — skip if you already know what you're intervening in.
+    template: explore.md
+    requires: []
+    optional: true
+
+  - id: gesture
+    generates: gesture.md
+    description: >
+      The gesture we are making in the system. What we are gesturing
+      toward, what type of gesture, what are the load-bearing assumptions,
+      and what evidence motivated this.
+    template: gesture.md
+    requires: []
+
+  - id: contact-test
+    generates: contact-test.md
+    description: >
+      How we will know if the claim is true or false.
+      Must be falsifiable. Must specify evidence tier.
+    template: contact-test.md
+    requires:
+      - gesture
+
+  - id: specs
+    generates: specs/
+    description: >
+      Delta specs describing how behavior changes.
+      Not requirements — descriptions of what the system
+      will do differently after this intervention.
+    template: specs.md
+    requires:
+      - contact-test
+
+  - id: design
+    generates: design.md
+    description: >
+      Technical direction stated as assumptions about approach.
+      Not a plan — a hypothesis about implementation.
+    template: design.md
+    requires:
+      - specs
+
+  - id: tasks
+    generates: tasks.md
+    description: >
+      Implementation steps with co-variance notes.
+      Each task identifies what else might change as a result.
+    template: tasks.md
+    requires:
+      - design
+
+  - id: evidence
+    generates: evidence.md
+    description: >
+      What actually happened. Contact test result.
+      Filled in after implementation, on the contact test timeline.
+      Required before a change can be learned.
+    template: evidence.md
+    requires:
+      - tasks
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+
+learn:
+  requires: [evidence]
+  destination: changes/archive/
