@@ -20,7 +20,7 @@ import { env } from "../env";
 import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
-import type { Schema } from "./schema";
+import type { Schema } from "./evolu-schema";
 import {
   captureChange,
   type ReconcileFatalError,
@@ -354,5 +354,3 @@ export const resetOwner = async (session: OwnerSession): Promise<void> => {
   logger.info("Owner reset.");
   logger.info("Restart required to activate new owner.");
 };
-
-export type { Schema } from "./schema";

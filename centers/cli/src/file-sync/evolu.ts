@@ -14,7 +14,7 @@ import {
 } from "@evolu/common";
 import { logger } from "../logger";
 import type { FlushError } from "./errors";
-import { Schema } from "./schema";
+import { Schema } from "./evolu-schema";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 

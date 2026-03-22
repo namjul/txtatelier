@@ -4,7 +4,7 @@
 import { relative } from "node:path";
 import { type Evolu, type Result, sqliteTrue, tryAsync } from "@evolu/common";
 import { computeFileHash } from "../hash";
-import type { Schema } from "../schema";
+import type { Schema } from "../evolu-schema";
 import { getTrackedHash } from "../state";
 import type { ChangeCaptureState, MaterializationState } from "./state-types";
 

@@ -6,38 +6,26 @@ import {
   err,
   type IdBytes,
   idBytesToId,
-  type kysely,
   ok,
   type Result,
   sqliteTrue,
   tryAsync,
 } from "@evolu/common";
-import type { InferRow, TimestampBytes } from "@evolu/common/local-first";
+import type { TimestampBytes } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import { createConflictFile } from "../conflicts";
 import type { StateMaterializationError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
-import type { FileId, Schema } from "../schema";
+import type { FileId, Schema } from "../evolu-schema";
 import { clearTrackedHash, getTrackedHash } from "../state";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { planStateMaterialization } from "./state-materialization-plan";
+import { createAllFilesQuery, createChangedFilesQuery, createLatestHistoryQuery, type FileRow } from "../evolu-queries";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
-const createAllFilesQuery = (evolu: EvoluDatabase) =>
-  evolu.createQuery((db) =>
-    db
-      .selectFrom("file")
-      .selectAll()
-      .where("isDeleted", "is not", sqliteTrue)
-      .where("path", "is not", null)
-      .where("contentHash", "is not", null)
-      .$narrowType<{ path: kysely.NotNull; contentHash: kysely.NotNull }>(),
-  );
-
-type FileRow = InferRow<ReturnType<typeof createAllFilesQuery>>;
 
 export interface StateMaterializationOptions {
   readonly onConflictArtifactCreated?: (absolutePath: string) => Promise<void>;
@@ -97,14 +85,7 @@ export const startStateMaterialization = (
 
     // Set cursor to current timestamp to avoid replaying old history
     // Query latest timestamp from evolu_history
-    const latestHistoryQuery = evolu.createQuery((db) =>
-      db
-        .selectFrom("evolu_history")
-        .select(["timestamp"])
-        .where("table", "==", "file")
-        .orderBy("timestamp", "desc")
-        .limit(1),
-    );
+    const latestHistoryQuery = createLatestHistoryQuery(evolu)
 
     const latestHistory = await evolu.loadQuery(latestHistoryQuery);
     if (latestHistory.length > 0) {
@@ -206,13 +187,7 @@ export const startStateMaterialization = (
 
         // Process content changes
         if (contentChangeIds.length > 0) {
-          const changedFilesQuery = evolu.createQuery((db) =>
-            db
-              .selectFrom("file")
-              .selectAll()
-              .where("id", "in", contentChangeIds)
-              .where("isDeleted", "is not", sqliteTrue),
-          );
+          const changedFilesQuery = createChangedFilesQuery(evolu, contentChangeIds)
 
           const changedRows = await evolu.loadQuery(changedFilesQuery);
 

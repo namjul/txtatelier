@@ -10,7 +10,7 @@ import {
   trySync,
 } from "@evolu/common";
 import type { StateMaterializationError } from "./errors";
-import type { Schema } from "./schema";
+import type { Schema } from "./evolu-schema";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 

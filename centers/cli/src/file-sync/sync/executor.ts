@@ -12,7 +12,7 @@ import {
   trySync,
 } from "@evolu/common";
 import { logger } from "../../logger";
-import type { Schema } from "../schema";
+import type { Schema } from "../evolu-schema";
 import {
   clearTrackedHash as clearTrackedHashState,
   setTrackedHash as setTrackedHashState,

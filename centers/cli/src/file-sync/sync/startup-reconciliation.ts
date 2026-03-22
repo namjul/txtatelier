@@ -4,7 +4,7 @@ import { type Evolu, err, ok, type Result, sqliteTrue } from "@evolu/common";
 import { logger } from "../../logger";
 import type { ChangeCaptureError } from "../errors";
 import { isIgnoredRelativePath } from "../ignore";
-import type { Schema } from "../schema";
+import type { Schema } from "../evolu-schema";
 import { getTrackedHash } from "../state";
 import { captureChange } from "./change-capture";
 import { executePlan } from "./executor";

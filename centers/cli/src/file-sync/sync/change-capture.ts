@@ -7,7 +7,7 @@ import { type Evolu, err, ok, type Result } from "@evolu/common";
 import { logger } from "../../logger";
 import { MAX_FILE_SIZE_BYTES } from "../constants";
 import type { ChangeCaptureError } from "../errors";
-import type { Schema } from "../schema";
+import type { Schema } from "../evolu-schema";
 import { planChangeCapture } from "./change-capture-plan";
 import { executePlan } from "./executor";
 import { collectChangeCaptureState } from "./state-collector";
