@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { bin } from "specialist";
 import packageJson from "../package.json" with { type: "json" };
 import { env } from "./env.js";

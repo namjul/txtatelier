@@ -1,5 +1,7 @@
 // Content hashing utilities for file change detection
-// Uses Bun's fast native hashing (xxHash64)
+
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 /**
  * Compute hash from bytes (pure function).
@@ -8,8 +10,7 @@
  * @returns Hash as hex string
  */
 export const computeHash = (bytes: Uint8Array): string => {
-  const hash = Bun.hash(bytes);
-  return hash.toString(16);
+  return createHash("sha1").update(bytes).digest("hex");
 };
 
 /**
@@ -19,8 +20,7 @@ export const computeHash = (bytes: Uint8Array): string => {
  * @returns Hash as hex string
  */
 export const computeContentHash = (content: string): string => {
-  const hash = Bun.hash(content);
-  return hash.toString(16);
+  return createHash("sha1").update(content).digest("hex");
 };
 
 /**
@@ -30,7 +30,6 @@ export const computeContentHash = (content: string): string => {
  * @returns Hash as hex string
  */
 export const computeFileHash = async (filePath: string): Promise<string> => {
-  const file = Bun.file(filePath);
-  const content = await file.arrayBuffer();
-  return computeHash(new Uint8Array(content));
+  const bytes = await readFile(filePath);
+  return computeHash(new Uint8Array(bytes));
 };

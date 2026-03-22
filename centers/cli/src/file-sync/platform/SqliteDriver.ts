@@ -1,17 +1,15 @@
-// Evolu SQLite driver using Bun's native SQLite with debounced persistence.
-// Based on the Obsidian reference implementation pattern.
+import Database from "better-sqlite3";
 
-import { Database } from "bun:sqlite";
-
-type SqliteValue = null | string | number | Uint8Array;
 import { type CreateSqliteDriver, trySync } from "@evolu/common";
 import { logger } from "../../logger";
 import type { DbDeserializeError } from "../errors";
 import type { PlatformIO } from "./PlatformIO";
 
+type SqliteValue = null | string | number | Uint8Array;
+
 const SAVE_DEBOUNCE_MS = 5_000;
 
-export const createPersistentBunSqliteDriver = (
+export const createPersistentSqliteDriver = (
   io: PlatformIO,
 ): CreateSqliteDriver => {
   return async (_name, options) => {
@@ -29,11 +27,12 @@ export const createPersistentBunSqliteDriver = (
     const existingData = readResult.value;
 
     // 2. Create in-memory database
-    let db: Database;
+    let db: Database.Database;
     if (existingData && !options?.memory) {
-      // Deserialize existing data into in-memory database
+      // Deserialize existing data into in-memory database.
+      // better-sqlite3 accepts a Buffer as the constructor argument.
       const deserializeResult = trySync(
-        () => Database.deserialize(existingData),
+        () => new Database(Buffer.from(existingData)),
         (cause): DbDeserializeError => ({
           type: "DbDeserializeFailed",
           cause,
@@ -53,15 +52,11 @@ export const createPersistentBunSqliteDriver = (
       db = deserializeResult.value;
     } else {
       // Fresh in-memory database
-      db = new Database(":memory:", {
-        strict: true,
-        // safeIntegers disabled - Evolu expects Number not BigInt for getSize()
-        safeIntegers: false,
-      });
+      db = new Database(":memory:");
     }
 
     // 3. Enable WAL mode for better performance
-    db.run("PRAGMA journal_mode = WAL;");
+    db.exec("PRAGMA journal_mode = WAL;");
 
     // 4. Setup debounced persistence state
     let isDisposed = false;
@@ -123,11 +118,11 @@ export const createPersistentBunSqliteDriver = (
 
       exec: (query, isMutation) => {
         // After dispose the SQLite DB is closed; return empty results rather
-        // than letting db.run/exec throw "Database closed" on every operation
+        // than letting db.prepare/exec throw "Database closed" on every operation
         if (isDisposed) return { rows: [], changes: 0 };
 
         if (isMutation) {
-          const stmt = db.query<Record<string, SqliteValue>, SqliteValue[]>(query.sql);
+          const stmt = db.prepare<SqliteValue[]>(query.sql);
           const result = stmt.run(...query.parameters);
           const changes = result.changes;
           if (changes > 0) scheduleSave();
@@ -135,7 +130,9 @@ export const createPersistentBunSqliteDriver = (
         }
 
         // Query (read operation)
-        const stmt = db.query<Record<string, SqliteValue>, SqliteValue[]>(query.sql);
+        const stmt = db.prepare<SqliteValue[], Record<string, SqliteValue>>(
+          query.sql,
+        );
         const rows = stmt.all(...query.parameters);
         return { rows, changes: 0 };
       },
@@ -162,7 +159,7 @@ export const createPersistentBunSqliteDriver = (
             }
           })();
         }
-        db.close(false);
+        db.close();
       },
     };
   };

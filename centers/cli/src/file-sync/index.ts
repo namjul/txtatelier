@@ -3,6 +3,7 @@
 // Phase 1: State Materialization (Evolu → Filesystem)
 
 import { createHash } from "node:crypto";
+import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -150,7 +151,10 @@ export const startFileSync = async (
   }
 
   // Detect first run (check if DB file exists)
-  const isFirstRun = !(await Bun.file(resolvedDbPath).exists());
+  const isFirstRun = !(await access(resolvedDbPath).then(
+    () => true,
+    () => false,
+  ));
 
   if (isFirstRun && !restoreMnemonic) {
     logger.info("[lifecycle]");

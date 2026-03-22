@@ -1,5 +1,5 @@
 // Platform layer exports
 
-export { createBunEvoluDeps } from "./BunEvoluDeps";
-export { createPersistentBunSqliteDriver } from "./BunSqliteDriver";
-export { createBunPlatformIO, type PlatformIO } from "./PlatformIO";
+export { createEvoluDeps } from "./EvoluDeps";
+export { createPersistentSqliteDriver } from "./SqliteDriver";
+export { createPlatformIO, type PlatformIO } from "./PlatformIO";

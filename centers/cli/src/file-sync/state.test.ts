@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { generateStateId } from "./state";
 
 describe("generateStateId - pure ID generation", () => {
@@ -16,7 +16,7 @@ describe("generateStateId - pure ID generation", () => {
 
   test("handles special characters in path", () => {
     const id = generateStateId("path/with spaces/file.md");
-    expect(id).toBeString();
+    expect(typeof id).toBe("string");
     expect(id.length).toBeGreaterThan(0);
   });
 });

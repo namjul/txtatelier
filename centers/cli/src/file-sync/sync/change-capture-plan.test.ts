@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { planChangeCapture } from "./change-capture-plan";
 import type { ChangeCaptureState } from "./state-types";
 

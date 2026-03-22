@@ -1,4 +1,4 @@
-import { unlink } from "node:fs/promises";
+import { access, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import {
   createIdFromString,
@@ -393,10 +393,9 @@ export const applyRemoteDeletionToFilesystem = async (
   options?: StateMaterializationOptions,
 ): Promise<Result<void, StateMaterializationError>> => {
   const absolutePath = join(watchDir, path);
-  const file = Bun.file(absolutePath);
 
   const existsResult = await tryAsync(
-    () => file.exists(),
+    () => access(absolutePath).then(() => true, () => false),
     (cause): StateMaterializationError => ({
       type: "FileDeleteFailed",
       absolutePath,
@@ -429,7 +428,7 @@ export const applyRemoteDeletionToFilesystem = async (
     logger.info(`[materialize:evolu→fs] Deletion conflict detected: ${path}`);
 
     const localContentResult = await tryAsync(
-      () => file.text(),
+      () => readFile(absolutePath, "utf-8"),
       (cause): StateMaterializationError => ({
         type: "ConflictFileCreateFailed",
         absolutePath,

@@ -1,7 +1,7 @@
 // Atomic file write utilities
 // Uses temp-file + rename pattern to prevent partial writes
 
-import { mkdir, rename } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 /**
@@ -27,7 +27,7 @@ export const writeFileAtomic = async (
 
   // Write to temp file first
   const tempPath = `${filePath}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  await Bun.write(tempPath, content);
+  await writeFile(tempPath, content);
 
   // Atomic rename (this is the key operation)
   // On Unix systems, rename() is atomic at the filesystem level

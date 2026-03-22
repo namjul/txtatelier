@@ -2,7 +2,7 @@
 // Follows the pattern from the Obsidian reference implementation.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, rename } from "node:fs/promises";
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { err, ok, type Result, tryAsync } from "@evolu/common";
 import type { ReadDbError, WriteDbError } from "../errors";
@@ -12,12 +12,14 @@ export type PlatformIO = {
   readonly writeFile: (data: Uint8Array) => Promise<Result<void, WriteDbError>>;
 };
 
-export const createBunPlatformIO = (dbPath: string): PlatformIO => {
+export const createPlatformIO = (dbPath: string): PlatformIO => {
   return {
     readFile: async (): Promise<Result<Uint8Array | null, ReadDbError>> => {
-      const file = Bun.file(dbPath);
       const existsResult = await tryAsync(
-        () => file.exists(),
+        async () => {
+          await access(dbPath);
+          return true;
+        },
         (cause): ReadDbError => ({
           type: "DbReadFailed",
           dbPath,
@@ -26,15 +28,16 @@ export const createBunPlatformIO = (dbPath: string): PlatformIO => {
       );
 
       if (!existsResult.ok) {
+        // ENOENT means file doesn't exist — not an error, return null
+        const cause = existsResult.error.cause as NodeJS.ErrnoException;
+        if (cause?.code === "ENOENT") {
+          return ok(null);
+        }
         return err(existsResult.error);
       }
 
-      if (!existsResult.value) {
-        return ok(null);
-      }
-
       const contentResult = await tryAsync(
-        async () => new Uint8Array(await file.arrayBuffer()),
+        async () => new Uint8Array(await readFile(dbPath)),
         (cause): ReadDbError => ({
           type: "DbReadFailed",
           dbPath,
@@ -58,7 +61,7 @@ export const createBunPlatformIO = (dbPath: string): PlatformIO => {
       const writeResult = await tryAsync(
         async () => {
           await mkdir(dirname(dbPath), { recursive: true });
-          await Bun.write(tempPath, data);
+          await writeFile(tempPath, data);
 
           // Atomic rename (POSIX guarantees atomicity)
           await rename(tempPath, dbPath);

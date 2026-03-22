@@ -1,6 +1,7 @@
 // State collectors - gather filesystem and Evolu state for planning
 // These functions handle I/O and return Result types
 
+import { access, readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { type Evolu, NonEmptyString1000, type Result, tryAsync } from "@evolu/common";
 import { computeFileHash } from "../hash";
@@ -39,15 +40,14 @@ export const collectChangeCaptureState = async (
       ));
 
       // Check if file exists and get content
-      const file = Bun.file(absolutePath);
-      const exists = await file.exists();
+      const exists = await access(absolutePath).then(() => true, () => false);
 
       let diskHash: string | null = null;
       let diskContent: string | null = null;
 
       if (exists) {
         diskHash = await computeFileHash(absolutePath);
-        diskContent = await file.text();
+        diskContent = await readFile(absolutePath, "utf-8");
       }
 
       // Query Evolu for existing record
@@ -96,8 +96,7 @@ export const collectMaterializationState = async (
       const lastAppliedHash = trackedResult.ok ? trackedResult.value : null;
 
       // Get disk hash if file exists
-      const file = Bun.file(absolutePath);
-      const exists = await file.exists();
+      const exists = await access(absolutePath).then(() => true, () => false);
 
       let diskHash: string | null = null;
       if (exists) {

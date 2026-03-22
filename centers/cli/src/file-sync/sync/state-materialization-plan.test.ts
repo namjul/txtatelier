@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { planStateMaterialization } from "./state-materialization-plan";
 import type { MaterializationState } from "./state-types";
 

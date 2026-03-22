@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sqliteTrue } from "@evolu/common";
@@ -25,7 +25,7 @@ test("does not sync file over size limit by 1 byte", async () => {
   const session = result.value;
 
   const content = "a".repeat(MAX_FILE_SIZE_BYTES + 1); // 10MB + 1 byte
-  await Bun.write(join(tempDir, "overlimit.txt"), content);
+  await writeFile(join(tempDir, "overlimit.txt"), content);
   await new Promise((resolve) => setTimeout(resolve, 1000));
 
   const query = session.evolu.createQuery((db) =>
@@ -47,7 +47,7 @@ test("does not sync file way over size limit (50MB)", async () => {
   const session = result.value;
 
   const content = "a".repeat(50 * 1024 * 1024); // 50MB
-  await Bun.write(join(tempDir, "huge.txt"), content);
+  await writeFile(join(tempDir, "huge.txt"), content);
   await new Promise((resolve) => setTimeout(resolve, 1000));
 
   const query = session.evolu.createQuery((db) =>

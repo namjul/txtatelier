@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test } from "vitest";
 import { isIgnoredRelativePath } from "./ignore";
 
 test("ignores temp files with .tmp- in path", () => {

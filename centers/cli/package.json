@@ -13,9 +13,9 @@
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target node --format esm --external better-sqlite3",
     "prepublishOnly": "bun run build",
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
-    "test": "bun test"
+    "dev": "node --import tsx/esm --watch src/index.ts",
+    "start": "node --import tsx/esm src/index.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@evolu/common": "^7.4.0",
@@ -27,11 +27,12 @@
     "tsx": "^4.21.0"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/picomatch": "^4.0.2"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/picomatch": "^4.0.2",
+    "vitest": "^4.1.0"
   },
   "engines": {
-    "bun": ">=1.0.0"
+    "node": ">=22.5.0"
   },
   "keywords": [
     "file-sync",

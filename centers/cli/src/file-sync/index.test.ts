@@ -1,7 +1,8 @@
 // biome-ignore-all lint/style/noNonNullAssertion: reason
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { access, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -32,9 +33,9 @@ describe("GIVEN clean workspace", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       const session = result.value;
-      expect(session.stop).toBeFunction();
+      expect(typeof session.stop).toBe("function");
       expect(session.evolu).toBeDefined();
-      expect(session.flush).toBeFunction();
+      expect(typeof session.flush).toBe("function");
       expect(session.failedSyncs).toBeDefined();
       expect(session.failedSyncs.size).toBe(0);
       await session.stop();
@@ -47,7 +48,7 @@ describe("GIVEN clean workspace", () => {
       expect(result1.ok).toBe(true);
       if (!result1.ok) return;
       const session1 = result1.value;
-      await Bun.write(join(tempDir, "lifecycle.txt"), "test content");
+      await writeFile(join(tempDir, "lifecycle.txt"), "test content");
       await new Promise((resolve) => setTimeout(resolve, 500));
       await session1.stop();
 
@@ -58,7 +59,7 @@ describe("GIVEN clean workspace", () => {
       if (!result2.ok) return;
 
       const session2 = result2.value;
-      expect(session2.stop).toBeFunction();
+      expect(typeof session2.stop).toBe("function");
       await session2.stop();
     });
   });
@@ -66,8 +67,8 @@ describe("GIVEN clean workspace", () => {
 
 describe("GIVEN files exist on disk before sync starts", () => {
   beforeEach(async () => {
-    await Bun.write(join(tempDir, "existing.txt"), "existing content");
-    await Bun.write(join(tempDir, "another.txt"), "another file");
+    await writeFile(join(tempDir, "existing.txt"), "existing content");
+    await writeFile(join(tempDir, "another.txt"), "another file");
   });
 
   describe("WHEN sync is started", () => {
@@ -102,7 +103,7 @@ describe("GIVEN sync is running", () => {
       const session = result.value;
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.write(join(tempDir, "test.txt"), "hello");
+      await writeFile(join(tempDir, "test.txt"), "hello");
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const query = session.evolu.createQuery((db) =>
@@ -127,10 +128,10 @@ describe("GIVEN sync is running", () => {
       const session = result.value;
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.write(join(tempDir, "edit.txt"), "original");
+      await writeFile(join(tempDir, "edit.txt"), "original");
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.write(join(tempDir, "edit.txt"), "modified");
+      await writeFile(join(tempDir, "edit.txt"), "modified");
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       const query = session.evolu.createQuery((db) =>
@@ -155,10 +156,10 @@ describe("GIVEN sync is running", () => {
       const session = result.value;
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.write(join(tempDir, "delete.txt"), "content");
+      await writeFile(join(tempDir, "delete.txt"), "content");
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.file(join(tempDir, "delete.txt")).unlink();
+      await unlink(join(tempDir, "delete.txt"));
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const query = session.evolu.createQuery((db) =>
@@ -191,7 +192,7 @@ describe("GIVEN sync is running", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      const content = await Bun.file(join(tempDir, "remote.txt")).text();
+      const content = await readFile(join(tempDir, "remote.txt"), "utf-8");
       expect(content).toBe("from evolu");
 
       await session.stop();
@@ -216,7 +217,7 @@ describe("GIVEN sync is running", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      let content = await Bun.file(join(tempDir, "update.txt")).text();
+      let content = await readFile(join(tempDir, "update.txt"), "utf-8");
       expect(content).toBe("version 1");
 
       session.evolu.upsert("file", {
@@ -228,7 +229,7 @@ describe("GIVEN sync is running", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      content = await Bun.file(join(tempDir, "update.txt")).text();
+      content = await readFile(join(tempDir, "update.txt"), "utf-8");
       expect(content).toBe("version 2");
 
       await session.stop();
@@ -253,7 +254,10 @@ describe("GIVEN sync is running", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      let exists = await Bun.file(join(tempDir, "remote-delete.txt")).exists();
+      let exists = await access(join(tempDir, "remote-delete.txt")).then(
+        () => true,
+        () => false,
+      );
       expect(exists).toBe(true);
 
       session.evolu.update("file", {
@@ -263,7 +267,10 @@ describe("GIVEN sync is running", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      exists = await Bun.file(join(tempDir, "remote-delete.txt")).exists();
+      exists = await access(join(tempDir, "remote-delete.txt")).then(
+        () => true,
+        () => false,
+      );
       expect(exists).toBe(false);
 
       await session.stop();
@@ -275,7 +282,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
   let session1: FileSyncSession;
 
   beforeEach(async () => {
-    await Bun.write(join(tempDir, "synced.txt"), "synced content");
+    await writeFile(join(tempDir, "synced.txt"), "synced content");
     const result1 = await startFileSync({ watchDir: tempDir });
 
     if (!result1.ok) throw new Error("Failed to start");
@@ -307,7 +314,10 @@ describe("GIVEN file exists in both Evolu and disk", () => {
 
       const session2 = result2.value;
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const exists = await Bun.file(join(tempDir, "synced.txt")).exists();
+      const exists = await access(join(tempDir, "synced.txt")).then(
+        () => true,
+        () => false,
+      );
       expect(exists).toBe(false);
       await session2.stop();
     });
@@ -332,7 +342,10 @@ describe("GIVEN file exists in both Evolu and disk", () => {
 
       const session2 = result2.value;
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const content = await Bun.file(join(tempDir, "offline-new.txt")).text();
+      const content = await readFile(
+        join(tempDir, "offline-new.txt"),
+        "utf-8",
+      );
       expect(content).toBe("added offline");
       await session2.stop();
     });
@@ -342,7 +355,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
     test("THEN changes sync to Evolu on startup", async () => {
       await session1.stop();
 
-      await Bun.write(join(tempDir, "synced.txt"), "modified offline");
+      await writeFile(join(tempDir, "synced.txt"), "modified offline");
 
       const result2 = await startFileSync({ watchDir: tempDir });
 
@@ -385,7 +398,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       await session1.flush();
       await session1.stop();
 
-      await Bun.write(join(tempDir, "synced.txt"), "disk edit");
+      await writeFile(join(tempDir, "synced.txt"), "disk edit");
 
       const result2 = await startFileSync({ watchDir: tempDir });
 
@@ -395,8 +408,9 @@ describe("GIVEN file exists in both Evolu and disk", () => {
 
       const session2 = result2.value;
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const conflictFiles = await Array.fromAsync(
-        new Bun.Glob("synced.conflict*").scan(tempDir),
+      const allFiles = await readdir(tempDir);
+      const conflictFiles = allFiles.filter((f) =>
+        f.startsWith("synced.conflict"),
       );
       expect(conflictFiles.length).toBeGreaterThan(0);
       await session2.stop();
@@ -421,7 +435,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       await session1.flush();
       await session1.stop();
 
-      await Bun.write(join(tempDir, "synced.txt"), "disk edit");
+      await writeFile(join(tempDir, "synced.txt"), "disk edit");
 
       const result2 = await startFileSync({ watchDir: tempDir });
 
@@ -432,8 +446,9 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       const session2 = result2.value;
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      const conflictFiles = await Array.fromAsync(
-        new Bun.Glob("synced.conflict*").scan(tempDir),
+      const allFiles = await readdir(tempDir);
+      const conflictFiles = allFiles.filter((f) =>
+        f.startsWith("synced.conflict"),
       );
       expect(conflictFiles.length).toBeGreaterThan(0);
 
@@ -461,7 +476,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       await session1.flush();
       await session1.stop();
 
-      await Bun.file(join(tempDir, "synced.txt")).unlink();
+      await unlink(join(tempDir, "synced.txt"));
 
       const result2 = await startFileSync({ watchDir: tempDir });
 

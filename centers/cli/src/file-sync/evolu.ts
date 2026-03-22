@@ -18,8 +18,8 @@ import { Schema } from "./evolu-schema";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
-import { createBunEvoluDeps } from "./platform/BunEvoluDeps";
-import { createBunPlatformIO } from "./platform/PlatformIO";
+import { createEvoluDeps } from "./platform/EvoluDeps";
+import { createPlatformIO } from "./platform/PlatformIO";
 
 // Module-level cache to prevent WebSocket leaks on reload
 // (Evolu doesn't properly dispose WebSocket connections in 7.4.1)
@@ -45,7 +45,7 @@ export const createEvoluClient = async ({
   // Ensure directory exists
   await fs.mkdir(dirname(dbPath), { recursive: true });
 
-  const io = createBunPlatformIO(dbPath);
+  const io = createPlatformIO(dbPath);
   const readPreflightResult = await io.readFile();
   if (!readPreflightResult.ok) {
     logger.error(
@@ -57,7 +57,7 @@ export const createEvoluClient = async ({
     });
   }
 
-  const deps = createBunEvoluDeps(io);
+  const deps = createEvoluDeps(io);
 
   const evolu = createEvolu(deps)(Schema, {
     name: SimpleName.orThrow("txtatelier"),

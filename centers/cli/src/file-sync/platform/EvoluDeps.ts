@@ -1,4 +1,4 @@
-// Evolu platform dependencies for Bun CLI environment.
+// Evolu platform dependencies for CLI environment.
 // Uses createDbWorkerForPlatform to wire up our custom SQLite driver.
 
 import {
@@ -12,11 +12,11 @@ import {
 } from "@evolu/common";
 import { createDbWorkerForPlatform } from "@evolu/common/local-first";
 import { logger } from "../../logger";
-import { createPersistentBunSqliteDriver } from "./BunSqliteDriver";
+import { createPersistentSqliteDriver } from "./SqliteDriver";
 import type { PlatformIO } from "./PlatformIO";
 
-export const createBunEvoluDeps = (io: PlatformIO): EvoluDeps => {
-  const sqliteDriverFactory = createPersistentBunSqliteDriver(io);
+export const createEvoluDeps = (io: PlatformIO): EvoluDeps => {
+  const sqliteDriverFactory = createPersistentSqliteDriver(io);
 
   const createLoggedWebSocket: CreateWebSocket = (url, options) => {
     const ws = createWebSocket(url, {

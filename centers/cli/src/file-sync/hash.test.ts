@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { computeContentHash, computeHash } from "./hash";
 
 describe("computeHash - pure byte hashing", () => {
   test("computes hash from bytes", () => {
     const bytes = new Uint8Array([1, 2, 3, 4]);
     const hash = computeHash(bytes);
-    expect(hash).toBeString();
+    expect(typeof hash).toBe("string");
     expect(hash.length).toBeGreaterThan(0);
   });
 
@@ -24,7 +24,7 @@ describe("computeHash - pure byte hashing", () => {
 describe("computeContentHash - pure string hashing", () => {
   test("computes hash from string", () => {
     const hash = computeContentHash("test content");
-    expect(hash).toBeString();
+    expect(typeof hash).toBe("string");
     expect(hash.length).toBeGreaterThan(0);
   });
 
@@ -39,6 +39,6 @@ describe("computeContentHash - pure string hashing", () => {
 
   test("handles empty string", () => {
     const hash = computeContentHash("");
-    expect(hash).toBeString();
+    expect(typeof hash).toBe("string");
   });
 });
