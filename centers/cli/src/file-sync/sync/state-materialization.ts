@@ -6,24 +6,38 @@ import {
   err,
   type IdBytes,
   idBytesToId,
+  type kysely,
   ok,
   type Result,
   sqliteTrue,
   tryAsync,
 } from "@evolu/common";
-import type { TimestampBytes } from "@evolu/common/local-first";
+import type { InferRow, TimestampBytes } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import { createConflictFile } from "../conflicts";
 import type { StateMaterializationError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
-import type { Schema } from "../schema";
+import type { FileId, Schema } from "../schema";
 import { clearTrackedHash, getTrackedHash } from "../state";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { planStateMaterialization } from "./state-materialization-plan";
 
 type EvoluDatabase = Evolu<typeof Schema>;
+
+const createAllFilesQuery = (evolu: EvoluDatabase) =>
+  evolu.createQuery((db) =>
+    db
+      .selectFrom("file")
+      .selectAll()
+      .where("isDeleted", "is not", sqliteTrue)
+      .where("path", "is not", null)
+      .where("contentHash", "is not", null)
+      .$narrowType<{ path: kysely.NotNull; contentHash: kysely.NotNull }>(),
+  );
+
+type FileRow = InferRow<ReturnType<typeof createAllFilesQuery>>;
 
 export interface StateMaterializationOptions {
   readonly onConflictArtifactCreated?: (absolutePath: string) => Promise<void>;
@@ -68,13 +82,7 @@ export const startStateMaterialization = (
 ): (() => void) => {
   logger.debug("[materialize:evolu→fs] Starting state materialization");
 
-  const allFilesQuery = evolu.createQuery((db) =>
-    db
-      .selectFrom("file")
-      .selectAll()
-      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-      .where("isDeleted", "is not", sqliteTrue as any),
-  );
+  const allFilesQuery = createAllFilesQuery(evolu);
 
   let initialLoadComplete = false;
 
@@ -90,27 +98,24 @@ export const startStateMaterialization = (
     // Set cursor to current timestamp to avoid replaying old history
     // Query latest timestamp from evolu_history
     const latestHistoryQuery = evolu.createQuery((db) =>
-      // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-      (db as any)
+      db
         .selectFrom("evolu_history")
         .select(["timestamp"])
-        // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-        .where("table", "==", "file" as any)
-        // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-        .orderBy("timestamp", "desc" as any)
+        .where("table", "==", "file")
+        .orderBy("timestamp", "desc")
         .limit(1),
     );
 
     const latestHistory = await evolu.loadQuery(latestHistoryQuery);
     if (latestHistory.length > 0) {
       const firstRow = latestHistory[0];
-
       // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
       if (firstRow?.["timestamp"]) {
-        const latestTimestamp = firstRow[
-          // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-          "timestamp"
-        ] as unknown as TimestampBytes;
+        const latestTimestamp =
+          firstRow[
+            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+            "timestamp"
+          ];
         saveHistoryCursor(evolu, latestTimestamp);
         logger.debug(
           "[state:subscription] Cursor initialized to latest history timestamp",
@@ -163,18 +168,14 @@ export const startStateMaterialization = (
           let qb = db
             .selectFrom("evolu_history")
             .select(["id", "timestamp", "column"])
-            // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-            .where("table", "==", "file" as any)
-            // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-            .where("column", "in", ["content", "isDeleted"] as any);
+            .where("table", "==", "file")
+            .where("column", "in", ["content", "isDeleted"]);
 
           if (cursor != null) {
-            // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-            qb = qb.where("timestamp", ">", cursor as any);
+            qb = qb.where("timestamp", ">", cursor);
           }
 
-          // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-          return qb.orderBy("timestamp", "asc" as any);
+          return qb.orderBy("timestamp", "asc");
         });
 
         const historyRows = await evolu.loadQuery(historyQuery);
@@ -186,13 +187,15 @@ export const startStateMaterialization = (
         }
 
         // Separate history rows by event type
-        const contentChangeIds: string[] = [];
-        const deletionEventIds: string[] = [];
+        const contentChangeIds: FileId[] = [];
+        const deletionEventIds: FileId[] = [];
 
         for (const historyRow of historyRows) {
-          const stringId = idBytesToId(historyRow.id as unknown as IdBytes);
+          const stringId = idBytesToId(
+            historyRow.id as unknown as IdBytes,
+          ) as FileId;
           // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-          const column = historyRow["column"] as string;
+          const column = historyRow["column"];
 
           if (column === "isDeleted") {
             deletionEventIds.push(stringId);
@@ -204,14 +207,11 @@ export const startStateMaterialization = (
         // Process content changes
         if (contentChangeIds.length > 0) {
           const changedFilesQuery = evolu.createQuery((db) =>
-            // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
-            (db as any)
+            db
               .selectFrom("file")
               .selectAll()
-              // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
-              .where("id", "in", contentChangeIds as any)
-              // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-              .where("isDeleted", "is not", sqliteTrue as any),
+              .where("id", "in", contentChangeIds)
+              .where("isDeleted", "is not", sqliteTrue),
           );
 
           const changedRows = await evolu.loadQuery(changedFilesQuery);
@@ -241,14 +241,11 @@ export const startStateMaterialization = (
         // Process deletion events
         if (deletionEventIds.length > 0) {
           const deletedFilesQuery = evolu.createQuery((db) =>
-            // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
-            (db as any)
+            db
               .selectFrom("file")
               .select(["id", "path"])
-              // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
-              .where("id", "in", deletionEventIds as any)
-              // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-              .where("isDeleted", "is", sqliteTrue as any),
+              .where("id", "in", deletionEventIds)
+              .where("isDeleted", "is", sqliteTrue),
           );
 
           const deletedRows = await evolu.loadQuery(deletedFilesQuery);
@@ -333,8 +330,7 @@ export const startStateMaterialization = (
 const syncEvoluToFiles = async (
   evolu: EvoluDatabase,
   watchDir: string,
-  // biome-ignore lint/suspicious/noExplicitAny: Query rows type will be refined later
-  rows: readonly any[], // TODO remove any type
+  rows: readonly FileRow[],
   options?: StateMaterializationOptions,
 ): Promise<void> => {
   const total = rows.length;
@@ -397,8 +393,7 @@ const syncEvoluToFiles = async (
 const syncEvoluRowToFile = async (
   evolu: EvoluDatabase,
   watchDir: string,
-  // biome-ignore lint/suspicious/noExplicitAny: Row type will be refined later
-  row: any,
+  row: FileRow,
   options?: StateMaterializationOptions,
 ): Promise<Result<void, StateMaterializationError>> => {
   // Step 1: Collect state (I/O)

@@ -14,7 +14,8 @@
     "lint": "bunx biome lint .",
     "lint:fix": "bunx biome check --write .",
     "typecheck": "bunx tsc --noEmit",
-    "relay": "tsx scripts/relay.ts"
+    "relay": "tsx scripts/relay.ts",
+    "todo": "rg TODO --glob '*.ts'"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
