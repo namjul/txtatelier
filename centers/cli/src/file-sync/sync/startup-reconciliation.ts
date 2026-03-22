@@ -7,6 +7,7 @@ import { isIgnoredRelativePath } from "../ignore";
 import type { FilePath, Schema } from "../evolu-schema";
 import { getTrackedHash } from "../state";
 import { captureChange } from "./change-capture";
+import { isTxtFile } from "./change-capture-plan";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { applyRemoteDeletionToFilesystem } from "./state-materialization";
@@ -151,7 +152,10 @@ export const reconcileStartupFilesystemState = async (
 
   const filesToReconcile = allFiles.filter((absolutePath) => {
     const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
-    return !isIgnoredRelativePath(relativePath);
+    return (
+      isTxtFile(absolutePath) &&
+      !isIgnoredRelativePath(relativePath)
+    );
   });
 
   // Query non-deleted files from Evolu

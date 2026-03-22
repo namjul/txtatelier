@@ -14,7 +14,7 @@ import {
 } from "./actions";
 import type { ChangeCaptureState } from "./state-types";
 
-const isTxtFile = (filePath: string): boolean =>
+export const isTxtFile = (filePath: string): boolean =>
   extname(filePath).toLowerCase() === ".txt";
 
 /**
