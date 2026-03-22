@@ -9,6 +9,7 @@ import {
   insertEvolu,
   log,
   markDeletedEvolu,
+  setTrackedHash,
   skip,
   updateEvolu,
 } from "./actions";
@@ -73,16 +74,26 @@ export const planChangeCapture = (
 
   // Need to sync to Evolu
   if (state.evolId !== null) {
-    // Update existing record
+    // Update existing record.
+    // setTrackedHash records diskHash as the last hash we applied to _syncState.
+    // This is necessary so that on the next startup, reconcileStartupEvoluState
+    // (evolu→fs) sees lastAppliedHash === evolHash and skips re-writing the file —
+    // preventing it from overwriting any offline disk changes the user made while
+    // the CLI was not running. Without this, _syncState would only be written by
+    // the state materialization debounce (500ms), creating a race on shutdown.
     return [
       log("debug", `[capture:fs→evolu] Updating: ${state.path}`),
       updateEvolu(state.evolId, state.path, diskContent, diskHash),
+      setTrackedHash(state.path, diskHash),
     ];
   }
 
-  // Insert new record
+  // Insert new record.
+  // Same reasoning as the update branch above: record diskHash in _syncState
+  // immediately so the next startup knows this version is already on disk.
   return [
     log("debug", `[capture:fs→evolu] Inserting: ${state.path}`),
     insertEvolu(state.path, diskContent, diskHash),
+    setTrackedHash(state.path, diskHash),
   ];
 };
