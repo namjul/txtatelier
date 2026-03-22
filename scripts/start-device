@@ -169,7 +169,7 @@ run_device() {
         TXTATELIER_LOG_LEVEL=DEBUG TXTATELIER_DB_PATH="${db_path}" TXTATELIER_MNEMONIC="${restore_mnemonic}" bun "${CLI_ENTRY}" --watch-dir "${watch_dir}"
       ) 2>&1 | tee "${output_file}"
 
-      if grep -Fq "[file-sync] Restart required to activate restored owner" "${output_file}"; then
+      if grep -Fq "[lifecycle] Restart required to activate restored owner" "${output_file}"; then
         rm -f "${output_file}"
         echo
         echo "Mnemonic restored. Restarting device..."
@@ -194,14 +194,14 @@ run_device() {
       while IFS= read -r line; do
         printf '%s\n' "${line}"
 
-        if [[ "${line}" == "[file-sync] Your mnemonic (save this securely!):" ]]; then
+        if [[ "${line}" == "[lifecycle] Your mnemonic (save this securely!):" ]]; then
           capture_mnemonic=1
           continue
         fi
 
         if [[ "${capture_mnemonic}" -eq 1 && "${copied_mnemonic}" -eq 0 ]]; then
-          if [[ "${line}" == "[file-sync]   "* ]]; then
-            mnemonic="${line#"[file-sync]   "}"
+          if [[ "${line}" == "[lifecycle]   "* ]]; then
+            mnemonic="${line#"[lifecycle]   "}"
             if copy_to_clipboard "${mnemonic}"; then
               printf '\nMnemonic copied to clipboard.\n'
             else

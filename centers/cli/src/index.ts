@@ -9,11 +9,15 @@ import {
   showOwnerMnemonic,
   startFileSync,
 } from "./file-sync/index.js";
+import { env } from "./env.js";
 
 const runStart = async (watchDir?: string): Promise<void> => {
   console.log("[txtatelier] Starting...");
 
-  const result = await startFileSync({ ...(watchDir && { watchDir }) });
+  const result = await startFileSync(
+    { ...(watchDir && { watchDir }) },
+    env.mnemonic,
+  );
 
   if (!result.ok) {
     console.error("[txtatelier] Fatal error during startup:");
