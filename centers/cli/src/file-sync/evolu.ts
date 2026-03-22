@@ -1,5 +1,7 @@
 // Evolu client creation and management with module-level caching
 
+import fs from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   type AppOwner,
   createEvolu,
@@ -41,8 +43,6 @@ export const createEvoluClient = async ({
   }
 
   // Ensure directory exists
-  const fs = await import("node:fs/promises");
-  const { dirname } = await import("node:path");
   await fs.mkdir(dirname(dbPath), { recursive: true });
 
   const io = createBunPlatformIO(dbPath);

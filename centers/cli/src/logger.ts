@@ -13,7 +13,7 @@ const cleanLogger = createConsole({
 
 const debugLogger = createConsoleWithTime({
   enableLogging: true, // We handle level filtering via shouldLog()
-  timestampType: 'relative'
+  timestampType: "relative",
 });
 
 const shouldLog = (messageLevel: LogLevel): boolean => {

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { bin } from "specialist";
 import packageJson from "../package.json" with { type: "json" };
+import { env } from "./env.js";
 import {
   createOwnerSession,
   resetOwner,
@@ -9,7 +10,6 @@ import {
   showOwnerMnemonic,
   startFileSync,
 } from "./file-sync/index.js";
-import { env } from "./env.js";
 
 const runStart = async (watchDir?: string): Promise<void> => {
   console.log("[txtatelier] Starting...");

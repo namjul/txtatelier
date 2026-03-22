@@ -126,7 +126,9 @@ describe("planStateMaterialization - pure planning logic", () => {
       const plan = planStateMaterialization(state);
 
       expect(
-        plan.some((a) => a.type === "SKIP" && a.reason === "invalid-evolu-state"),
+        plan.some(
+          (a) => a.type === "SKIP" && a.reason === "invalid-evolu-state",
+        ),
       ).toBe(false);
 
       const writeFile = plan.find((a) => a.type === "WRITE_FILE");
@@ -151,7 +153,9 @@ describe("planStateMaterialization - pure planning logic", () => {
       const plan = planStateMaterialization(state);
 
       expect(
-        plan.some((a) => a.type === "SKIP" && a.reason === "invalid-evolu-state"),
+        plan.some(
+          (a) => a.type === "SKIP" && a.reason === "invalid-evolu-state",
+        ),
       ).toBe(false);
       expect(plan.some((a) => a.type === "WRITE_FILE")).toBe(false);
       expect(plan.some((a) => a.type === "SET_TRACKED_HASH")).toBe(true);

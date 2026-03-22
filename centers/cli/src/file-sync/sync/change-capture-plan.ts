@@ -1,7 +1,7 @@
 // Pure planning functions for change capture (filesystem → Evolu)
 // No I/O - just data transformation
 
-import { extname } from "path";
+import { extname } from "node:path";
 import { isIgnoredRelativePath } from "../ignore";
 import type { SyncAction } from "./actions";
 import {

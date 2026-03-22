@@ -19,6 +19,9 @@ import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
 import type { Schema } from "../schema";
 import { clearTrackedHash, getTrackedHash } from "../state";
+import { executePlan } from "./executor";
+import { collectMaterializationState } from "./state-collector";
+import { planStateMaterialization } from "./state-materialization-plan";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -150,164 +153,165 @@ export const startStateMaterialization = (
     // TODO simplify debouncer
     debounceTimer = setTimeout(async () => {
       try {
-      logger.debug("[state:debounce] Change detected (debounced)");
+        logger.debug("[state:debounce] Change detected (debounced)");
 
-      // Load cursor to find last processed timestamp
-      const cursor = await loadHistoryCursor(evolu);
+        // Load cursor to find last processed timestamp
+        const cursor = await loadHistoryCursor(evolu);
 
-      // Query evolu_history for both content and deletion changes since cursor
-      const historyQuery = evolu.createQuery((db) => {
-        let qb = db
-          .selectFrom("evolu_history")
-          .select(["id", "timestamp", "column"])
-          // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-          .where("table", "==", "file" as any)
-          // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-          .where("column", "in", ["content", "isDeleted"] as any);
+        // Query evolu_history for both content and deletion changes since cursor
+        const historyQuery = evolu.createQuery((db) => {
+          let qb = db
+            .selectFrom("evolu_history")
+            .select(["id", "timestamp", "column"])
+            // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+            .where("table", "==", "file" as any)
+            // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+            .where("column", "in", ["content", "isDeleted"] as any);
 
-        if (cursor != null) {
+          if (cursor != null) {
+            // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
+            qb = qb.where("timestamp", ">", cursor as any);
+          }
+
           // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-          qb = qb.where("timestamp", ">", cursor as any);
+          return qb.orderBy("timestamp", "asc" as any);
+        });
+
+        const historyRows = await evolu.loadQuery(historyQuery);
+
+        if (historyRows.length === 0) {
+          logger.debug("[state:debounce] No new changes to process");
+          debounceTimer = null;
+          return;
         }
 
-        // biome-ignore lint/suspicious/noExplicitAny: Evolu's internal table needs runtime values
-        return qb.orderBy("timestamp", "asc" as any);
-      });
+        // Separate history rows by event type
+        const contentChangeIds: string[] = [];
+        const deletionEventIds: string[] = [];
 
-      const historyRows = await evolu.loadQuery(historyQuery);
-
-      if (historyRows.length === 0) {
-        logger.debug("[state:debounce] No new changes to process");
-        debounceTimer = null;
-        return;
-      }
-
-      // Separate history rows by event type
-      const contentChangeIds: string[] = [];
-      const deletionEventIds: string[] = [];
-
-      for (const historyRow of historyRows) {
-        const stringId = idBytesToId(historyRow.id as unknown as IdBytes);
-        // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-        const column = historyRow["column"] as string;
-
-        if (column === "isDeleted") {
-          deletionEventIds.push(stringId);
-        } else if (column === "content") {
-          contentChangeIds.push(stringId);
-        }
-      }
-
-      // Process content changes
-      if (contentChangeIds.length > 0) {
-        const changedFilesQuery = evolu.createQuery((db) =>
-          // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
-          (db as any)
-            .selectFrom("file")
-            .selectAll()
-            // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
-            .where("id", "in", contentChangeIds as any)
-            // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-            .where("isDeleted", "is not", sqliteTrue as any),
-        );
-
-        const changedRows = await evolu.loadQuery(changedFilesQuery);
-
-        // Log which files are being processed
-        if (changedRows.length === 1) {
-          logger.debug(
-            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-            `[materialize:evolu→fs] Processing changed file: ${changedRows[0]?.["path"]}`,
-          );
-        } else if (changedRows.length <= 5) {
+        for (const historyRow of historyRows) {
+          const stringId = idBytesToId(historyRow.id as unknown as IdBytes);
           // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-          const paths = changedRows.map((r) => r["path"]).join(", ");
-          logger.debug(
-            `[materialize:evolu→fs] Processing ${changedRows.length} changed files: ${paths}`,
-          );
-        } else {
-          logger.debug(
-            `[materialize:evolu→fs] Processing ${changedRows.length} changed files`,
-          );
+          const column = historyRow["column"] as string;
+
+          if (column === "isDeleted") {
+            deletionEventIds.push(stringId);
+          } else if (column === "content") {
+            contentChangeIds.push(stringId);
+          }
         }
 
         // Process content changes
-        await syncEvoluToFiles(evolu, watchDir, changedRows, options);
-      }
-
-      // Process deletion events
-      if (deletionEventIds.length > 0) {
-        const deletedFilesQuery = evolu.createQuery((db) =>
-          // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
-          (db as any)
-            .selectFrom("file")
-            .select(["id", "path"])
+        if (contentChangeIds.length > 0) {
+          const changedFilesQuery = evolu.createQuery((db) =>
             // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
-            .where("id", "in", deletionEventIds as any)
-            // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-            .where("isDeleted", "is", sqliteTrue as any),
-        );
+            (db as any)
+              .selectFrom("file")
+              .selectAll()
+              // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
+              .where("id", "in", contentChangeIds as any)
+              // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+              .where("isDeleted", "is not", sqliteTrue as any),
+          );
 
-        const deletedRows = await evolu.loadQuery(deletedFilesQuery);
+          const changedRows = await evolu.loadQuery(changedFilesQuery);
 
-        if (deletedRows.length === 1) {
-          const firstRow = deletedRows[0];
-          logger.debug(
+          // Log which files are being processed
+          if (changedRows.length === 1) {
+            logger.debug(
+              // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+              `[materialize:evolu→fs] Processing changed file: ${changedRows[0]?.["path"]}`,
+            );
+          } else if (changedRows.length <= 5) {
             // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-            `[materialize:evolu→fs] Processing deletion: ${firstRow?.["path"]}`,
-          );
-        } else if (deletedRows.length > 0) {
-          logger.debug(
-            `[materialize:evolu→fs] Processing ${deletedRows.length} deletions`,
-          );
-        }
-
-        // Process each deletion
-        for (const deletedRow of deletedRows) {
-          // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-          const path = deletedRow["path"] as string | null | undefined;
-          if (!path) continue;
-
-          const lastAppliedHashResult = await getTrackedHash(
-            evolu,
-            path as string,
-          );
-
-          if (!lastAppliedHashResult.ok) {
-            logger.error(
-              `[materialize:evolu→fs] Failed to get tracked hash for ${path}:`,
-              lastAppliedHashResult.error,
+            const paths = changedRows.map((r) => r["path"]).join(", ");
+            logger.debug(
+              `[materialize:evolu→fs] Processing ${changedRows.length} changed files: ${paths}`,
             );
-            continue;
-          }
-
-          const deleteResult = await applyRemoteDeletionToFilesystem(
-            evolu,
-            watchDir,
-            path as string,
-            lastAppliedHashResult.value ?? "",
-            options,
-          );
-
-          if (!deleteResult.ok) {
-            logger.error(
-              `[materialize:evolu→fs] Failed to apply deletion for ${path}:`,
-              deleteResult.error,
+          } else {
+            logger.debug(
+              `[materialize:evolu→fs] Processing ${changedRows.length} changed files`,
             );
           }
-        }
-      }
 
-      // Update cursor to latest timestamp
-      if (historyRows.length > 0) {
-        const lastRow = historyRows[historyRows.length - 1];
-        if (lastRow?.timestamp) {
-          const lastTimestamp = lastRow.timestamp as unknown as TimestampBytes;
-          saveHistoryCursor(evolu, lastTimestamp);
+          // Process content changes
+          await syncEvoluToFiles(evolu, watchDir, changedRows, options);
         }
-      }
 
-      debounceTimer = null;
+        // Process deletion events
+        if (deletionEventIds.length > 0) {
+          const deletedFilesQuery = evolu.createQuery((db) =>
+            // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
+            (db as any)
+              .selectFrom("file")
+              .select(["id", "path"])
+              // biome-ignore lint/suspicious/noExplicitAny: Dynamic ID list requires any
+              .where("id", "in", deletionEventIds as any)
+              // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
+              .where("isDeleted", "is", sqliteTrue as any),
+          );
+
+          const deletedRows = await evolu.loadQuery(deletedFilesQuery);
+
+          if (deletedRows.length === 1) {
+            const firstRow = deletedRows[0];
+            logger.debug(
+              // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+              `[materialize:evolu→fs] Processing deletion: ${firstRow?.["path"]}`,
+            );
+          } else if (deletedRows.length > 0) {
+            logger.debug(
+              `[materialize:evolu→fs] Processing ${deletedRows.length} deletions`,
+            );
+          }
+
+          // Process each deletion
+          for (const deletedRow of deletedRows) {
+            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+            const path = deletedRow["path"] as string | null | undefined;
+            if (!path) continue;
+
+            const lastAppliedHashResult = await getTrackedHash(
+              evolu,
+              path as string,
+            );
+
+            if (!lastAppliedHashResult.ok) {
+              logger.error(
+                `[materialize:evolu→fs] Failed to get tracked hash for ${path}:`,
+                lastAppliedHashResult.error,
+              );
+              continue;
+            }
+
+            const deleteResult = await applyRemoteDeletionToFilesystem(
+              evolu,
+              watchDir,
+              path as string,
+              lastAppliedHashResult.value ?? "",
+              options,
+            );
+
+            if (!deleteResult.ok) {
+              logger.error(
+                `[materialize:evolu→fs] Failed to apply deletion for ${path}:`,
+                deleteResult.error,
+              );
+            }
+          }
+        }
+
+        // Update cursor to latest timestamp
+        if (historyRows.length > 0) {
+          const lastRow = historyRows[historyRows.length - 1];
+          if (lastRow?.timestamp) {
+            const lastTimestamp =
+              lastRow.timestamp as unknown as TimestampBytes;
+            saveHistoryCursor(evolu, lastTimestamp);
+          }
+        }
+
+        debounceTimer = null;
       } catch (error) {
         logger.error("[state:debounce] Unhandled error:", error);
         debounceTimer = null;
@@ -330,7 +334,7 @@ const syncEvoluToFiles = async (
   evolu: EvoluDatabase,
   watchDir: string,
   // biome-ignore lint/suspicious/noExplicitAny: Query rows type will be refined later
-  rows: readonly any[],
+  rows: readonly any[], // TODO remove any type
   options?: StateMaterializationOptions,
 ): Promise<void> => {
   const total = rows.length;
@@ -397,13 +401,6 @@ const syncEvoluRowToFile = async (
   row: any,
   options?: StateMaterializationOptions,
 ): Promise<Result<void, StateMaterializationError>> => {
-  // Import plan-execute infrastructure
-  const { collectMaterializationState } = await import("./state-collector");
-  const { planStateMaterialization } = await import(
-    "./state-materialization-plan"
-  );
-  const { executePlan } = await import("./executor");
-
   // Step 1: Collect state (I/O)
   const stateResult = await collectMaterializationState(evolu, watchDir, row);
 
