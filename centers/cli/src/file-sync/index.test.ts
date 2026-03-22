@@ -1,3 +1,5 @@
+// biome-ignore-all lint/style/noNonNullAssertion: reason
+
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
