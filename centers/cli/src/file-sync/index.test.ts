@@ -47,7 +47,7 @@ describe("GIVEN clean workspace", () => {
       expect(result1.ok).toBe(true);
       if (!result1.ok) return;
       const session1 = result1.value;
-      await Bun.write(join(tempDir, "lifecycle.md"), "test content");
+      await Bun.write(join(tempDir, "lifecycle.txt"), "test content");
       await new Promise((resolve) => setTimeout(resolve, 500));
       await session1.stop();
 
@@ -66,8 +66,8 @@ describe("GIVEN clean workspace", () => {
 
 describe("GIVEN files exist on disk before sync starts", () => {
   beforeEach(async () => {
-    await Bun.write(join(tempDir, "existing.md"), "existing content");
-    await Bun.write(join(tempDir, "another.md"), "another file");
+    await Bun.write(join(tempDir, "existing.txt"), "existing content");
+    await Bun.write(join(tempDir, "another.txt"), "another file");
   });
 
   describe("WHEN sync is started", () => {
@@ -85,8 +85,8 @@ describe("GIVEN files exist on disk before sync starts", () => {
 
       expect(rows.length).toBeGreaterThanOrEqual(2);
       const paths = rows.map((r) => r.path);
-      expect(paths).toContain(NonEmptyString1000.orThrow("existing.md"));
-      expect(paths).toContain(NonEmptyString1000.orThrow("another.md"));
+      expect(paths).toContain(NonEmptyString1000.orThrow("existing.txt"));
+      expect(paths).toContain(NonEmptyString1000.orThrow("another.txt"));
 
       await session.stop();
     });
@@ -102,14 +102,14 @@ describe("GIVEN sync is running", () => {
       const session = result.value;
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.write(join(tempDir, "test.md"), "hello");
+      await Bun.write(join(tempDir, "test.txt"), "hello");
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const query = session.evolu.createQuery((db) =>
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("test.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("test.txt")),
       );
       const rows = await session.evolu.loadQuery(query);
       expect(rows).toHaveLength(1);
@@ -127,17 +127,17 @@ describe("GIVEN sync is running", () => {
       const session = result.value;
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.write(join(tempDir, "edit.md"), "original");
+      await Bun.write(join(tempDir, "edit.txt"), "original");
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.write(join(tempDir, "edit.md"), "modified");
+      await Bun.write(join(tempDir, "edit.txt"), "modified");
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       const query = session.evolu.createQuery((db) =>
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("edit.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("edit.txt")),
       );
       const rows = await session.evolu.loadQuery(query);
       expect(rows).toHaveLength(1);
@@ -155,17 +155,17 @@ describe("GIVEN sync is running", () => {
       const session = result.value;
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.write(join(tempDir, "delete.md"), "content");
+      await Bun.write(join(tempDir, "delete.txt"), "content");
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await Bun.file(join(tempDir, "delete.md")).unlink();
+      await Bun.file(join(tempDir, "delete.txt")).unlink();
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const query = session.evolu.createQuery((db) =>
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("delete.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("delete.txt")),
       );
       const rows = await session.evolu.loadQuery(query);
       expect(rows[0]?.isDeleted).toBe(sqliteTrue);
@@ -184,14 +184,14 @@ describe("GIVEN sync is running", () => {
 
       session.evolu.upsert("file", {
         id: createIdFromString("File"),
-        path: NonEmptyString1000.orThrow("remote.md"),
+        path: NonEmptyString1000.orThrow("remote.txt"),
         content: "from evolu",
         contentHash: NonEmptyString100.orThrow("fake-hash"),
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      const content = await Bun.file(join(tempDir, "remote.md")).text();
+      const content = await Bun.file(join(tempDir, "remote.txt")).text();
       expect(content).toBe("from evolu");
 
       await session.stop();
@@ -209,26 +209,26 @@ describe("GIVEN sync is running", () => {
       const fileId = createIdFromString("UpdateTestFile");
       session.evolu.upsert("file", {
         id: fileId,
-        path: NonEmptyString1000.orThrow("update.md"),
+        path: NonEmptyString1000.orThrow("update.txt"),
         content: "version 1",
         contentHash: NonEmptyString100.orThrow("hash-v1"),
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      let content = await Bun.file(join(tempDir, "update.md")).text();
+      let content = await Bun.file(join(tempDir, "update.txt")).text();
       expect(content).toBe("version 1");
 
       session.evolu.upsert("file", {
         id: fileId,
-        path: NonEmptyString1000.orThrow("update.md"),
+        path: NonEmptyString1000.orThrow("update.txt"),
         content: "version 2",
         contentHash: NonEmptyString100.orThrow("hash-v2"),
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      content = await Bun.file(join(tempDir, "update.md")).text();
+      content = await Bun.file(join(tempDir, "update.txt")).text();
       expect(content).toBe("version 2");
 
       await session.stop();
@@ -246,14 +246,14 @@ describe("GIVEN sync is running", () => {
       const fileId = createIdFromString("DeleteTestFile");
       session.evolu.upsert("file", {
         id: fileId,
-        path: NonEmptyString1000.orThrow("remote-delete.md"),
+        path: NonEmptyString1000.orThrow("remote-delete.txt"),
         content: "will be deleted",
         contentHash: NonEmptyString100.orThrow("hash-delete"),
       });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      let exists = await Bun.file(join(tempDir, "remote-delete.md")).exists();
+      let exists = await Bun.file(join(tempDir, "remote-delete.txt")).exists();
       expect(exists).toBe(true);
 
       session.evolu.update("file", {
@@ -263,7 +263,7 @@ describe("GIVEN sync is running", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      exists = await Bun.file(join(tempDir, "remote-delete.md")).exists();
+      exists = await Bun.file(join(tempDir, "remote-delete.txt")).exists();
       expect(exists).toBe(false);
 
       await session.stop();
@@ -275,7 +275,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
   let session1: FileSyncSession;
 
   beforeEach(async () => {
-    await Bun.write(join(tempDir, "synced.md"), "synced content");
+    await Bun.write(join(tempDir, "synced.txt"), "synced content");
     const result1 = await startFileSync({ watchDir: tempDir });
 
     if (!result1.ok) throw new Error("Failed to start");
@@ -290,7 +290,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
       );
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
@@ -307,7 +307,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
 
       const session2 = result2.value;
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const exists = await Bun.file(join(tempDir, "synced.md")).exists();
+      const exists = await Bun.file(join(tempDir, "synced.txt")).exists();
       expect(exists).toBe(false);
       await session2.stop();
     });
@@ -317,7 +317,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
     test("THEN file is written to disk on startup", async () => {
       session1.evolu.upsert("file", {
         id: createIdFromString("OfflineAddTest"),
-        path: NonEmptyString1000.orThrow("offline-new.md"),
+        path: NonEmptyString1000.orThrow("offline-new.txt"),
         content: "added offline",
         contentHash: NonEmptyString100.orThrow("hash-offline"),
       });
@@ -332,7 +332,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
 
       const session2 = result2.value;
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const content = await Bun.file(join(tempDir, "offline-new.md")).text();
+      const content = await Bun.file(join(tempDir, "offline-new.txt")).text();
       expect(content).toBe("added offline");
       await session2.stop();
     });
@@ -342,7 +342,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
     test("THEN changes sync to Evolu on startup", async () => {
       await session1.stop();
 
-      await Bun.write(join(tempDir, "synced.md"), "modified offline");
+      await Bun.write(join(tempDir, "synced.txt"), "modified offline");
 
       const result2 = await startFileSync({ watchDir: tempDir });
 
@@ -357,7 +357,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
       );
       const rows = await session2.evolu.loadQuery(query);
       expect(rows[0]?.content).toBe("modified offline");
@@ -371,21 +371,21 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
       );
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
       session1.evolu.upsert("file", {
         id: fileId!,
-        path: NonEmptyString1000.orThrow("synced.md"),
+        path: NonEmptyString1000.orThrow("synced.txt"),
         content: "evolu edit",
         contentHash: NonEmptyString100.orThrow("hash-conflict"),
       });
       await session1.flush();
       await session1.stop();
 
-      await Bun.write(join(tempDir, "synced.md"), "disk edit");
+      await Bun.write(join(tempDir, "synced.txt"), "disk edit");
 
       const result2 = await startFileSync({ watchDir: tempDir });
 
@@ -409,7 +409,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
       );
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
@@ -421,7 +421,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       await session1.flush();
       await session1.stop();
 
-      await Bun.write(join(tempDir, "synced.md"), "disk edit");
+      await Bun.write(join(tempDir, "synced.txt"), "disk edit");
 
       const result2 = await startFileSync({ watchDir: tempDir });
 
@@ -447,21 +447,21 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
       );
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
       session1.evolu.upsert("file", {
         id: fileId!,
-        path: NonEmptyString1000.orThrow("synced.md"),
+        path: NonEmptyString1000.orThrow("synced.txt"),
         content: "evolu edit",
         contentHash: NonEmptyString100.orThrow("hash-conflict"),
       });
       await session1.flush();
       await session1.stop();
 
-      await Bun.file(join(tempDir, "synced.md")).unlink();
+      await Bun.file(join(tempDir, "synced.txt")).unlink();
 
       const result2 = await startFileSync({ watchDir: tempDir });
 
@@ -476,7 +476,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.md")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
       );
       const rows2 = await session2.evolu.loadQuery(query2);
       expect(rows2).toHaveLength(1);
