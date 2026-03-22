@@ -8,7 +8,6 @@ import {
   idBytesToId,
   ok,
   type Result,
-  sqliteTrue,
   tryAsync,
 } from "@evolu/common";
 import type { TimestampBytes } from "@evolu/common/local-first";
@@ -22,7 +21,7 @@ import { clearTrackedHash, getTrackedHash } from "../state";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { planStateMaterialization } from "./state-materialization-plan";
-import { createAllFilesQuery, createChangedFilesQuery, createLatestHistoryQuery, type FileRow } from "../evolu-queries";
+import { createAllFilesQuery, createChangedFilesQuery, createDeletedFilesWithIdsQuery, createHistoryChangesQuery, createHistoryCursorQuery, createLatestHistoryQuery, type FileRow } from "../evolu-queries";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -41,17 +40,7 @@ const ensureHistoryCursor = (evolu: EvoluDatabase): void => {
 const loadHistoryCursor = async (
   evolu: EvoluDatabase,
 ): Promise<TimestampBytes | null> => {
-  const cursorId = createIdFromString<"HistoryCursor">("history-cursor");
-
-  const q = evolu.createQuery((db) =>
-    db
-      .selectFrom("_historyCursor")
-      .select(["lastTimestamp"])
-      .where("id", "=", cursorId)
-      .where("isDeleted", "is", null)
-      .limit(1),
-  );
-
+  const q = createHistoryCursorQuery(evolu);
   const rows = await evolu.loadQuery(q);
   return rows[0]?.lastTimestamp ?? null;
 };
@@ -145,20 +134,7 @@ export const startStateMaterialization = (
         const cursor = await loadHistoryCursor(evolu);
 
         // Query evolu_history for both content and deletion changes since cursor
-        const historyQuery = evolu.createQuery((db) => {
-          let qb = db
-            .selectFrom("evolu_history")
-            .select(["id", "timestamp", "column"])
-            .where("table", "==", "file")
-            .where("column", "in", ["content", "isDeleted"]);
-
-          if (cursor != null) {
-            qb = qb.where("timestamp", ">", cursor);
-          }
-
-          return qb.orderBy("timestamp", "asc");
-        });
-
+        const historyQuery = createHistoryChangesQuery(evolu, cursor);
         const historyRows = await evolu.loadQuery(historyQuery);
 
         if (historyRows.length === 0) {
@@ -215,14 +191,7 @@ export const startStateMaterialization = (
 
         // Process deletion events
         if (deletionEventIds.length > 0) {
-          const deletedFilesQuery = evolu.createQuery((db) =>
-            db
-              .selectFrom("file")
-              .select(["id", "path"])
-              .where("id", "in", deletionEventIds)
-              .where("isDeleted", "is", sqliteTrue),
-          );
-
+          const deletedFilesQuery = createDeletedFilesWithIdsQuery(evolu, deletionEventIds);
           const deletedRows = await evolu.loadQuery(deletedFilesQuery);
 
           if (deletedRows.length === 1) {
@@ -239,13 +208,12 @@ export const startStateMaterialization = (
 
           // Process each deletion
           for (const deletedRow of deletedRows) {
-            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-            const path = deletedRow["path"] as string | null | undefined;
+            const path = deletedRow["path"]
             if (!path) continue;
 
             const lastAppliedHashResult = await getTrackedHash(
               evolu,
-              path as string,
+              path,
             );
 
             if (!lastAppliedHashResult.ok) {

@@ -2,6 +2,8 @@
 // Based on the Obsidian reference implementation pattern.
 
 import { Database } from "bun:sqlite";
+
+type SqliteValue = null | string | number | Uint8Array;
 import { type CreateSqliteDriver, trySync } from "@evolu/common";
 import { logger } from "../../logger";
 import type { DbDeserializeError } from "../errors";
@@ -125,18 +127,16 @@ export const createPersistentBunSqliteDriver = (
         if (isDisposed) return { rows: [], changes: 0 };
 
         if (isMutation) {
-          const stmt = db.query(query.sql);
-          // biome-ignore lint/suspicious/noExplicitAny: Evolu's query parameters are loosely typed
-          const result = stmt.run(...(query.parameters as any[]));
+          const stmt = db.query<Record<string, SqliteValue>, SqliteValue[]>(query.sql);
+          const result = stmt.run(...query.parameters);
           const changes = result.changes;
           if (changes > 0) scheduleSave();
           return { rows: [], changes };
         }
 
         // Query (read operation)
-        const stmt = db.query(query.sql);
-        // biome-ignore lint/suspicious/noExplicitAny: Evolu's query parameters and rows are loosely typed
-        const rows = stmt.all(...(query.parameters as any[])) as readonly any[];
+        const stmt = db.query<Record<string, SqliteValue>, SqliteValue[]>(query.sql);
+        const rows = stmt.all(...query.parameters);
         return { rows, changes: 0 };
       },
 

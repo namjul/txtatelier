@@ -10,7 +10,8 @@ import {
   trySync,
 } from "@evolu/common";
 import type { StateMaterializationError } from "./errors";
-import type { Schema } from "./evolu-schema";
+import type { FilePath, Schema } from "./evolu-schema";
+import { createSyncStateQuery } from "./evolu-queries";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -27,18 +28,11 @@ export const generateStateId = (path: string): string => {
  */
 export const getTrackedHash = async (
   evolu: EvoluDatabase,
-  path: string,
+  path: FilePath,
 ): Promise<Result<string | null, StateMaterializationError>> => {
   return tryAsync(
     async () => {
-      const query = evolu.createQuery((db) =>
-        db
-          .selectFrom("_syncState")
-          .select(["lastAppliedHash"])
-          // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-          .where("path", "==", path as any),
-      );
-
+      const query = createSyncStateQuery(evolu, path);
       const rows = await evolu.loadQuery(query);
       return rows[0]?.lastAppliedHash ?? null;
     },

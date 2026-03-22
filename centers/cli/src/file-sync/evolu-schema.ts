@@ -16,6 +16,8 @@ export type SyncStateId = typeof SyncStateId.Type;
 export const HistoryCursorId = Evolu.id("HistoryCursor");
 export type HistoryCursorId = typeof HistoryCursorId.Type;
 
+export type FilePath = typeof Evolu.NonEmptyString1000.Type
+
 // Schema definition
 export const Schema = {
   file: {

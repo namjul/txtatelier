@@ -2,11 +2,12 @@
 // These functions handle I/O and return Result types
 
 import { relative } from "node:path";
-import { type Evolu, type Result, sqliteTrue, tryAsync } from "@evolu/common";
+import { type Evolu, NonEmptyString1000, type Result, tryAsync } from "@evolu/common";
 import { computeFileHash } from "../hash";
 import type { Schema } from "../evolu-schema";
 import { getTrackedHash } from "../state";
 import type { ChangeCaptureState, MaterializationState } from "./state-types";
+import { createFielsFromPathQuery } from "../evolu-queries";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -32,10 +33,10 @@ export const collectChangeCaptureState = async (
 ): Promise<Result<ChangeCaptureState, StateCollectionError>> => {
   return tryAsync(
     async (): Promise<ChangeCaptureState> => {
-      const relativePath = relative(watchDir, absolutePath).replaceAll(
+      const relativePath = NonEmptyString1000.orThrow(relative(watchDir, absolutePath).replaceAll(
         "\\",
         "/",
-      );
+      ));
 
       // Check if file exists and get content
       const file = Bun.file(absolutePath);
@@ -50,15 +51,7 @@ export const collectChangeCaptureState = async (
       }
 
       // Query Evolu for existing record
-      const query = evolu.createQuery((db) =>
-        db
-          .selectFrom("file")
-          .select(["id", "contentHash"])
-          // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-          .where("path", "==", relativePath as any)
-          // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-          .where("isDeleted", "is not", sqliteTrue as any),
-      );
+      const query = createFielsFromPathQuery(evolu, relativePath)
 
       const rows = await evolu.loadQuery(query);
       const existing = rows[0];

@@ -1,16 +1,17 @@
 import { mkdir, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { type Evolu, err, ok, type Result, sqliteTrue } from "@evolu/common";
+import { type Evolu, err, ok, type Result } from "@evolu/common";
 import { logger } from "../../logger";
 import type { ChangeCaptureError } from "../errors";
 import { isIgnoredRelativePath } from "../ignore";
-import type { Schema } from "../evolu-schema";
+import type { FilePath, Schema } from "../evolu-schema";
 import { getTrackedHash } from "../state";
 import { captureChange } from "./change-capture";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { applyRemoteDeletionToFilesystem } from "./state-materialization";
 import { planStateMaterialization } from "./state-materialization-plan";
+import { createAllFilesQuery, createDeletedPathsQuery, createExistingPathsQuery, type FileRow } from "../evolu-queries";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -154,14 +155,7 @@ export const reconcileStartupFilesystemState = async (
   });
 
   // Query non-deleted files from Evolu
-  const existingRowsQuery = evolu.createQuery((db) =>
-    db
-      .selectFrom("file")
-      .select(["path"])
-      // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-      .where("isDeleted", "is not", sqliteTrue as any),
-  );
-  const existingRows = await evolu.loadQuery(existingRowsQuery);
+  const existingRows = await evolu.loadQuery(createExistingPathsQuery(evolu));
   const existingPaths = new Set(
     existingRows.flatMap((row) => (row.path ? [row.path as string] : [])),
   );
@@ -263,16 +257,9 @@ export const reconcileStartupEvoluState = async (
 
   // Step 1: Apply remote deletions (files deleted in Evolu while offline)
   // Fatal check: ensure we can query database
-  let deletedRows: ReadonlyArray<{ path: string | null }>;
+  let deletedRows: ReadonlyArray<{ path: FilePath }>;
   try {
-    const deletedRowsQuery = evolu.createQuery((db) =>
-      db
-        .selectFrom("file")
-        .select(["path"])
-        // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-        .where("isDeleted", "is", sqliteTrue as any),
-    );
-    deletedRows = await evolu.loadQuery(deletedRowsQuery);
+    deletedRows = await evolu.loadQuery(createDeletedPathsQuery(evolu));
   } catch (error) {
     return err({
       type: "DatabaseUnavailable",
@@ -291,7 +278,7 @@ export const reconcileStartupEvoluState = async (
 
     processedCount += 1;
 
-    const trackedHashResult = await getTrackedHash(evolu, row.path as string);
+    const trackedHashResult = await getTrackedHash(evolu, row.path);
     const lastAppliedHash = trackedHashResult.ok
       ? (trackedHashResult.value ?? "")
       : "";
@@ -328,17 +315,9 @@ export const reconcileStartupEvoluState = async (
 
   // Step 2: Apply remote additions/updates (files added/updated in Evolu while offline)
   // Fatal check: ensure we can query database
-  // biome-ignore lint/suspicious/noExplicitAny: Row type from Evolu query
-  let activeRows: ReadonlyArray<any>;
+  let activeRows: readonly FileRow[];
   try {
-    const activeRowsQuery = evolu.createQuery((db) =>
-      db
-        .selectFrom("file")
-        .selectAll()
-        // biome-ignore lint/suspicious/noExplicitAny: Evolu's Kysely needs runtime values
-        .where("isDeleted", "is not", sqliteTrue as any),
-    );
-    activeRows = await evolu.loadQuery(activeRowsQuery);
+    activeRows = await evolu.loadQuery(createAllFilesQuery(evolu));
   } catch (error) {
     return err({
       type: "DatabaseUnavailable",
