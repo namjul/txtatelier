@@ -1,6 +1,7 @@
 // Pure planning functions for change capture (filesystem → Evolu)
 // No I/O - just data transformation
 
+import { extname } from "path";
 import { isIgnoredRelativePath } from "../ignore";
 import type { SyncAction } from "./actions";
 import {
@@ -12,6 +13,9 @@ import {
   updateEvolu,
 } from "./actions";
 import type { ChangeCaptureState } from "./state-types";
+
+const isTxtFile = (filePath: string): boolean =>
+  extname(filePath).toLowerCase() === ".txt";
 
 /**
  * Plan what actions to take when filesystem changes.
@@ -26,6 +30,15 @@ export const planChangeCapture = (
   // Check if path should be ignored
   if (isIgnoredRelativePath(state.path)) {
     return [skip("ignored-path", state.path)];
+  }
+
+  // Only sync .txt files. Allow deletions of previously-synced non-txt records
+  // (evolId !== null) to pass through so they don't become ghost records in Evolu.
+  if (!isTxtFile(state.path) && state.evolId === null) {
+    return [
+      log("debug", `[capture:fs→evolu] Skipping non-txt file: ${state.path}`),
+      skip("not-txt-file", state.path),
+    ];
   }
 
   // File deleted on disk

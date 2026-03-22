@@ -47,7 +47,7 @@ describe("planChangeCapture - pure planning logic", () => {
   describe("new file", () => {
     test("WHEN file not in evolu THEN plan includes INSERT_EVOLU action", () => {
       const state: ChangeCaptureState = {
-        path: "new.md",
+        path: "new.txt",
         diskHash: "hash123",
         diskContent: "content",
         evolHash: null,
@@ -59,7 +59,7 @@ describe("planChangeCapture - pure planning logic", () => {
       const insertAction = plan.find((a) => a.type === "INSERT_EVOLU");
       expect(insertAction).toBeDefined();
       if (insertAction && insertAction.type === "INSERT_EVOLU") {
-        expect(insertAction.path).toBe("new.md");
+        expect(insertAction.path).toBe("new.txt");
         expect(insertAction.content).toBe("content");
         expect(insertAction.hash).toBe("hash123");
       }
@@ -90,7 +90,7 @@ describe("planChangeCapture - pure planning logic", () => {
 
     test("WHEN file deleted but not in evolu THEN plan skips", () => {
       const state: ChangeCaptureState = {
-        path: "not-tracked.md",
+        path: "not-tracked.txt",
         diskHash: null,
         diskContent: null,
         evolHash: null,
@@ -120,6 +120,67 @@ describe("planChangeCapture - pure planning logic", () => {
       expect(
         plan.some((a) => a.type === "SKIP" && a.reason === "ignored-path"),
       ).toBe(true);
+    });
+  });
+
+  describe("txt file filter", () => {
+    test("WHEN non-txt file has no evolu record THEN plan skips with not-txt-file reason", () => {
+      const state: ChangeCaptureState = {
+        path: "readme.md",
+        diskHash: "hash123",
+        diskContent: "content",
+        evolHash: null,
+        evolId: null,
+      };
+
+      const plan = planChangeCapture(state);
+
+      expect(
+        plan.some((a) => a.type === "SKIP" && a.reason === "not-txt-file"),
+      ).toBe(true);
+      expect(plan.some((a) => a.type === "INSERT_EVOLU")).toBe(false);
+    });
+
+    test("WHEN non-txt file has evolu record and is deleted THEN plan marks deleted (filter bypass)", () => {
+      const state: ChangeCaptureState = {
+        path: "old-synced.md",
+        diskHash: null,
+        diskContent: null,
+        evolHash: "old-hash",
+        evolId: "file-id-legacy",
+      };
+
+      const plan = planChangeCapture(state);
+
+      expect(plan.some((a) => a.type === "MARK_DELETED_EVOLU")).toBe(true);
+    });
+
+    test("WHEN txt file has no evolu record THEN plan inserts normally", () => {
+      const state: ChangeCaptureState = {
+        path: "note.txt",
+        diskHash: "hash123",
+        diskContent: "hello",
+        evolHash: null,
+        evolId: null,
+      };
+
+      const plan = planChangeCapture(state);
+
+      expect(plan.some((a) => a.type === "INSERT_EVOLU")).toBe(true);
+    });
+
+    test("WHEN file extension is uppercase .TXT THEN plan inserts normally", () => {
+      const state: ChangeCaptureState = {
+        path: "note.TXT",
+        diskHash: "hash123",
+        diskContent: "hello",
+        evolHash: null,
+        evolId: null,
+      };
+
+      const plan = planChangeCapture(state);
+
+      expect(plan.some((a) => a.type === "INSERT_EVOLU")).toBe(true);
     });
   });
 
