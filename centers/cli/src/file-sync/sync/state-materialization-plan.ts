@@ -22,11 +22,18 @@ import type { MaterializationState } from "./state-types";
 export const planStateMaterialization = (
   state: MaterializationState,
 ): readonly SyncAction[] => {
-  // Evolu row should always have content and hash for non-deleted rows
-  const { evolHash, evolContent } = state;
-  if (evolHash === null || evolContent === null) {
-    return [skip("invalid-evolu-state", state.path)];
+  // Evolu row should always have a hash for non-deleted rows.
+  // Content may be null for empty files (stored as null by convention).
+  const { evolHash } = state;
+  if (evolHash === null) {
+    return [
+      log("warn", `[materialize:evolu→fs] Skipping (no hash): ${state.path}`),
+      skip("invalid-evolu-state", state.path),
+    ];
   }
+
+  // Null content means empty file — treat as empty string for write operations.
+  const evolContent = state.evolContent ?? "";
 
   // Already processed?
   if (state.lastAppliedHash === evolHash) {

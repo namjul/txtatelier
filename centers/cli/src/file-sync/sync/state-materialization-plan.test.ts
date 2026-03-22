@@ -112,6 +112,52 @@ describe("planStateMaterialization - pure planning logic", () => {
     });
   });
 
+  describe("empty file", () => {
+    test("WHEN evolContent is null and file not on disk THEN plan writes empty file", () => {
+      const state: MaterializationState = {
+        path: "empty.txt",
+        diskHash: null,
+        evolHash: "hash-of-empty",
+        evolContent: null,
+        lastAppliedHash: null,
+        ownerId: "device1",
+      };
+
+      const plan = planStateMaterialization(state);
+
+      expect(
+        plan.some((a) => a.type === "SKIP" && a.reason === "invalid-evolu-state"),
+      ).toBe(false);
+
+      const writeFile = plan.find((a) => a.type === "WRITE_FILE");
+      expect(writeFile).toBeDefined();
+      if (writeFile && writeFile.type === "WRITE_FILE") {
+        expect(writeFile.path).toBe("empty.txt");
+        expect(writeFile.content).toBe("");
+        expect(writeFile.hash).toBe("hash-of-empty");
+      }
+    });
+
+    test("WHEN evolContent is null and disk already matches THEN plan updates tracking only", () => {
+      const state: MaterializationState = {
+        path: "empty.txt",
+        diskHash: "hash-of-empty",
+        evolHash: "hash-of-empty",
+        evolContent: null,
+        lastAppliedHash: null,
+        ownerId: "device1",
+      };
+
+      const plan = planStateMaterialization(state);
+
+      expect(
+        plan.some((a) => a.type === "SKIP" && a.reason === "invalid-evolu-state"),
+      ).toBe(false);
+      expect(plan.some((a) => a.type === "WRITE_FILE")).toBe(false);
+      expect(plan.some((a) => a.type === "SET_TRACKED_HASH")).toBe(true);
+    });
+  });
+
   describe("deletion conflict", () => {
     test("WHEN disk has changes during deletion THEN handled by applyRemoteDeletionToFilesystem", () => {
       // Note: Deletion conflicts are handled by applyRemoteDeletionToFilesystem

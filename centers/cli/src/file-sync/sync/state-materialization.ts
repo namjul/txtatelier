@@ -147,7 +147,9 @@ export const startStateMaterialization = (
       clearTimeout(debounceTimer);
     }
 
+    // TODO simplify debouncer
     debounceTimer = setTimeout(async () => {
+      try {
       logger.debug("[state:debounce] Change detected (debounced)");
 
       // Load cursor to find last processed timestamp
@@ -306,6 +308,10 @@ export const startStateMaterialization = (
       }
 
       debounceTimer = null;
+      } catch (error) {
+        logger.error("[state:debounce] Unhandled error:", error);
+        debounceTimer = null;
+      }
     }, SUBSCRIPTION_DEBOUNCE_MS);
   });
 
