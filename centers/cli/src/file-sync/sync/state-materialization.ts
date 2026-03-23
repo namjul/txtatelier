@@ -21,7 +21,7 @@ import { clearTrackedHash, getTrackedHash } from "../state";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { planStateMaterialization } from "./state-materialization-plan";
-import { createAllFilesQuery, createChangedFilesQuery, createDeletedFilesWithIdsQuery, createHistoryChangesQuery, createHistoryCursorQuery, createLatestHistoryQuery, type FileRow } from "../evolu-queries";
+import { createAllFilesQuery, createAllSyncStateQuery, createChangedFilesQuery, createDeletedFilesWithIdsQuery, createHistoryChangesQuery, createHistoryCursorQuery, createLatestHistoryQuery, type FileRow } from "../evolu-queries";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -270,6 +270,8 @@ export const startStateMaterialization = (
   };
 };
 
+const MATERIALIZE_CONCURRENCY = 20;
+
 const syncEvoluToFiles = async (
   evolu: EvoluDatabase,
   watchDir: string,
@@ -277,22 +279,35 @@ const syncEvoluToFiles = async (
   options?: StateMaterializationOptions,
 ): Promise<void> => {
   const total = rows.length;
+  if (total === 0) return;
+
   const failedByType = new Map<string, number>();
   let failedCount = 0;
+  let processed = 0;
 
   if (total > 50) {
     logger.debug(`[materialize:evolu→fs] Processing ${total} files...`);
   }
 
-  let processed = 0;
+  // Pre-load all sync states to avoid one DB query per file
+  const syncStateRows = await evolu.loadQuery(createAllSyncStateQuery(evolu));
+  const syncStateMap = new Map<string, string | null>(
+    syncStateRows.map((r) => [r.path as string, r.lastAppliedHash ?? null]),
+  );
+
   const startTime = Date.now();
 
-  for (const row of rows) {
+  const processRow = async (row: FileRow): Promise<void> => {
     if (isIgnoredRelativePath(row.path)) {
-      continue;
+      processed++;
+      return;
     }
 
-    const result = await syncEvoluRowToFile(evolu, watchDir, row, options);
+    const preloadedHash = syncStateMap.has(row.path)
+      ? (syncStateMap.get(row.path) ?? null)
+      : null;
+    const result = await syncEvoluRowToFile(evolu, watchDir, row, options, preloadedHash);
+
     if (!result.ok) {
       failedCount += 1;
       failedByType.set(
@@ -313,6 +328,10 @@ const syncEvoluToFiles = async (
         `[materialize:evolu→fs] Progress: ${processed}/${total} files (${elapsed}s)`,
       );
     }
+  };
+
+  for (let i = 0; i < rows.length; i += MATERIALIZE_CONCURRENCY) {
+    await Promise.all(rows.slice(i, i + MATERIALIZE_CONCURRENCY).map(processRow));
   }
 
   if (total > 50) {
@@ -338,9 +357,10 @@ const syncEvoluRowToFile = async (
   watchDir: string,
   row: FileRow,
   options?: StateMaterializationOptions,
+  preloadedLastAppliedHash?: string | null,
 ): Promise<Result<void, StateMaterializationError>> => {
   // Step 1: Collect state (I/O)
-  const stateResult = await collectMaterializationState(evolu, watchDir, row);
+  const stateResult = await collectMaterializationState(evolu, watchDir, row, preloadedLastAppliedHash);
 
   if (!stateResult.ok) {
     logger.error(

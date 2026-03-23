@@ -31,6 +31,7 @@ export const collectChangeCaptureState = async (
   evolu: EvoluDatabase,
   watchDir: string,
   absolutePath: string,
+  preloadedExisting?: { id: unknown; contentHash: unknown } | null,
 ): Promise<Result<ChangeCaptureState, StateCollectionError>> => {
   return tryAsync(
     async (): Promise<ChangeCaptureState> => {
@@ -50,11 +51,15 @@ export const collectChangeCaptureState = async (
         diskContent = await readFile(absolutePath, "utf-8");
       }
 
-      // Query Evolu for existing record
-      const query = createFielsFromPathQuery(evolu, relativePath)
-
-      const rows = await evolu.loadQuery(query);
-      const existing = rows[0];
+      // Query Evolu for existing record (or use pre-loaded data)
+      let existing: { id: unknown; contentHash: unknown } | undefined;
+      if (preloadedExisting !== undefined) {
+        existing = preloadedExisting ?? undefined;
+      } else {
+        const query = createFielsFromPathQuery(evolu, relativePath);
+        const rows = await evolu.loadQuery(query);
+        existing = rows[0];
+      }
 
       return {
         path: relativePath,
@@ -86,14 +91,20 @@ export const collectMaterializationState = async (
   watchDir: string,
   // biome-ignore lint/suspicious/noExplicitAny: Row type from Evolu query
   row: any,
+  preloadedLastAppliedHash?: string | null,
 ): Promise<Result<MaterializationState, StateCollectionError>> => {
   return tryAsync(
     async (): Promise<MaterializationState> => {
       const absolutePath = `${watchDir}/${row.path}`;
 
-      // Get tracked hash
-      const trackedResult = await getTrackedHash(evolu, row.path);
-      const lastAppliedHash = trackedResult.ok ? trackedResult.value : null;
+      // Get tracked hash (from pre-loaded cache or DB query)
+      let lastAppliedHash: string | null;
+      if (preloadedLastAppliedHash !== undefined) {
+        lastAppliedHash = preloadedLastAppliedHash;
+      } else {
+        const trackedResult = await getTrackedHash(evolu, row.path);
+        lastAppliedHash = trackedResult.ok ? trackedResult.value : null;
+      }
 
       // Get disk hash if file exists
       const exists = await access(absolutePath).then(() => true, () => false);

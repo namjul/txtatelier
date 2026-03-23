@@ -41,6 +41,7 @@ export const captureChange = async (
   evolu: EvoluDatabase,
   watchDir: string,
   absolutePath: string,
+  preloadedExisting?: { id: unknown; contentHash: unknown } | null,
 ): Promise<Result<void, ChangeCaptureError>> => {
   const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
 
@@ -86,6 +87,7 @@ export const captureChange = async (
     evolu,
     watchDir,
     absolutePath,
+    preloadedExisting,
   );
 
   if (!stateResult.ok) {

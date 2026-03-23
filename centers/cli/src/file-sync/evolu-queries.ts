@@ -56,6 +56,21 @@ export const createSyncStateQuery = (evolu: EvoluDatabase, path: FilePath) =>
       .where("path", "==", path),
   );
 
+export const createAllSyncStateQuery = (evolu: EvoluDatabase) =>
+  evolu.createQuery((db) =>
+    db.selectFrom("_syncState").select(["path", "lastAppliedHash"]),
+  );
+
+export const createAllFileRecordsQuery = (evolu: EvoluDatabase) =>
+  evolu.createQuery((db) =>
+    db
+      .selectFrom("file")
+      .select(["path", "id", "contentHash"])
+      .where("isDeleted", "is not", Evolu.sqliteTrue)
+      .where("path", "is not", null)
+      .$narrowType<{ path: Evolu.kysely.NotNull }>(),
+  );
+
 export const createHistoryCursorQuery = (evolu: EvoluDatabase) => {
   const cursorId = Evolu.createIdFromString<"HistoryCursor">("history-cursor");
   return evolu.createQuery((db) =>
