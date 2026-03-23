@@ -123,10 +123,10 @@ describe("planChangeCapture - pure planning logic", () => {
     });
   });
 
-  describe("txt file filter", () => {
-    test("WHEN non-txt file has no evolu record THEN plan skips with not-txt-file reason", () => {
+  describe("text file filter", () => {
+    test("WHEN non-text file has no evolu record THEN plan skips with not-text-file reason", () => {
       const state: ChangeCaptureState = {
-        path: "readme.md",
+        path: "readme.py",
         diskHash: "hash123",
         diskContent: "content",
         evolHash: null,
@@ -136,14 +136,14 @@ describe("planChangeCapture - pure planning logic", () => {
       const plan = planChangeCapture(state);
 
       expect(
-        plan.some((a) => a.type === "SKIP" && a.reason === "not-txt-file"),
+        plan.some((a) => a.type === "SKIP" && a.reason === "not-text-file"),
       ).toBe(true);
       expect(plan.some((a) => a.type === "INSERT_EVOLU")).toBe(false);
     });
 
-    test("WHEN non-txt file has evolu record and is deleted THEN plan marks deleted (filter bypass)", () => {
+    test("WHEN non-text file has evolu record and is deleted THEN plan marks deleted (filter bypass)", () => {
       const state: ChangeCaptureState = {
-        path: "old-synced.md",
+        path: "old-synced.py",
         diskHash: null,
         diskContent: null,
         evolHash: "old-hash",
@@ -174,6 +174,34 @@ describe("planChangeCapture - pure planning logic", () => {
         path: "note.TXT",
         diskHash: "hash123",
         diskContent: "hello",
+        evolHash: null,
+        evolId: null,
+      };
+
+      const plan = planChangeCapture(state);
+
+      expect(plan.some((a) => a.type === "INSERT_EVOLU")).toBe(true);
+    });
+
+    test("WHEN md file has no evolu record THEN plan inserts normally", () => {
+      const state: ChangeCaptureState = {
+        path: "note.md",
+        diskHash: "hash123",
+        diskContent: "# Hello",
+        evolHash: null,
+        evolId: null,
+      };
+
+      const plan = planChangeCapture(state);
+
+      expect(plan.some((a) => a.type === "INSERT_EVOLU")).toBe(true);
+    });
+
+    test("WHEN file extension is uppercase .MD THEN plan inserts normally", () => {
+      const state: ChangeCaptureState = {
+        path: "note.MD",
+        diskHash: "hash123",
+        diskContent: "# Hello",
         evolHash: null,
         evolId: null,
       };

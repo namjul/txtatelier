@@ -15,8 +15,10 @@ import {
 } from "./actions";
 import type { ChangeCaptureState } from "./state-types";
 
+const TEXT_EXTENSIONS = new Set([".txt", ".md"]);
+
 export const isTxtFile = (filePath: string): boolean =>
-  extname(filePath).toLowerCase() === ".txt";
+  TEXT_EXTENSIONS.has(extname(filePath).toLowerCase());
 
 /**
  * Plan what actions to take when filesystem changes.
@@ -33,12 +35,12 @@ export const planChangeCapture = (
     return [skip("ignored-path", state.path)];
   }
 
-  // Only sync .txt files. Allow deletions of previously-synced non-txt records
-  // (evolId !== null) to pass through so they don't become ghost records in Evolu.
+  // Only sync text files (.txt, .md). Allow deletions of previously-synced non-text
+  // records (evolId !== null) to pass through so they don't become ghost records.
   if (!isTxtFile(state.path) && state.evolId === null) {
     return [
-      log("debug", `[capture:fs→evolu] Skipping non-txt file: ${state.path}`),
-      skip("not-txt-file", state.path),
+      log("debug", `[capture:fs→evolu] Skipping non-text file: ${state.path}`),
+      skip("not-text-file", state.path),
     ];
   }
 
