@@ -1,6 +1,7 @@
 import { mkdir, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { type Evolu, err, ok, type Result } from "@evolu/common";
+import type { OwnerId } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import type { ChangeCaptureError } from "../errors";
 import { isIgnoredRelativePath } from "../ignore";
@@ -111,6 +112,7 @@ export const decideReconcileAction = (
 export const reconcileStartupFilesystemState = async (
   evolu: EvoluDatabase,
   watchDir: string,
+  filesOwnerId: OwnerId,
 ): Promise<Result<ReconcileStats, ReconcileFatalError>> => {
   // Fatal check: ensure watchDir exists and is accessible
   try {
@@ -186,7 +188,7 @@ export const reconcileStartupFilesystemState = async (
     const preloadedExisting = fileRecordsMap.get(relativePath) ?? null;
 
     // captureChange handles both new files and content updates
-    const result = await captureChange(evolu, watchDir, absolutePath, preloadedExisting);
+    const result = await captureChange(evolu, watchDir, absolutePath, filesOwnerId, preloadedExisting);
     if (!result.ok) {
       // Per-file error: NOT fatal, add to stats and continue
       errors.push({ path: absolutePath, error: result.error });
@@ -224,7 +226,7 @@ export const reconcileStartupFilesystemState = async (
     logger.debug(`[reconcile:fs→evolu] Offline deletion detected: ${evolPath}`);
 
     const preloadedExisting = fileRecordsMap.get(evolPath) ?? null;
-    const result = await captureChange(evolu, watchDir, absolutePath, preloadedExisting);
+    const result = await captureChange(evolu, watchDir, absolutePath, filesOwnerId, preloadedExisting);
     if (!result.ok) {
       // Per-file error: NOT fatal, add to stats and continue
       errors.push({ path: absolutePath, error: result.error });
@@ -265,6 +267,7 @@ export const reconcileStartupFilesystemState = async (
 export const reconcileStartupEvoluState = async (
   evolu: EvoluDatabase,
   watchDir: string,
+  filesOwnerId: OwnerId,
 ): Promise<Result<ReconcileStats, ReconcileFatalError>> => {
   logger.debug("[reconcile:evolu→fs] Starting Evolu state reconciliation");
 
@@ -384,7 +387,7 @@ export const reconcileStartupEvoluState = async (
     const plan = planStateMaterialization(stateResult.value);
 
     // Step 2c: Execute plan
-    const results = await executePlan(evolu, watchDir, plan);
+    const results = await executePlan(evolu, watchDir, plan, filesOwnerId);
 
     // Count synced files (those with WRITE_FILE action)
     if (plan.some((a) => a.type === "WRITE_FILE")) {

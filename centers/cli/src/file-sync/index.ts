@@ -16,6 +16,7 @@ import {
   type Result,
   tryAsync,
 } from "@evolu/common";
+import type { ShardOwner } from "@evolu/common/local-first";
 import envPaths from "env-paths";
 import { env } from "../env";
 import { logger } from "../logger";
@@ -63,6 +64,7 @@ export interface OwnerSession {
   readonly evolu: Evolu<typeof Schema>;
   readonly flush: () => Promise<Result<void, FlushError>>;
   readonly owner: AppOwner;
+  readonly filesShardOwner: ShardOwner;
   readonly config: FileSyncConfig;
 }
 
@@ -96,6 +98,7 @@ export const createOwnerSession = async (
   return {
     evolu: client.evolu,
     owner: client.owner,
+    filesShardOwner: client.filesShardOwner,
     flush: client.flush,
     config: {
       dbPath: resolvedDbPath,
@@ -113,7 +116,7 @@ export const startFileSync = async (
 
   // Create base owner session
   const ownerSession = await createOwnerSession(config);
-  const { evolu, owner, flush: closeDb, config: resolvedConfig } = ownerSession;
+  const { evolu, owner, filesShardOwner, flush: closeDb, config: resolvedConfig } = ownerSession;
   const resolvedWatchDir = resolvedConfig.watchDir;
   const resolvedDbPath = resolvedConfig.dbPath;
   const resolvedrelayUrl = resolvedConfig.relayUrl;
@@ -183,7 +186,7 @@ export const startFileSync = async (
 
   // Startup sync: apply any Evolu changes that happened while offline (deletions/additions)
   // This must run BEFORE filesystem reconciliation to prevent re-adding deleted files
-  const evolResult = await reconcileStartupEvoluState(evolu, resolvedWatchDir);
+  const evolResult = await reconcileStartupEvoluState(evolu, resolvedWatchDir, filesShardOwner.id);
 
   if (!evolResult.ok) {
     // Fatal error in Evolu reconciliation - cannot proceed
@@ -205,6 +208,7 @@ export const startFileSync = async (
   const fsResult = await reconcileStartupFilesystemState(
     evolu,
     resolvedWatchDir,
+    filesShardOwner.id,
   );
 
   if (!fsResult.ok) {
@@ -231,7 +235,7 @@ export const startFileSync = async (
   const stopWatching = await startWatching(
     resolvedWatchDir,
     async (filePath) => {
-      const result = await captureChange(evolu, resolvedWatchDir, filePath);
+      const result = await captureChange(evolu, resolvedWatchDir, filePath, filesShardOwner.id);
       if (!result.ok) {
         failedSyncs.add(filePath);
         logger.error(
@@ -243,9 +247,9 @@ export const startFileSync = async (
   );
 
   // Start State Materialization: apply replicated rows to filesystem
-  const stopSyncing = startStateMaterialization(evolu, resolvedWatchDir, {
+  const stopSyncing = startStateMaterialization(evolu, resolvedWatchDir, filesShardOwner.id, {
     onConflictArtifactCreated: async (conflictPath: string) => {
-      const result = await captureChange(evolu, resolvedWatchDir, conflictPath);
+      const result = await captureChange(evolu, resolvedWatchDir, conflictPath, filesShardOwner.id);
       if (!result.ok) {
         failedSyncs.add(conflictPath);
         logger.error(
@@ -262,6 +266,7 @@ export const startFileSync = async (
   return ok({
     evolu,
     owner,
+    filesShardOwner,
     flush: closeDb,
     failedSyncs,
     startupReconciliation: {

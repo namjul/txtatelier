@@ -11,6 +11,7 @@ import {
   tryAsync,
   trySync,
 } from "@evolu/common";
+import type { OwnerId } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import type { Schema } from "../evolu-schema";
 import {
@@ -41,6 +42,7 @@ export const executeAction = async (
   evolu: EvoluDatabase,
   watchDir: string,
   action: SyncAction,
+  filesOwnerId: OwnerId,
 ): Promise<Result<void, ExecutionError>> => {
   switch (action.type) {
     case "WRITE_FILE": {
@@ -81,11 +83,15 @@ export const executeAction = async (
     case "INSERT_EVOLU": {
       return trySync(
         () => {
-          evolu.insert("file", {
-            path: action.path,
-            content: action.content || null,
-            contentHash: action.hash,
-          });
+          evolu.insert(
+            "file",
+            {
+              path: action.path,
+              content: action.content || null,
+              contentHash: action.hash,
+            },
+            { ownerId: filesOwnerId },
+          );
         },
         (cause): ExecutionError => ({
           type: "ExecutionFailed",
@@ -98,12 +104,16 @@ export const executeAction = async (
     case "UPDATE_EVOLU": {
       return trySync(
         () => {
-          evolu.update("file", {
-            id: action.id,
-            path: action.path,
-            content: action.content || null,
-            contentHash: action.hash,
-          });
+          evolu.update(
+            "file",
+            {
+              id: action.id,
+              path: action.path,
+              content: action.content || null,
+              contentHash: action.hash,
+            },
+            { ownerId: filesOwnerId },
+          );
         },
         (cause): ExecutionError => ({
           type: "ExecutionFailed",
@@ -116,10 +126,14 @@ export const executeAction = async (
     case "MARK_DELETED_EVOLU": {
       return trySync(
         () => {
-          evolu.update("file", {
-            id: action.id,
-            isDeleted: sqliteTrue,
-          });
+          evolu.update(
+            "file",
+            {
+              id: action.id,
+              isDeleted: sqliteTrue,
+            },
+            { ownerId: filesOwnerId },
+          );
         },
         (cause): ExecutionError => ({
           type: "ExecutionFailed",
@@ -184,11 +198,12 @@ export const executePlan = async (
   evolu: EvoluDatabase,
   watchDir: string,
   actions: readonly SyncAction[],
+  filesOwnerId: OwnerId,
 ): Promise<readonly Result<void, ExecutionError>[]> => {
   const results: Result<void, ExecutionError>[] = [];
 
   for (const action of actions) {
-    const result = await executeAction(evolu, watchDir, action);
+    const result = await executeAction(evolu, watchDir, action, filesOwnerId);
     results.push(result);
 
     // Continue executing even on error for resilience

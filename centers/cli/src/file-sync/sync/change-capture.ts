@@ -4,6 +4,7 @@
 import { stat } from "node:fs/promises";
 import { relative } from "node:path";
 import { type Evolu, err, ok, type Result } from "@evolu/common";
+import type { OwnerId } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import { MAX_FILE_SIZE_BYTES } from "../constants";
 import type { ChangeCaptureError } from "../errors";
@@ -41,6 +42,7 @@ export const captureChange = async (
   evolu: EvoluDatabase,
   watchDir: string,
   absolutePath: string,
+  filesOwnerId: OwnerId,
   preloadedExisting?: { id: unknown; contentHash: unknown } | null,
 ): Promise<Result<void, ChangeCaptureError>> => {
   const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
@@ -106,7 +108,7 @@ export const captureChange = async (
   const plan = planChangeCapture(stateResult.value);
 
   // Step 3: Execute plan (I/O)
-  const results = await executePlan(evolu, watchDir, plan);
+  const results = await executePlan(evolu, watchDir, plan, filesOwnerId);
 
   // Check for execution errors
   const firstError = results.find((r) => !r.ok);

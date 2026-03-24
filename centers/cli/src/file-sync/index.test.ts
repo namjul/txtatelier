@@ -188,7 +188,7 @@ describe("GIVEN sync is running", () => {
         path: NonEmptyString1000.orThrow("remote.txt"),
         content: "from evolu",
         contentHash: NonEmptyString100.orThrow("fake-hash"),
-      });
+      }, { ownerId: session.filesShardOwner.id });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -213,7 +213,7 @@ describe("GIVEN sync is running", () => {
         path: NonEmptyString1000.orThrow("update.txt"),
         content: "version 1",
         contentHash: NonEmptyString100.orThrow("hash-v1"),
-      });
+      }, { ownerId: session.filesShardOwner.id });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -225,7 +225,7 @@ describe("GIVEN sync is running", () => {
         path: NonEmptyString1000.orThrow("update.txt"),
         content: "version 2",
         contentHash: NonEmptyString100.orThrow("hash-v2"),
-      });
+      }, { ownerId: session.filesShardOwner.id });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -250,7 +250,7 @@ describe("GIVEN sync is running", () => {
         path: NonEmptyString1000.orThrow("remote-delete.txt"),
         content: "will be deleted",
         contentHash: NonEmptyString100.orThrow("hash-delete"),
-      });
+      }, { ownerId: session.filesShardOwner.id });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -263,7 +263,7 @@ describe("GIVEN sync is running", () => {
       session.evolu.update("file", {
         id: fileId,
         isDeleted: sqliteTrue,
-      });
+      }, { ownerId: session.filesShardOwner.id });
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -302,7 +302,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
-      session1.evolu.update("file", { id: fileId!, isDeleted: sqliteTrue });
+      session1.evolu.update("file", { id: fileId!, isDeleted: sqliteTrue }, { ownerId: session1.filesShardOwner.id });
       await session1.flush();
       await session1.stop();
 
@@ -330,7 +330,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         path: NonEmptyString1000.orThrow("offline-new.txt"),
         content: "added offline",
         contentHash: NonEmptyString100.orThrow("hash-offline"),
-      });
+      }, { ownerId: session1.filesShardOwner.id });
       await session1.flush();
       await session1.stop();
 
@@ -394,7 +394,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         path: NonEmptyString1000.orThrow("synced.txt"),
         content: "evolu edit",
         contentHash: NonEmptyString100.orThrow("hash-conflict"),
-      });
+      }, { ownerId: session1.filesShardOwner.id });
       await session1.flush();
       await session1.stop();
 
@@ -431,7 +431,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       session1.evolu.update("file", {
         id: fileId!,
         isDeleted: sqliteTrue,
-      });
+      }, { ownerId: session1.filesShardOwner.id });
       await session1.flush();
       await session1.stop();
 
@@ -472,7 +472,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         path: NonEmptyString1000.orThrow("synced.txt"),
         content: "evolu edit",
         contentHash: NonEmptyString100.orThrow("hash-conflict"),
-      });
+      }, { ownerId: session1.filesShardOwner.id });
       await session1.flush();
       await session1.stop();
 

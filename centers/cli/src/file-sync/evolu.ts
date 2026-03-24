@@ -12,6 +12,10 @@ import {
   SimpleName,
   tryAsync,
 } from "@evolu/common";
+import {
+  deriveShardOwner,
+  type ShardOwner,
+} from "@evolu/common/local-first";
 import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { Schema } from "./evolu-schema";
@@ -27,6 +31,7 @@ let _cached: {
   evolu: EvoluDatabase;
   flush: () => Promise<Result<void, FlushError>>;
   owner: AppOwner;
+  filesShardOwner: ShardOwner;
 } | null = null;
 
 export const createEvoluClient = async ({
@@ -67,6 +72,9 @@ export const createEvoluClient = async ({
   // Get owner (Evolu handles persistence internally)
   const owner = await evolu.appOwner;
 
+  const filesShardOwner = deriveShardOwner(owner, ["files", 1]);
+  evolu.useOwner(filesShardOwner);
+
   // Flush function - for now, just export and write the database
   const flush = async (): Promise<Result<void, FlushError>> => {
     const exportResult = await tryAsync(
@@ -93,7 +101,7 @@ export const createEvoluClient = async ({
     return ok();
   };
 
-  _cached = { evolu, flush, owner };
+  _cached = { evolu, flush, owner, filesShardOwner };
 
   return _cached;
 };

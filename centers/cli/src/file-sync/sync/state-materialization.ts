@@ -10,7 +10,7 @@ import {
   type Result,
   tryAsync,
 } from "@evolu/common";
-import type { TimestampBytes } from "@evolu/common/local-first";
+import type { OwnerId, TimestampBytes } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import { createConflictFile } from "../conflicts";
 import type { StateMaterializationError } from "../errors";
@@ -55,6 +55,7 @@ const saveHistoryCursor = (evolu: EvoluDatabase, ts: TimestampBytes): void => {
 export const startStateMaterialization = (
   evolu: EvoluDatabase,
   watchDir: string,
+  filesOwnerId: OwnerId,
   options?: StateMaterializationOptions,
 ): (() => void) => {
   logger.debug("[materialize:evolu→fs] Starting state materialization");
@@ -70,7 +71,7 @@ export const startStateMaterialization = (
     logger.debug(
       `[state:subscription] Initial load: ${rows.length} existing files`,
     );
-    await syncEvoluToFiles(evolu, watchDir, rows, options);
+    await syncEvoluToFiles(evolu, watchDir, rows, filesOwnerId, options);
 
     // Set cursor to current timestamp to avoid replaying old history
     // Query latest timestamp from evolu_history
@@ -186,7 +187,7 @@ export const startStateMaterialization = (
           }
 
           // Process content changes
-          await syncEvoluToFiles(evolu, watchDir, changedRows, options);
+          await syncEvoluToFiles(evolu, watchDir, changedRows, filesOwnerId, options);
         }
 
         // Process deletion events
@@ -276,6 +277,7 @@ const syncEvoluToFiles = async (
   evolu: EvoluDatabase,
   watchDir: string,
   rows: readonly FileRow[],
+  filesOwnerId: OwnerId,
   options?: StateMaterializationOptions,
 ): Promise<void> => {
   const total = rows.length;
@@ -306,7 +308,7 @@ const syncEvoluToFiles = async (
     const preloadedHash = syncStateMap.has(row.path)
       ? (syncStateMap.get(row.path) ?? null)
       : null;
-    const result = await syncEvoluRowToFile(evolu, watchDir, row, options, preloadedHash);
+    const result = await syncEvoluRowToFile(evolu, watchDir, row, filesOwnerId, options, preloadedHash);
 
     if (!result.ok) {
       failedCount += 1;
@@ -356,6 +358,7 @@ const syncEvoluRowToFile = async (
   evolu: EvoluDatabase,
   watchDir: string,
   row: FileRow,
+  filesOwnerId: OwnerId,
   options?: StateMaterializationOptions,
   preloadedLastAppliedHash?: string | null,
 ): Promise<Result<void, StateMaterializationError>> => {
@@ -378,7 +381,7 @@ const syncEvoluRowToFile = async (
   const plan = planStateMaterialization(stateResult.value);
 
   // Step 3: Execute plan (I/O)
-  const results = await executePlan(evolu, watchDir, plan);
+  const results = await executePlan(evolu, watchDir, plan, filesOwnerId);
 
   // Step 4: Handle conflict notification if needed
   const conflictAction = plan.find((a) => a.type === "CREATE_CONFLICT");
