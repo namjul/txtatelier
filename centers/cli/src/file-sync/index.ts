@@ -25,6 +25,7 @@ import { createEvoluClient } from "./evolu";
 import type { Schema } from "./evolu-schema";
 import {
   captureChange,
+  type FileSyncContext,
   type ReconcileFatalError,
   type ReconcileStats,
   reconcileStartupEvoluState,
@@ -121,6 +122,12 @@ export const startFileSync = async (
   const resolvedDbPath = resolvedConfig.dbPath;
   const resolvedrelayUrl = resolvedConfig.relayUrl;
 
+  const syncCtx: FileSyncContext = {
+    evolu,
+    watchDir: resolvedWatchDir,
+    filesOwnerId: filesShardOwner.id,
+  };
+
   if (restoreMnemonic) {
     logger.debug("[lifecycle] Restoring from provided mnemonic...");
 
@@ -186,7 +193,7 @@ export const startFileSync = async (
 
   // Startup sync: apply any Evolu changes that happened while offline (deletions/additions)
   // This must run BEFORE filesystem reconciliation to prevent re-adding deleted files
-  const evolResult = await reconcileStartupEvoluState(evolu, resolvedWatchDir, filesShardOwner.id);
+  const evolResult = await reconcileStartupEvoluState(syncCtx);
 
   if (!evolResult.ok) {
     // Fatal error in Evolu reconciliation - cannot proceed
@@ -205,11 +212,7 @@ export const startFileSync = async (
 
   // Phase 5 startup reconciliation: reflect pre-existing filesystem files into
   // Evolu before both loops start, now that watcher ignores initial events.
-  const fsResult = await reconcileStartupFilesystemState(
-    evolu,
-    resolvedWatchDir,
-    filesShardOwner.id,
-  );
+  const fsResult = await reconcileStartupFilesystemState(syncCtx);
 
   if (!fsResult.ok) {
     // Fatal error in filesystem reconciliation - cannot proceed
@@ -235,7 +238,7 @@ export const startFileSync = async (
   const stopWatching = await startWatching(
     resolvedWatchDir,
     async (filePath) => {
-      const result = await captureChange(evolu, resolvedWatchDir, filePath, filesShardOwner.id);
+      const result = await captureChange(syncCtx, filePath);
       if (!result.ok) {
         failedSyncs.add(filePath);
         logger.error(
@@ -247,9 +250,9 @@ export const startFileSync = async (
   );
 
   // Start State Materialization: apply replicated rows to filesystem
-  const stopSyncing = startStateMaterialization(evolu, resolvedWatchDir, filesShardOwner.id, {
+  const stopSyncing = startStateMaterialization(syncCtx, {
     onConflictArtifactCreated: async (conflictPath: string) => {
-      const result = await captureChange(evolu, resolvedWatchDir, conflictPath, filesShardOwner.id);
+      const result = await captureChange(syncCtx, conflictPath);
       if (!result.ok) {
         failedSyncs.add(conflictPath);
         logger.error(

@@ -1,4 +1,5 @@
 export { captureChange } from "./change-capture";
+export type { FileSyncContext } from "./context";
 export {
   type ReconcileFatalError,
   type ReconcileStats,

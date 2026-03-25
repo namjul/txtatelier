@@ -3,25 +3,15 @@
 
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  type Evolu,
-  ok,
-  type Result,
-  sqliteTrue,
-  tryAsync,
-  trySync,
-} from "@evolu/common";
-import type { OwnerId } from "@evolu/common/local-first";
+import { ok, type Result, sqliteTrue, tryAsync, trySync } from "@evolu/common";
 import { logger } from "../../logger";
-import type { Schema } from "../evolu-schema";
 import {
   clearTrackedHash as clearTrackedHashState,
   setTrackedHash as setTrackedHashState,
 } from "../state";
 import { writeFileAtomic } from "../write";
 import type { SyncAction } from "./actions";
-
-type EvoluDatabase = Evolu<typeof Schema>;
+import type { FileSyncContext } from "./context";
 
 interface ExecutionError {
   readonly type: "ExecutionFailed";
@@ -33,17 +23,15 @@ interface ExecutionError {
  * Execute a single sync action.
  * Dispatches to appropriate I/O operation based on action type.
  *
- * @param evolu - Evolu database instance
- * @param watchDir - Watch directory (for absolute paths)
+ * @param ctx - Sync environment (database, watch root, files owner)
  * @param action - Action to execute
  * @returns Result of execution
  */
 export const executeAction = async (
-  evolu: EvoluDatabase,
-  watchDir: string,
+  ctx: FileSyncContext,
   action: SyncAction,
-  filesOwnerId: OwnerId,
 ): Promise<Result<void, ExecutionError>> => {
+  const { evolu, watchDir, filesOwnerId } = ctx;
   switch (action.type) {
     case "WRITE_FILE": {
       const absolutePath = join(watchDir, action.path);
@@ -189,21 +177,18 @@ export const executeAction = async (
  * Execute a plan (sequence of actions).
  * Executes actions sequentially, continues on error.
  *
- * @param evolu - Evolu database instance
- * @param watchDir - Watch directory
+ * @param ctx - Sync environment (database, watch root, files owner)
  * @param actions - Array of actions to execute
  * @returns Array of results (one per action)
  */
 export const executePlan = async (
-  evolu: EvoluDatabase,
-  watchDir: string,
+  ctx: FileSyncContext,
   actions: readonly SyncAction[],
-  filesOwnerId: OwnerId,
 ): Promise<readonly Result<void, ExecutionError>[]> => {
   const results: Result<void, ExecutionError>[] = [];
 
   for (const action of actions) {
-    const result = await executeAction(evolu, watchDir, action, filesOwnerId);
+    const result = await executeAction(ctx, action);
     results.push(result);
 
     // Continue executing even on error for resilience

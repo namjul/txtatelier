@@ -1,20 +1,18 @@
 import { mkdir, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { type Evolu, err, ok, type Result } from "@evolu/common";
-import type { OwnerId } from "@evolu/common/local-first";
+import { err, ok, type Result } from "@evolu/common";
 import { logger } from "../../logger";
 import type { ChangeCaptureError } from "../errors";
 import { isIgnoredRelativePath } from "../ignore";
-import type { FilePath, Schema } from "../evolu-schema";
+import type { FilePath } from "../evolu-schema";
 import { captureChange } from "./change-capture";
 import { isTxtFile } from "./change-capture-plan";
+import type { FileSyncContext } from "./context";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { applyRemoteDeletionToFilesystem } from "./state-materialization";
 import { planStateMaterialization } from "./state-materialization-plan";
 import { createAllFileRecordsQuery, createAllFilesQuery, createAllSyncStateQuery, createDeletedPathsQuery, type FileRow } from "../evolu-queries";
-
-type EvoluDatabase = Evolu<typeof Schema>;
 
 /**
  * Fatal errors that prevent reconciliation from proceeding.
@@ -110,10 +108,9 @@ export const decideReconcileAction = (
 };
 
 export const reconcileStartupFilesystemState = async (
-  evolu: EvoluDatabase,
-  watchDir: string,
-  filesOwnerId: OwnerId,
+  ctx: FileSyncContext,
 ): Promise<Result<ReconcileStats, ReconcileFatalError>> => {
+  const { evolu, watchDir } = ctx;
   // Fatal check: ensure watchDir exists and is accessible
   try {
     await mkdir(watchDir, { recursive: true });
@@ -188,7 +185,7 @@ export const reconcileStartupFilesystemState = async (
     const preloadedExisting = fileRecordsMap.get(relativePath) ?? null;
 
     // captureChange handles both new files and content updates
-    const result = await captureChange(evolu, watchDir, absolutePath, filesOwnerId, preloadedExisting);
+    const result = await captureChange(ctx, absolutePath, preloadedExisting);
     if (!result.ok) {
       // Per-file error: NOT fatal, add to stats and continue
       errors.push({ path: absolutePath, error: result.error });
@@ -226,7 +223,7 @@ export const reconcileStartupFilesystemState = async (
     logger.debug(`[reconcile:fs→evolu] Offline deletion detected: ${evolPath}`);
 
     const preloadedExisting = fileRecordsMap.get(evolPath) ?? null;
-    const result = await captureChange(evolu, watchDir, absolutePath, filesOwnerId, preloadedExisting);
+    const result = await captureChange(ctx, absolutePath, preloadedExisting);
     if (!result.ok) {
       // Per-file error: NOT fatal, add to stats and continue
       errors.push({ path: absolutePath, error: result.error });
@@ -265,10 +262,9 @@ export const reconcileStartupFilesystemState = async (
 };
 
 export const reconcileStartupEvoluState = async (
-  evolu: EvoluDatabase,
-  watchDir: string,
-  filesOwnerId: OwnerId,
+  ctx: FileSyncContext,
 ): Promise<Result<ReconcileStats, ReconcileFatalError>> => {
+  const { evolu, watchDir } = ctx;
   logger.debug("[reconcile:evolu→fs] Starting Evolu state reconciliation");
 
   // Track stats for observability
@@ -309,8 +305,7 @@ export const reconcileStartupEvoluState = async (
     const lastAppliedHash = syncStateMap.get(row.path as string) ?? "";
 
     const result = await applyRemoteDeletionToFilesystem(
-      evolu,
-      watchDir,
+      ctx,
       row.path as string,
       lastAppliedHash,
       {},
@@ -387,7 +382,7 @@ export const reconcileStartupEvoluState = async (
     const plan = planStateMaterialization(stateResult.value);
 
     // Step 2c: Execute plan
-    const results = await executePlan(evolu, watchDir, plan, filesOwnerId);
+    const results = await executePlan(ctx, plan);
 
     // Count synced files (those with WRITE_FILE action)
     if (plan.some((a) => a.type === "WRITE_FILE")) {

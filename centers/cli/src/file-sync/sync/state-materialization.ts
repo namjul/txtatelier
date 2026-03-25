@@ -2,7 +2,6 @@ import { access, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import {
   createIdFromString,
-  type Evolu,
   err,
   type IdBytes,
   idBytesToId,
@@ -10,20 +9,19 @@ import {
   type Result,
   tryAsync,
 } from "@evolu/common";
-import type { OwnerId, TimestampBytes } from "@evolu/common/local-first";
+import type { TimestampBytes } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import { createConflictFile } from "../conflicts";
 import type { StateMaterializationError } from "../errors";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
-import type { FileId, Schema } from "../evolu-schema";
+import type { FileId } from "../evolu-schema";
 import { clearTrackedHash, getTrackedHash } from "../state";
+import type { EvoluDatabase, FileSyncContext } from "./context";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { planStateMaterialization } from "./state-materialization-plan";
 import { createAllFilesQuery, createAllSyncStateQuery, createChangedFilesQuery, createDeletedFilesWithIdsQuery, createHistoryChangesQuery, createHistoryCursorQuery, createLatestHistoryQuery, type FileRow } from "../evolu-queries";
-
-type EvoluDatabase = Evolu<typeof Schema>;
 
 
 export interface StateMaterializationOptions {
@@ -53,11 +51,10 @@ const saveHistoryCursor = (evolu: EvoluDatabase, ts: TimestampBytes): void => {
 // ========== State Materialization ==========
 
 export const startStateMaterialization = (
-  evolu: EvoluDatabase,
-  watchDir: string,
-  filesOwnerId: OwnerId,
+  ctx: FileSyncContext,
   options?: StateMaterializationOptions,
 ): (() => void) => {
+  const { evolu } = ctx;
   logger.debug("[materialize:evolu→fs] Starting state materialization");
 
   const allFilesQuery = createAllFilesQuery(evolu);
@@ -71,7 +68,7 @@ export const startStateMaterialization = (
     logger.debug(
       `[state:subscription] Initial load: ${rows.length} existing files`,
     );
-    await syncEvoluToFiles(evolu, watchDir, rows, filesOwnerId, options);
+    await syncEvoluToFiles(ctx, rows, options);
 
     // Set cursor to current timestamp to avoid replaying old history
     // Query latest timestamp from evolu_history
@@ -187,7 +184,7 @@ export const startStateMaterialization = (
           }
 
           // Process content changes
-          await syncEvoluToFiles(evolu, watchDir, changedRows, filesOwnerId, options);
+          await syncEvoluToFiles(ctx, changedRows, options);
         }
 
         // Process deletion events
@@ -226,8 +223,7 @@ export const startStateMaterialization = (
             }
 
             const deleteResult = await applyRemoteDeletionToFilesystem(
-              evolu,
-              watchDir,
+              ctx,
               path as string,
               lastAppliedHashResult.value ?? "",
               options,
@@ -274,12 +270,11 @@ export const startStateMaterialization = (
 const MATERIALIZE_CONCURRENCY = 20;
 
 const syncEvoluToFiles = async (
-  evolu: EvoluDatabase,
-  watchDir: string,
+  ctx: FileSyncContext,
   rows: readonly FileRow[],
-  filesOwnerId: OwnerId,
   options?: StateMaterializationOptions,
 ): Promise<void> => {
+  const { evolu } = ctx;
   const total = rows.length;
   if (total === 0) return;
 
@@ -308,7 +303,7 @@ const syncEvoluToFiles = async (
     const preloadedHash = syncStateMap.has(row.path)
       ? (syncStateMap.get(row.path) ?? null)
       : null;
-    const result = await syncEvoluRowToFile(evolu, watchDir, row, filesOwnerId, options, preloadedHash);
+    const result = await syncEvoluRowToFile(ctx, row, options, preloadedHash);
 
     if (!result.ok) {
       failedCount += 1;
@@ -355,13 +350,12 @@ const syncEvoluToFiles = async (
 };
 
 const syncEvoluRowToFile = async (
-  evolu: EvoluDatabase,
-  watchDir: string,
+  ctx: FileSyncContext,
   row: FileRow,
-  filesOwnerId: OwnerId,
   options?: StateMaterializationOptions,
   preloadedLastAppliedHash?: string | null,
 ): Promise<Result<void, StateMaterializationError>> => {
+  const { evolu, watchDir } = ctx;
   // Step 1: Collect state (I/O)
   const stateResult = await collectMaterializationState(evolu, watchDir, row, preloadedLastAppliedHash);
 
@@ -381,7 +375,7 @@ const syncEvoluRowToFile = async (
   const plan = planStateMaterialization(stateResult.value);
 
   // Step 3: Execute plan (I/O)
-  const results = await executePlan(evolu, watchDir, plan, filesOwnerId);
+  const results = await executePlan(ctx, plan);
 
   // Step 4: Handle conflict notification if needed
   const conflictAction = plan.find((a) => a.type === "CREATE_CONFLICT");
@@ -409,12 +403,12 @@ const syncEvoluRowToFile = async (
 };
 
 export const applyRemoteDeletionToFilesystem = async (
-  evolu: EvoluDatabase,
-  watchDir: string,
+  ctx: FileSyncContext,
   path: string,
   lastAppliedHash: string,
   options?: StateMaterializationOptions,
 ): Promise<Result<void, StateMaterializationError>> => {
+  const { evolu, watchDir } = ctx;
   const absolutePath = join(watchDir, path);
 
   const existsResult = await tryAsync(

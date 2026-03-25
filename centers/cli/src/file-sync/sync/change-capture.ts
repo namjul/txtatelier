@@ -3,17 +3,14 @@
 
 import { stat } from "node:fs/promises";
 import { relative } from "node:path";
-import { type Evolu, err, ok, type Result } from "@evolu/common";
-import type { OwnerId } from "@evolu/common/local-first";
+import { err, ok, type Result } from "@evolu/common";
 import { logger } from "../../logger";
 import { MAX_FILE_SIZE_BYTES } from "../constants";
 import type { ChangeCaptureError } from "../errors";
-import type { Schema } from "../evolu-schema";
 import { planChangeCapture } from "./change-capture-plan";
+import type { FileSyncContext } from "./context";
 import { executePlan } from "./executor";
 import { collectChangeCaptureState } from "./state-collector";
-
-type EvoluDatabase = Evolu<typeof Schema>;
 
 /**
  * Format bytes to human-readable size using binary units (1024-based).
@@ -33,18 +30,16 @@ const formatBytes = (bytes: number): string => {
  * Capture filesystem changes and sync to Evolu.
  * Uses plan-execute pattern: collect state → plan actions → execute plan.
  *
- * @param evolu - Evolu database instance
- * @param watchDir - Watch directory
+ * @param ctx - Sync environment (database, watch root, files owner)
  * @param absolutePath - Absolute path to changed file
  * @returns Result of sync operation
  */
 export const captureChange = async (
-  evolu: EvoluDatabase,
-  watchDir: string,
+  ctx: FileSyncContext,
   absolutePath: string,
-  filesOwnerId: OwnerId,
   preloadedExisting?: { id: unknown; contentHash: unknown } | null,
 ): Promise<Result<void, ChangeCaptureError>> => {
+  const { evolu, watchDir } = ctx;
   const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
 
   // Safety checks for path validity
@@ -108,7 +103,7 @@ export const captureChange = async (
   const plan = planChangeCapture(stateResult.value);
 
   // Step 3: Execute plan (I/O)
-  const results = await executePlan(evolu, watchDir, plan, filesOwnerId);
+  const results = await executePlan(ctx, plan);
 
   // Check for execution errors
   const firstError = results.find((r) => !r.ok);

@@ -61,12 +61,17 @@ export const collectChangeCaptureState = async (
         existing = rows[0];
       }
 
+      const evolHash =
+        typeof existing?.contentHash === "string" ? existing.contentHash : null;
+      const evolId =
+        typeof existing?.id === "string" ? existing.id : null;
+
       return {
         path: relativePath,
         diskHash,
         diskContent,
-        evolHash: existing?.contentHash ?? null,
-        evolId: existing?.id ?? null,
+        evolHash,
+        evolId,
       };
     },
     (cause): StateCollectionError => ({
