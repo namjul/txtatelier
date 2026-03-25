@@ -2,21 +2,21 @@
 
 ## Approach
 <!--
-Describe the technical direction in plain terms.
-Not a full spec — just enough to understand the shape of the solution.
+Shape of the solution in plain terms.
+Focus on architecture and approach, not line-by-line implementation.
 -->
 
-## Why this approach?
+## Rationale
 <!--
-What makes this the right direction over alternatives?
+Why this direction over alternatives.
+Good design docs explain the "why" behind technical decisions.
 If you considered other approaches and rejected them, say why.
-Not looking for certainty here — just your current best thinking.
+Not looking for certainty — just your current best thinking.
 -->
 
-## What are our load-bearing assumptions about the approach?
+## Load-bearing assumptions
 <!--
-State the technical bets you are making.
-These are the things that could turn out to be wrong.
+Technical bets that could be wrong.
 If any of these prove false during implementation, update this document.
 -->
 
@@ -28,7 +28,7 @@ A risk is not the same as an assumption — it's what could hurt us
 even when we're right about the approach.
 -->
 
-## What we are not doing
+## Out of scope
 <!--
 Explicitly name approaches or scope you are leaving out.
 This prevents scope creep and helps future readers understand the boundaries.
@@ -36,13 +36,13 @@ This prevents scope creep and helps future readers understand the boundaries.
 
 ## Known unknowns
 <!--
-What technical questions are still open?
-What might you need to figure out during implementation?
+Technical questions still open.
 No need to resolve these now — just name them so they don't get forgotten.
 -->
 
-## Co-variance: what else might this touch?
+## Co-variance
 <!--
+What else this motion will touch beyond the obvious structures.
 Which parts of the codebase will this touch beyond the obvious?
 Think about: what might break, what needs updating, what will behave differently.
 Don't overthink — just name what comes to mind.

@@ -1,82 +1,263 @@
 # openspec/schemas/attractor-protocol/schema.yaml
 name: attractor-protocol
 version: 1
-description: >
+description: |
   Living systems intervention workflow.
-  Changes are hypotheses. Implementation is testing.
+  Gestures are hypotheses. Implementation is testing.
   Learning is the goal, not shipping.
 
-artifacts:
-  - id: explore
-    generates: explore.md
-    description: >
-      Pre-claim investigation. For when you notice something
-      but can't yet make a falsifiable claim.
-      Optional — skip if you already know what you're intervening in.
-    template: explore.md
-    requires: []
-    optional: true
+  COGNITION: Motion in co-variant relations
 
+  This workflow applies the same pattern at two scales:
+
+  1. EXPLORATION (openspec-explore mode): Cognitive motion—asking questions,
+     challenging assumptions, following threads—to establish coherent schema
+     in thinking space.
+
+  2. IMPLEMENTATION (this workflow): System motion—creating change, observing
+     co-variances—to establish coherent schema in the system.
+
+  The boundary is epistemic, not procedural: exploration continues until a
+  falsifiable claim emerges; then motion shifts from thinking to the system.
+
+  Both modes establish structure through observing what co-varies with motion.
+
+  FLOW:
+
+      EXPLORATION          IMPLEMENTATION           LEARNING
+   (cognitive motion)  →  (system motion)      →  (schema in specs/)
+   openspec-explore        gesture.md
+   (always available)      contact-test.md
+                            design.md
+                            tasks (motion)
+                            evidence (optional)
+                            specs (back-propagated during apply)
+
+  Transition: When claim becomes falsifiable, motion shifts from thinking to system.
+  Result: Coherent schema established through accumulated co-variances.
+
+artifacts:
   - id: gesture
     generates: gesture.md
-    description: >
-      The gesture we are making in the system. What we are gesturing
-      toward, what type of gesture, what are the load-bearing assumptions,
-      and what evidence motivated this.
+    description: The falsifiable hypothesis we are testing about the system.
     template: gesture.md
+    instruction: |
+      Create a gesture document that makes a specific, testable claim about the system.
+
+      Sections:
+      - **Gesture type**: strengthen | create | dissolve | repair | revision | simplify | feedback
+        - strengthen: enhance existing structure
+        - create: introduce new structure
+        - dissolve: remove dead structure
+        - repair: fix broken structure
+        - revision: fundamentally change structure
+        - simplify: reduce complexity
+        - feedback: observe without changing
+
+      - **What are we gesturing toward?**: Name the structure this touches.
+        Something users would notice if gone. Examples: "color-picker", "undo-flow".
+
+      - **Claim**: Falsifiable prediction. "Users will do X" not "This will improve."
+
+      - **What made us do this?**: Raw observation that brought you here.
+
+      - **Load-bearing assumptions**: 2-3 things that must be true. If false, gesture fails.
+
+      - **Structures**: Patterns we anticipate might co-vary with this motion
+        - **New structures**: List structures being anticipated. Patterns not yet documented in openspec/specs/.
+          Will be established through motion and documented under this change's `specs/` if they cohere.
+        - **Anticipated co-variances**: List existing patterns we hypothesize that
+          will be affected. Check openspec/specs/ for existing documentation.
+          Leave empty if no patterns are expected to change at the structure level.
+        These are hypotheses, not commitments. The motion will reveal which structures
+        actually co-vary. Document all observations (anticipated and unanticipated)
+        in `openspec/changes/<this-change>/specs/<capability>/spec.md` after apply completes.
+
+      - **Co-variance**: What else might shift?
+
+      Keep it to 1 page. The gesture is a hypothesis; implementation tests it.
     requires: []
 
   - id: contact-test
     generates: contact-test.md
-    description: >
-      How we will know if the claim is true or false.
-      Must be falsifiable. Must specify evidence tier.
+    description: How we will observe co-variances to test the claim.
     template: contact-test.md
+    instruction: |
+      Create falsifiable test criteria for the gesture's claim.
+
+      Sections:
+      - **Evidence tier**: proximal | medial | distal
+      - **What would confirm**: Observable if claim is true
+      - **What would falsify**: Observable if claim is false
+      - **How we check**: The actual action to take
+      - **When we check**: Date or condition defining learnable timeline
+
+      The contact test must be executable without interpretation.
     requires:
       - gesture
 
-  - id: specs
-    generates: specs/
-    description: >
-      Delta specs describing how behavior changes.
-      Not requirements — descriptions of what the system
-      will do differently after this intervention.
-    template: specs.md
-    requires:
-      - contact-test
-
   - id: design
     generates: design.md
-    description: >
-      Technical direction stated as assumptions about approach.
-      Not a plan — a hypothesis about implementation.
+    description: Technical approach and assumptions about how to create motion.
     template: design.md
+    instruction: |
+      Create the design document that explains HOW to implement the change.
+
+      When to include design.md (create only if any apply):
+      - Cross-cutting motion (touches multiple structures) or new architectural pattern
+      - New external dependency or significant data model changes
+      - Security, performance, or migration complexity
+      - Ambiguity that benefits from technical direction before coding
+
+      If the gesture is straightforward and the approach is obvious from the claim,
+      you may create a minimal design.md with just the Approach section.
+
+      Sections:
+      - **Approach**: Shape of the solution in plain terms.
+        Focus on architecture and approach, not line-by-line implementation.
+      - **Rationale**: Why this direction over alternatives.
+        Good design docs explain the "why" behind technical decisions.
+      - **Load-bearing assumptions**: Technical bets that could be wrong
+      - **Risks and trade-offs**: What could go wrong even if right
+      - **Out of scope**: Scope deliberately left out
+      - **Known unknowns**: Questions still open
+      - **Co-variance**: What else might this motion touch?
+
+      This is a hypothesis about implementation, not a plan.
     requires:
-      - specs
+      - gesture
 
   - id: tasks
     generates: tasks.md
-    description: >
-      Implementation steps with co-variance notes.
-      Each task identifies what else might change as a result.
+    description: System motion—creating change and observing co-variances.
     template: tasks.md
+    instruction: |
+      Create the task list that breaks down the implementation work.
+
+      **IMPORTANT: Follow the template below exactly.** The apply phase parses
+      checkbox format to track progress. Tasks not using `- [ ]` won't be tracked.
+
+      Guidelines:
+      - Group related tasks under ## numbered headings
+      - Each task MUST be a checkbox: `- [ ] X.Y Task description`
+      - Tasks should be small enough to complete in one session
+      - Order tasks by dependency (what must be done first?)
+
+      Example:
+      ```
+      ## 1. Setup
+
+      - [ ] 1.1 Create new module structure
+      - [ ] 1.2 Add dependencies to package.json
+
+      ## 2. Core Implementation
+
+      - [ ] 2.1 Implement data export function
+      - [ ] 2.2 Add CSV formatting utilities
+
+      ## 3. Document co-variance (delta specs)
+
+      - [ ] 3.1 Add or update `specs/<capability>/spec.md` under this change directory
+            (`changeDir` from `openspec instructions apply --json`). Follow ADDED/MODIFIED
+            format and `#### Scenario:` rules from the apply instruction.
+      ```
+
+      **REQUIRED final group (attractor-protocol):** Every tasks.md MUST end with at least one
+      checkbox that creates or updates delta specs under `<changeDir>/specs/<capability>/spec.md`.
+      Reason: when every `- [ ]` is checked, `openspec instructions apply` typically reports
+      `all_done` and replaces this workflow's long instruction with a short archive hint — so
+      if spec work is not a tracked checkbox, back-propagation is easy to skip. Keep spec tasks
+      last; do not check them off until the files exist.
+
+      Reference specs for what needs to be built, design for how to build it.
+      Each task should be verifiable - you know when it's done.
     requires:
       - design
 
   - id: evidence
     generates: evidence.md
-    description: >
-      What actually happened. Contact test result.
-      Filled in after implementation, on the contact test timeline.
-      Required before a change can be learned.
+    description: Assessment of contact test and epistemic learning.
     template: evidence.md
+    instruction: |
+      Evaluate what the motion revealed about our understanding.
+
+      Sections:
+      - **Contact test result**: passed | failed | inconclusive
+      - **What we observed**: Raw observations matching evidence tier
+      - **What held**: Assumptions confirmed
+      - **What didn't hold**: Assumptions falsified
+      - **What changed in our understanding**: Key learning
+      - **What does this change about next steps**: New hypothesis or done
+
+      Optional but valuable for epistemic discipline.
     requires:
       - tasks
 
 apply:
   requires: [tasks]
   tracks: tasks.md
+  instruction: |
+    Execute the motion:
+    Read context files, work through pending tasks, mark complete as you go.
+    Pause if you hit blockers or need clarification.
 
-learn:
-  requires: [evidence]
-  destination: changes/archive/
+    **If this message is missing detail:** you may be in `all_done` state (every tasks.md
+    checkbox checked). Delta spec content is defined in this schema's apply block; new changes
+    should keep a **final unchecked spec task** until `specs/<capability>/spec.md` exists under
+    `changeDir` (see tasks artifact instruction).
+
+    Document what cohered:
+    After all tasks complete, document what cohered under the motion.
+    This is back-propagation, not prediction.
+
+    **Where delta specs MUST live during apply:** under this change directory only:
+    `openspec/changes/<change-name>/specs/<capability>/spec.md`
+    (the JSON from this command includes `changeDir` — use `<changeDir>/specs/...`).
+    Do not skip this step; it is part of completing apply, not a separate optional doc.
+
+    Create one spec file per capability observed to co-vary with the gesture.
+    - New capabilities: use a folder name users would recognize (`specs/<capability>/spec.md` under the change).
+    - Modified capabilities: when mainline specs exist at `openspec/specs/<capability>/spec.md`,
+      copy full requirement blocks into `## MODIFIED Requirements` in the change-local delta file under `<changeDir>/specs/`.
+
+    Delta operations (## headers):
+    - **ADDED Requirements**: New patterns that emerged during motion
+    - **MODIFIED Requirements**: Patterns that persisted but changed form - MUST include full observed content
+    - **REMOVED Requirements**: Patterns that dissolved - MUST include **Reason** for dissolution
+    - **RENAMED Requirements**: Same pattern, new name - use FROM:/TO: format
+
+    Format:
+    - Each requirement: `### Requirement: <name>` followed by description of what cohered
+    - Use SHALL/MUST for normative requirements (avoid should/may)
+    - Each scenario: `#### Scenario: <name>` with WHEN/THEN format
+    - **CRITICAL**: Scenarios MUST use exactly 4 hashtags (`####`). Using 3 hashtags or bullets will fail silently.
+    - Every requirement MUST have at least one scenario validating the co-variance.
+
+    MODIFIED requirements workflow:
+    1. Locate the existing requirement in openspec/specs/<capability>/spec.md
+    2. Copy the ENTIRE requirement block (from `### Requirement:` through all scenarios)
+    3. Paste under `## MODIFIED Requirements` and edit to reflect observed changes
+    4. Ensure header text matches exactly (whitespace-insensitive)
+
+    Common pitfall: Using MODIFIED with partial content loses detail at archive time.
+    If documenting new patterns without changing existing ones, use ADDED instead.
+
+    Template for spec file:
+    ```
+    ## ADDED Requirements
+
+    ### Requirement: User can export data
+    The system SHALL allow users to export their data in CSV format.
+
+    #### Scenario: Successful export
+    - **WHEN** user clicks "Export" button
+    - **THEN** system downloads a CSV file with all user data
+
+    ## REMOVED Requirements
+
+    ### Requirement: Legacy export
+    **Reason**: Replaced by new export system
+    **Migration**: Use new export endpoint at /api/v2/export
+    ```
+
+    Change-local deltas accumulate here until archive/sync promotes them into `openspec/specs/` (if your project uses that step).
