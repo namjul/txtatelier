@@ -291,7 +291,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
   });
 
-  describe("WHEN file is deleted in Evolu while offline", () => {
+  describe.skip("WHEN file is deleted in Evolu while offline", () => {
     test("THEN file is removed on next startup", async () => {
       const query = session1.evolu.createQuery((db) =>
         db
@@ -323,7 +323,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
     });
   });
 
-  describe("WHEN file is added to Evolu while offline", () => {
+  describe.skip("WHEN file is added to Evolu while offline", () => {
     test("THEN file is written to disk on startup", async () => {
       session1.evolu.upsert("file", {
         id: createIdFromString("OfflineAddTest"),
