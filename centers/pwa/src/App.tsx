@@ -25,7 +25,6 @@ import { type FilesRow, filesQuery } from "./evolu/files";
 // =============================================================================
 
 const useEvolu = createUseEvolu(evolu);
-type EvoluClient = ReturnType<typeof useEvolu>;
 
 // =============================================================================
 // TYPES
@@ -85,7 +84,8 @@ const formatTypeError = createFormatTypeError<MinLengthError | MaxLengthError>(
 // HOOK: FILE LIST MANAGEMENT
 // =============================================================================
 
-const useFileList = (evoluClient: EvoluClient) => {
+const useFileList = () => {
+  const evoluClient = useEvolu();
   const [files, setFiles] = createSignal<ReadonlyArray<FilesRow>>([]);
   const [isLoading, setIsLoading] = createSignal(true);
   const [selectedFileId, setSelectedFileId] = createSignal<
@@ -157,11 +157,11 @@ const useFileList = (evoluClient: EvoluClient) => {
 // =============================================================================
 
 const useFileEditor = (
-  evoluClient: EvoluClient,
   ownerId: () => string | undefined,
   selectedFile: () => FilesRow | null,
   status: StatusOps,
 ) => {
+  const evoluClient = useEvolu();
   const [editorFileId, setEditorFileId] = createSignal<FilesRow["id"] | null>(
     null,
   );
@@ -500,13 +500,11 @@ const Editor = (props: {
 // =============================================================================
 
 const FileWorkspace = (props: {
-  evoluClient: EvoluClient;
   ownerId: () => string | undefined;
   status: StatusOps;
 }) => {
-  const fileList = useFileList(props.evoluClient);
+  const fileList = useFileList();
   const editor = useFileEditor(
-    props.evoluClient,
     props.ownerId,
     () => fileList.selectedFile(),
     props.status,
@@ -590,10 +588,10 @@ interface OwnerData {
 type OwnerResource = ReturnType<typeof createResource<OwnerData>>;
 
 const SettingsPanel = (props: {
-  evoluClient: EvoluClient;
   owner: OwnerResource[0];
   status: StatusOps;
 }) => {
+  const evoluClient = useEvolu();
   const [showMnemonic, setShowMnemonic] = createSignal(false);
   const [transportUrl, setTransportUrl] = createSignal(
     localStorage.getItem("transportUrl") ?? "",
@@ -610,7 +608,7 @@ const SettingsPanel = (props: {
     }
 
     props.status.setIdle("restoring");
-    await props.evoluClient.restoreAppOwner(parsed.value);
+    await evoluClient.restoreAppOwner(parsed.value);
     props.status.setOk("restored");
   };
 
@@ -621,13 +619,13 @@ const SettingsPanel = (props: {
     if (!confirmed) return;
 
     props.status.setIdle("resetting");
-    await props.evoluClient.resetAppOwner();
+    await evoluClient.resetAppOwner();
     props.status.setOk("reset complete");
   };
 
   const handleExportDatabase = async () => {
     props.status.setIdle("exporting backup");
-    const array = await props.evoluClient.exportDatabase();
+    const array = await evoluClient.exportDatabase();
     const blob = new Blob([array], { type: "application/x-sqlite3" });
     const url = window.URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -784,19 +782,11 @@ const AppShell = () => {
       </p>
 
       <Show when={page() === "files"}>
-        <FileWorkspace
-          evoluClient={evoluClient}
-          ownerId={ownerId}
-          status={statusOps}
-        />
+        <FileWorkspace ownerId={ownerId} status={statusOps} />
       </Show>
 
       <Show when={page() === "settings"}>
-        <SettingsPanel
-          evoluClient={evoluClient}
-          owner={owner}
-          status={statusOps}
-        />
+        <SettingsPanel owner={owner} status={statusOps} />
       </Show>
     </main>
   );
