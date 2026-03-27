@@ -5,7 +5,8 @@
 import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import path, { join, resolve } from "node:path";
+import untildify from 'untildify';
 import {
   createFormatTypeError,
   type Evolu,
@@ -81,7 +82,7 @@ export interface FileSyncSession extends OwnerSession {
 export const createOwnerSession = async (
   config?: Partial<FileSyncConfig>,
 ): Promise<OwnerSession> => {
-  const resolvedWatchDir = config?.watchDir ?? env.watchDir ?? defaultWatchDir
+  const resolvedWatchDir = path.resolve(untildify(config?.watchDir ?? env.watchDir ?? defaultWatchDir));
   const resolvedDbPath =
     config?.dbPath ?? env.dbPath ?? defaultDbPath(resolvedWatchDir);
   const resolvedRelayUrl = config?.relayUrl ?? env.relayUrl ?? defaultRelayUrl;

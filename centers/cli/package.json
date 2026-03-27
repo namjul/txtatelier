@@ -24,7 +24,8 @@
     "env-paths": "^4.0.0",
     "picomatch": "^4.0.3",
     "specialist": "^2.0.0",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "untildify": "^6.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
