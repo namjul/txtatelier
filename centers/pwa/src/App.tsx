@@ -181,6 +181,7 @@ const useFileEditor = (
     null,
   );
   const [saveUi, setSaveUi] = createSignal<SaveUiState>("idle");
+  const [isSaving, setIsSaving] = createSignal(false);
 
   const isDirty = createMemo(() => {
     if (selectedFile() == null) return false;
@@ -216,6 +217,11 @@ const useFileEditor = (
       return;
     }
 
+    // Skip sync processing while we're in the middle of saving
+    if (isSaving()) {
+      return;
+    }
+
     // No remote changes
     if (file.contentHash === baseFingerprint()) {
       return;
@@ -227,7 +233,6 @@ const useFileEditor = (
         status.setError("conflict detected");
       }
       setConflictRemote(file);
-      setSaveUi("idle");
       return;
     }
 
@@ -243,8 +248,11 @@ const useFileEditor = (
     const file = selectedFile();
     if (file == null || !isDirty() || hasConflict()) return false;
 
+    setIsSaving(true);
+
     const content = draft();
     const contentHash = await computeContentHash(content);
+
     const result = evoluClient.update("file", {
       id: file.id,
       content,
@@ -252,6 +260,7 @@ const useFileEditor = (
     });
 
     if (!result.ok) {
+      setIsSaving(false);
       status.setError("invalid value");
       setSaveUi("idle");
       return false;
@@ -259,6 +268,7 @@ const useFileEditor = (
 
     setBaseContent(content);
     setBaseFingerprint(contentHash);
+    setIsSaving(false);
     status.setLastAction(`saved ${file.path}`);
     status.setIdle("ready");
     return true;
