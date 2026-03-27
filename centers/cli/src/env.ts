@@ -7,14 +7,11 @@ import {
   union,
 } from "@evolu/common";
 
-const LoggingValue = union("0", "1", "false", "true");
-
 export const LogLevel = union("DEBUG", "INFO", "ERROR");
 export type LogLevel = typeof LogLevel.Type;
 
 const EnvInput = object({
   TXTATELIER_DB_PATH: optional(EvoluString),
-  TXTATELIER_LOGGING: optional(LoggingValue),
   TXTATELIER_LOG_LEVEL: optional(LogLevel),
   TXTATELIER_MNEMONIC: optional(Mnemonic),
   TXTATELIER_RELAY_URL: optional(EvoluString),
@@ -28,7 +25,6 @@ const parseEnv = () => {
   // biome-ignore-start lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
   const mnemonicInput = processEnv["TXTATELIER_MNEMONIC"];
   const dbPathInput = processEnv["TXTATELIER_DB_PATH"];
-  const loggingInput = processEnv["TXTATELIER_LOGGING"];
   const logLevelInput = processEnv["TXTATELIER_LOG_LEVEL"];
   const relayUrlInput = processEnv["TXTATELIER_RELAY_URL"];
   const watchDirInput = processEnv["TXTATELIER_WATCH_DIR"];
@@ -38,7 +34,6 @@ const parseEnv = () => {
 
   const envInput = {
     ...(dbPathInput !== undefined ? { TXTATELIER_DB_PATH: dbPathInput } : {}),
-    ...(loggingInput !== undefined ? { TXTATELIER_LOGGING: loggingInput } : {}),
     ...(logLevelInput !== undefined
       ? { TXTATELIER_LOG_LEVEL: logLevelInput.toUpperCase() }
       : {}),
@@ -65,9 +60,6 @@ const parseEnv = () => {
 
   return {
     dbPath: raw.TXTATELIER_DB_PATH,
-    enableLogging: raw.TXTATELIER_LOGGING
-      ? raw.TXTATELIER_LOGGING === "1" || raw.TXTATELIER_LOGGING === "true"
-      : false,
     logLevel: raw.TXTATELIER_LOG_LEVEL ?? "ERROR",
     mnemonic: raw.TXTATELIER_MNEMONIC,
     relayUrl: raw.TXTATELIER_RELAY_URL,
