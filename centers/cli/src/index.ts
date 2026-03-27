@@ -45,12 +45,10 @@ bin("txtatelier", "Local-first file synchronization CLI")
     package: packageJson.name,
     version: packageJson.version,
     colors: false,
-    autoExit: false,
   })
   .option("--watch-dir <path>", "Override the default watched directory")
   .action(async (options) => {
     await runStart(options.watchDir);
-    process.exit(0);
   })
 
   .command("owner", "Manage owner identity")
