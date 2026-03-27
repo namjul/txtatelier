@@ -4,14 +4,12 @@ import {
   type MinLengthError,
   Mnemonic,
 } from "@evolu/common";
-import * as combobox from "@zag-js/combobox";
-import { normalizeProps, useMachine } from "@zag-js/solid";
+import { Combobox, createListCollection } from "@ark-ui/solid";
 import {
   createEffect,
   createMemo,
   createResource,
   createSignal,
-  createUniqueId,
   For,
   Show,
 } from "solid-js";
@@ -328,9 +326,6 @@ interface FileOption {
   readonly value: string;
 }
 
-type InputChangeDetails = combobox.InputValueChangeDetails;
-type ValueChangeDetails = combobox.ValueChangeDetails<FileOption>;
-
 const FilePicker = (props: {
   files: ReadonlyArray<FilesRow>;
   selectedFileId: FilesRow["id"] | null;
@@ -351,83 +346,68 @@ const FilePicker = (props: {
       }));
   });
 
-  const fileCollection = createMemo(() =>
-    combobox.collection({
+  const collection = createMemo(() =>
+    createListCollection<FileOption>({
       items: fileOptions(),
-      itemToString: (item: FileOption) => item.label,
-      itemToValue: (item: FileOption) => item.value,
+      itemToString: (item) => item.label,
+      itemToValue: (item) => item.value,
     }),
   );
 
-  const filePickerService = useMachine(combobox.machine, {
-    id: createUniqueId(),
-    get collection() {
-      return fileCollection();
-    },
-    openOnClick: true,
-    positioning: { placement: "bottom-start" },
-    get value() {
-      const id = props.selectedFileId;
-      if (id == null) return [];
-      return [String(id)];
-    },
-    onInputValueChange(details: InputChangeDetails) {
-      setSearch(details.inputValue);
-    },
-    onValueChange(details: ValueChangeDetails) {
-      const selectedValue = details.value.at(0);
-      if (!selectedValue) return;
-
-      const selected = props.files.find(
-        (file) => String(file.id) === selectedValue,
-      );
-      if (!selected) return;
-
-      props.onSelect(selected.id);
-      setSearch(selected.path);
-    },
-  });
-
-  const filePicker = createMemo(() =>
-    combobox.connect(filePickerService, normalizeProps),
+  const value = createMemo(() =>
+    props.selectedFileId == null ? [] : [String(props.selectedFileId)],
   );
 
   return (
-    <div {...filePicker().getRootProps()} class="relative max-w-3xl">
-      <div class="mb-1 block text-xs">Search files</div>
-      <div {...filePicker().getControlProps()} class="flex">
-        <input
-          {...filePicker().getInputProps()}
-          class="w-full rounded-none border border-black/25 bg-transparent px-2.5 py-2 text-sm outline-none focus:border-black dark:border-white/25 dark:focus:border-white"
-          placeholder="Type a path"
-        />
-        <button
-          type="button"
-          {...filePicker().getTriggerProps()}
-          class="border border-l-0 border-black/25 px-3 text-xs dark:border-white/25"
-        >
-          open
-        </button>
-      </div>
-      <div {...filePicker().getPositionerProps()} class="z-10">
-        <Show when={fileOptions().length > 0}>
-          <ul
-            {...filePicker().getContentProps()}
-            class="max-h-72 overflow-auto border border-black/25 bg-[#f2f1ee] p-1 dark:border-white/25 dark:bg-[#151617]"
+    <div class="relative max-w-3xl">
+      <Combobox.Root
+        collection={collection()}
+        value={value()}
+        openOnClick
+        positioning={{ placement: "bottom-start" }}
+        onInputValueChange={(details) => setSearch(details.inputValue)}
+        onValueChange={(details) => {
+          const selectedValue = details.value.at(0);
+          if (!selectedValue) return;
+
+          const selected = props.files.find(
+            (file) => String(file.id) === selectedValue,
+          );
+          if (!selected) return;
+
+          props.onSelect(selected.id);
+        }}
+      >
+        <Combobox.Label class="mb-1 block text-xs">Search files</Combobox.Label>
+        <Combobox.Control class="flex">
+          <Combobox.Input
+            class="w-full rounded-none border border-black/25 bg-transparent px-2.5 py-2 text-sm outline-none focus:border-black dark:border-white/25 dark:focus:border-white"
+            placeholder="Type a path"
+          />
+          <Combobox.Trigger
+            type="button"
+            class="border border-l-0 border-black/25 px-3 text-xs dark:border-white/25"
           >
-            <For each={fileOptions()}>
-              {(item) => (
-                <li
-                  {...filePicker().getItemProps({ item })}
-                  class="cursor-pointer px-2 py-1 text-sm data-[highlighted]:bg-black/10 dark:data-[highlighted]:bg-white/10"
-                >
-                  {item.label}
-                </li>
-              )}
-            </For>
-          </ul>
-        </Show>
-      </div>
+            open
+          </Combobox.Trigger>
+        </Combobox.Control>
+        <Combobox.Positioner class="z-10">
+          <Show when={fileOptions().length > 0}>
+            <Combobox.Content class="max-h-72 overflow-auto border border-black/25 bg-[#f2f1ee] p-1 dark:border-white/25 dark:bg-[#151617]">
+              <For each={fileOptions()}>
+                {(item) => (
+                  <Combobox.Item
+                    item={item}
+                    class="cursor-pointer px-2 py-1 text-sm data-[highlighted]:bg-black/10 dark:data-[highlighted]:bg-white/10"
+                  >
+                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                  </Combobox.Item>
+                )}
+              </For>
+            </Combobox.Content>
+          </Show>
+        </Combobox.Positioner>
+      </Combobox.Root>
     </div>
   );
 };
