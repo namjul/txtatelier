@@ -1,21 +1,25 @@
 import { createEvolu, SimpleName } from "@evolu/common";
+import { deriveShardOwner } from "@evolu/common/local-first";
 import { evoluWebDeps } from "@evolu/web";
 import { Schema } from "./schema";
 
 export const createEvoluClient = (transportUrl?: string) => {
-  const config =
-    transportUrl && transportUrl.trim() !== ""
-      ? {
-          name: SimpleName.orThrow("txtatelier-pwa"),
-          transports: [
-            { type: "WebSocket" as const, url: transportUrl.trim() },
-          ],
-        }
-      : {
-          name: SimpleName.orThrow("txtatelier-pwa"),
-        };
+  const trimmedTransportUrl = transportUrl?.trim();
+  const evolu = createEvolu(evoluWebDeps)(Schema, {
+    name: SimpleName.orThrow("txtatelier"),
+    transports: trimmedTransportUrl
+      ? [{ type: "WebSocket" as const, url: trimmedTransportUrl }]
+      : [],
+  });
 
-  return createEvolu(evoluWebDeps)(Schema, config);
+  // Use same shard owner as CLI for file sync compatibility
+  // Shard path ["files", 1] matches CLI's filesShardOwner
+  evolu.appOwner.then((owner) => {
+    const filesShardOwner = deriveShardOwner(owner, ["files", 1]);
+    evolu.useOwner(filesShardOwner);
+  });
+
+  return evolu;
 };
 
 export const evolu = createEvoluClient(
