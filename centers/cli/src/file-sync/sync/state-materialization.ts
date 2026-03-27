@@ -13,16 +13,24 @@ import type { TimestampBytes } from "@evolu/common/local-first";
 import { logger } from "../../logger";
 import { createConflictFile } from "../conflicts";
 import type { StateMaterializationError } from "../errors";
+import {
+  createAllFilesQuery,
+  createAllSyncStateQuery,
+  createChangedFilesQuery,
+  createDeletedFilesWithIdsQuery,
+  createHistoryChangesQuery,
+  createHistoryCursorQuery,
+  createLatestHistoryQuery,
+  type FileRow,
+} from "../evolu-queries";
+import type { FileId } from "../evolu-schema";
 import { computeFileHash } from "../hash";
 import { isIgnoredRelativePath } from "../ignore";
-import type { FileId } from "../evolu-schema";
 import { clearTrackedHash, getTrackedHash } from "../state";
 import type { EvoluDatabase, FileSyncContext } from "./context";
 import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { planStateMaterialization } from "./state-materialization-plan";
-import { createAllFilesQuery, createAllSyncStateQuery, createChangedFilesQuery, createDeletedFilesWithIdsQuery, createHistoryChangesQuery, createHistoryCursorQuery, createLatestHistoryQuery, type FileRow } from "../evolu-queries";
-
 
 export interface StateMaterializationOptions {
   readonly onConflictArtifactCreated?: (absolutePath: string) => Promise<void>;
@@ -72,7 +80,7 @@ export const startStateMaterialization = (
 
     // Set cursor to current timestamp to avoid replaying old history
     // Query latest timestamp from evolu_history
-    const latestHistoryQuery = createLatestHistoryQuery(evolu)
+    const latestHistoryQuery = createLatestHistoryQuery(evolu);
 
     const latestHistory = await evolu.loadQuery(latestHistoryQuery);
     if (latestHistory.length > 0) {
@@ -161,7 +169,10 @@ export const startStateMaterialization = (
 
         // Process content changes
         if (contentChangeIds.length > 0) {
-          const changedFilesQuery = createChangedFilesQuery(evolu, contentChangeIds)
+          const changedFilesQuery = createChangedFilesQuery(
+            evolu,
+            contentChangeIds,
+          );
 
           const changedRows = await evolu.loadQuery(changedFilesQuery);
 
@@ -189,7 +200,10 @@ export const startStateMaterialization = (
 
         // Process deletion events
         if (deletionEventIds.length > 0) {
-          const deletedFilesQuery = createDeletedFilesWithIdsQuery(evolu, deletionEventIds);
+          const deletedFilesQuery = createDeletedFilesWithIdsQuery(
+            evolu,
+            deletionEventIds,
+          );
           const deletedRows = await evolu.loadQuery(deletedFilesQuery);
 
           if (deletedRows.length === 1) {
@@ -206,13 +220,10 @@ export const startStateMaterialization = (
 
           // Process each deletion
           for (const deletedRow of deletedRows) {
-            const path = deletedRow["path"]
+            const path = deletedRow.path;
             if (!path) continue;
 
-            const lastAppliedHashResult = await getTrackedHash(
-              evolu,
-              path,
-            );
+            const lastAppliedHashResult = await getTrackedHash(evolu, path);
 
             if (!lastAppliedHashResult.ok) {
               logger.error(
@@ -328,7 +339,9 @@ const syncEvoluToFiles = async (
   };
 
   for (let i = 0; i < rows.length; i += MATERIALIZE_CONCURRENCY) {
-    await Promise.all(rows.slice(i, i + MATERIALIZE_CONCURRENCY).map(processRow));
+    await Promise.all(
+      rows.slice(i, i + MATERIALIZE_CONCURRENCY).map(processRow),
+    );
   }
 
   if (total > 50) {
@@ -357,7 +370,12 @@ const syncEvoluRowToFile = async (
 ): Promise<Result<void, StateMaterializationError>> => {
   const { evolu, watchDir } = ctx;
   // Step 1: Collect state (I/O)
-  const stateResult = await collectMaterializationState(evolu, watchDir, row, preloadedLastAppliedHash);
+  const stateResult = await collectMaterializationState(
+    evolu,
+    watchDir,
+    row,
+    preloadedLastAppliedHash,
+  );
 
   if (!stateResult.ok) {
     logger.error(
@@ -412,7 +430,11 @@ export const applyRemoteDeletionToFilesystem = async (
   const absolutePath = join(watchDir, path);
 
   const existsResult = await tryAsync(
-    () => access(absolutePath).then(() => true, () => false),
+    () =>
+      access(absolutePath).then(
+        () => true,
+        () => false,
+      ),
     (cause): StateMaterializationError => ({
       type: "FileDeleteFailed",
       absolutePath,

@@ -12,8 +12,8 @@ import {
 } from "@evolu/common";
 import { createDbWorkerForPlatform } from "@evolu/common/local-first";
 import { logger } from "../../logger";
-import { createPersistentSqliteDriver } from "./SqliteDriver";
 import type { PlatformIO } from "./PlatformIO";
+import { createPersistentSqliteDriver } from "./SqliteDriver";
 
 export const createEvoluDeps = (io: PlatformIO): EvoluDeps => {
   const sqliteDriverFactory = createPersistentSqliteDriver(io);

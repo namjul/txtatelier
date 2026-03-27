@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, test } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sqliteTrue } from "@evolu/common";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { MAX_FILE_SIZE_BYTES } from "../constants";
 import { resetEvolu } from "../evolu";
 import { defaultRelayUrl, startFileSync } from "../index";

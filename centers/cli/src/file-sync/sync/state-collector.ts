@@ -3,12 +3,17 @@
 
 import { access, readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { type Evolu, NonEmptyString1000, type Result, tryAsync } from "@evolu/common";
-import { computeFileHash } from "../hash";
+import {
+  type Evolu,
+  NonEmptyString1000,
+  type Result,
+  tryAsync,
+} from "@evolu/common";
+import { createFielsFromPathQuery } from "../evolu-queries";
 import type { Schema } from "../evolu-schema";
+import { computeFileHash } from "../hash";
 import { getTrackedHash } from "../state";
 import type { ChangeCaptureState, MaterializationState } from "./state-types";
-import { createFielsFromPathQuery } from "../evolu-queries";
 
 type EvoluDatabase = Evolu<typeof Schema>;
 
@@ -35,13 +40,15 @@ export const collectChangeCaptureState = async (
 ): Promise<Result<ChangeCaptureState, StateCollectionError>> => {
   return tryAsync(
     async (): Promise<ChangeCaptureState> => {
-      const relativePath = NonEmptyString1000.orThrow(relative(watchDir, absolutePath).replaceAll(
-        "\\",
-        "/",
-      ));
+      const relativePath = NonEmptyString1000.orThrow(
+        relative(watchDir, absolutePath).replaceAll("\\", "/"),
+      );
 
       // Check if file exists and get content
-      const exists = await access(absolutePath).then(() => true, () => false);
+      const exists = await access(absolutePath).then(
+        () => true,
+        () => false,
+      );
 
       let diskHash: string | null = null;
       let diskContent: string | null = null;
@@ -63,8 +70,7 @@ export const collectChangeCaptureState = async (
 
       const evolHash =
         typeof existing?.contentHash === "string" ? existing.contentHash : null;
-      const evolId =
-        typeof existing?.id === "string" ? existing.id : null;
+      const evolId = typeof existing?.id === "string" ? existing.id : null;
 
       return {
         path: relativePath,
@@ -112,7 +118,10 @@ export const collectMaterializationState = async (
       }
 
       // Get disk hash if file exists
-      const exists = await access(absolutePath).then(() => true, () => false);
+      const exists = await access(absolutePath).then(
+        () => true,
+        () => false,
+      );
 
       let diskHash: string | null = null;
       if (exists) {

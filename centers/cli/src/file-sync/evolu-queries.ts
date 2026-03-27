@@ -1,4 +1,3 @@
-
 import * as Evolu from "@evolu/common";
 import type { TimestampBytes } from "@evolu/common/local-first";
 import type { FileId, FilePath, Schema } from "./evolu-schema";
@@ -13,7 +12,10 @@ export const createAllFilesQuery = (evolu: EvoluDatabase) =>
       .where("isDeleted", "is not", Evolu.sqliteTrue)
       .where("path", "is not", null)
       .where("contentHash", "is not", null)
-      .$narrowType<{ path: Evolu.kysely.NotNull; contentHash: Evolu.kysely.NotNull }>(),
+      .$narrowType<{
+        path: Evolu.kysely.NotNull;
+        contentHash: Evolu.kysely.NotNull;
+      }>(),
   );
 
 export type FileRow = Evolu.InferRow<ReturnType<typeof createAllFilesQuery>>;
@@ -28,8 +30,10 @@ export const createLatestHistoryQuery = (evolu: EvoluDatabase) =>
       .limit(1),
   );
 
-
-export const createChangedFilesQuery = (evolu: EvoluDatabase, contentChangeIds: FileId[]) =>
+export const createChangedFilesQuery = (
+  evolu: EvoluDatabase,
+  contentChangeIds: FileId[],
+) =>
   evolu.createQuery((db) =>
     db
       .selectFrom("file")
@@ -38,15 +42,23 @@ export const createChangedFilesQuery = (evolu: EvoluDatabase, contentChangeIds: 
       .where("path", "is not", null)
       .where("contentHash", "is not", null)
       .where("isDeleted", "is not", Evolu.sqliteTrue)
-      .$narrowType<{ path: Evolu.kysely.NotNull; contentHash: Evolu.kysely.NotNull }>(),
-  )
+      .$narrowType<{
+        path: Evolu.kysely.NotNull;
+        contentHash: Evolu.kysely.NotNull;
+      }>(),
+  );
 
-export const createFielsFromPathQuery = (evolu: EvoluDatabase, path: FilePath) => evolu.createQuery((db) =>
-  db.selectFrom("file")
-    .select(["id", "contentHash"])
-    .where("path", "==", path)
-    .where("isDeleted", "is not", Evolu.sqliteTrue),
-);
+export const createFielsFromPathQuery = (
+  evolu: EvoluDatabase,
+  path: FilePath,
+) =>
+  evolu.createQuery((db) =>
+    db
+      .selectFrom("file")
+      .select(["id", "contentHash"])
+      .where("path", "==", path)
+      .where("isDeleted", "is not", Evolu.sqliteTrue),
+  );
 
 export const createSyncStateQuery = (evolu: EvoluDatabase, path: FilePath) =>
   evolu.createQuery((db) =>
@@ -111,7 +123,7 @@ export const createDeletedFilesWithIdsQuery = (
       .select(["id", "path"])
       .where("id", "in", deletionEventIds)
       .where("isDeleted", "is", Evolu.sqliteTrue)
-      .$narrowType<{ path: Evolu.kysely.NotNull  }>(),
+      .$narrowType<{ path: Evolu.kysely.NotNull }>(),
   );
 
 export const createExistingPathsQuery = (evolu: EvoluDatabase) =>
@@ -120,7 +132,7 @@ export const createExistingPathsQuery = (evolu: EvoluDatabase) =>
       .selectFrom("file")
       .select(["path"])
       .where("isDeleted", "is not", Evolu.sqliteTrue)
-      .$narrowType<{ path: Evolu.kysely.NotNull  }>(),
+      .$narrowType<{ path: Evolu.kysely.NotNull }>(),
   );
 
 export const createDeletedPathsQuery = (evolu: EvoluDatabase) =>
@@ -129,5 +141,5 @@ export const createDeletedPathsQuery = (evolu: EvoluDatabase) =>
       .selectFrom("file")
       .select(["path"])
       .where("isDeleted", "is", Evolu.sqliteTrue)
-      .$narrowType<{ path: Evolu.kysely.NotNull  }>(),
+      .$narrowType<{ path: Evolu.kysely.NotNull }>(),
   );

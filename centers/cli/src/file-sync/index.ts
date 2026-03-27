@@ -117,7 +117,13 @@ export const startFileSync = async (
 
   // Create base owner session
   const ownerSession = await createOwnerSession(config);
-  const { evolu, owner, filesShardOwner, flush: closeDb, config: resolvedConfig } = ownerSession;
+  const {
+    evolu,
+    owner,
+    filesShardOwner,
+    flush: closeDb,
+    config: resolvedConfig,
+  } = ownerSession;
   const resolvedWatchDir = resolvedConfig.watchDir;
   const resolvedDbPath = resolvedConfig.dbPath;
   const resolvedrelayUrl = resolvedConfig.relayUrl;

@@ -3,8 +3,15 @@ import { join, relative } from "node:path";
 import { err, ok, type Result } from "@evolu/common";
 import { logger } from "../../logger";
 import type { ChangeCaptureError } from "../errors";
-import { isIgnoredRelativePath } from "../ignore";
+import {
+  createAllFileRecordsQuery,
+  createAllFilesQuery,
+  createAllSyncStateQuery,
+  createDeletedPathsQuery,
+  type FileRow,
+} from "../evolu-queries";
 import type { FilePath } from "../evolu-schema";
+import { isIgnoredRelativePath } from "../ignore";
 import { captureChange } from "./change-capture";
 import { isTxtFile } from "./change-capture-plan";
 import type { FileSyncContext } from "./context";
@@ -12,7 +19,6 @@ import { executePlan } from "./executor";
 import { collectMaterializationState } from "./state-collector";
 import { applyRemoteDeletionToFilesystem } from "./state-materialization";
 import { planStateMaterialization } from "./state-materialization-plan";
-import { createAllFileRecordsQuery, createAllFilesQuery, createAllSyncStateQuery, createDeletedPathsQuery, type FileRow } from "../evolu-queries";
 
 /**
  * Fatal errors that prevent reconciliation from proceeding.
@@ -150,14 +156,13 @@ export const reconcileStartupFilesystemState = async (
 
   const filesToReconcile = allFiles.filter((absolutePath) => {
     const relativePath = relative(watchDir, absolutePath).replaceAll("\\", "/");
-    return (
-      isTxtFile(absolutePath) &&
-      !isIgnoredRelativePath(relativePath)
-    );
+    return isTxtFile(absolutePath) && !isIgnoredRelativePath(relativePath);
   });
 
   // Pre-load all Evolu file records to avoid one DB query per file
-  const fileRecordRows = await evolu.loadQuery(createAllFileRecordsQuery(evolu));
+  const fileRecordRows = await evolu.loadQuery(
+    createAllFileRecordsQuery(evolu),
+  );
   const fileRecordsMap = new Map(
     fileRecordRows.map((r) => [
       r.path as string,
@@ -202,7 +207,9 @@ export const reconcileStartupFilesystemState = async (
   };
 
   for (let i = 0; i < filesToReconcile.length; i += RECONCILE_CONCURRENCY) {
-    await Promise.all(filesToReconcile.slice(i, i + RECONCILE_CONCURRENCY).map(processFile));
+    await Promise.all(
+      filesToReconcile.slice(i, i + RECONCILE_CONCURRENCY).map(processFile),
+    );
   }
 
   // Step 2: Detect offline deletions (files in Evolu but not on disk)
@@ -213,7 +220,9 @@ export const reconcileStartupFilesystemState = async (
   );
 
   let deletedCount = 0;
-  const deletionPaths = [...existingPaths].filter((p) => !filesystemPaths.has(p));
+  const deletionPaths = [...existingPaths].filter(
+    (p) => !filesystemPaths.has(p),
+  );
 
   const processDeletion = async (evolPath: string): Promise<void> => {
     processedCount += 1;
@@ -238,7 +247,9 @@ export const reconcileStartupFilesystemState = async (
   };
 
   for (let i = 0; i < deletionPaths.length; i += RECONCILE_CONCURRENCY) {
-    await Promise.all(deletionPaths.slice(i, i + RECONCILE_CONCURRENCY).map(processDeletion));
+    await Promise.all(
+      deletionPaths.slice(i, i + RECONCILE_CONCURRENCY).map(processDeletion),
+    );
   }
 
   // Return stats (ok even with partial failures)
@@ -332,7 +343,11 @@ export const reconcileStartupEvoluState = async (
   };
 
   for (let i = 0; i < deletedRows.length; i += EVOLU_RECONCILE_CONCURRENCY) {
-    await Promise.all(deletedRows.slice(i, i + EVOLU_RECONCILE_CONCURRENCY).map(processDeletion));
+    await Promise.all(
+      deletedRows
+        .slice(i, i + EVOLU_RECONCILE_CONCURRENCY)
+        .map(processDeletion),
+    );
   }
 
   logger.debug(`[reconcile:evolu→fs] Applied ${removedCount} remote deletions`);
@@ -360,7 +375,12 @@ export const reconcileStartupEvoluState = async (
     const preloadedHash = syncStateMap.get(row.path as string) ?? null;
 
     // Step 2a: Collect state
-    const stateResult = await collectMaterializationState(evolu, watchDir, row, preloadedHash);
+    const stateResult = await collectMaterializationState(
+      evolu,
+      watchDir,
+      row,
+      preloadedHash,
+    );
     if (!stateResult.ok) {
       // Per-file error: NOT fatal, add to stats and continue
       errors.push({
@@ -409,7 +429,9 @@ export const reconcileStartupEvoluState = async (
   };
 
   for (let i = 0; i < activeRows.length; i += EVOLU_RECONCILE_CONCURRENCY) {
-    await Promise.all(activeRows.slice(i, i + EVOLU_RECONCILE_CONCURRENCY).map(processRow));
+    await Promise.all(
+      activeRows.slice(i, i + EVOLU_RECONCILE_CONCURRENCY).map(processRow),
+    );
   }
 
   logger.info(`[reconcile:evolu→fs] Synced ${syncedCount} files from Evolu`);

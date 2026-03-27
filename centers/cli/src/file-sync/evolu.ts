@@ -12,10 +12,7 @@ import {
   SimpleName,
   tryAsync,
 } from "@evolu/common";
-import {
-  deriveShardOwner,
-  type ShardOwner,
-} from "@evolu/common/local-first";
+import { deriveShardOwner, type ShardOwner } from "@evolu/common/local-first";
 import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { Schema } from "./evolu-schema";

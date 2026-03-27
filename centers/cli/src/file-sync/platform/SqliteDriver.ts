@@ -1,6 +1,5 @@
-import Database from "better-sqlite3";
-
 import { type CreateSqliteDriver, trySync } from "@evolu/common";
+import Database from "better-sqlite3";
 import { logger } from "../../logger";
 import type { DbDeserializeError } from "../errors";
 import type { PlatformIO } from "./PlatformIO";

@@ -1,8 +1,13 @@
 // biome-ignore-all lint/style/noNonNullAssertion: reason
 
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { access, mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
-import { readdir } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  readdir,
+  readFile,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,6 +16,7 @@ import {
   NonEmptyString1000,
   sqliteTrue,
 } from "@evolu/common";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { resetEvolu } from "./evolu";
 import { defaultRelayUrl, type FileSyncSession, startFileSync } from "./index";
 
@@ -183,12 +189,16 @@ describe("GIVEN sync is running", () => {
       const session = result.value;
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      session.evolu.upsert("file", {
-        id: createIdFromString("File"),
-        path: NonEmptyString1000.orThrow("remote.txt"),
-        content: "from evolu",
-        contentHash: NonEmptyString100.orThrow("fake-hash"),
-      }, { ownerId: session.filesShardOwner.id });
+      session.evolu.upsert(
+        "file",
+        {
+          id: createIdFromString("File"),
+          path: NonEmptyString1000.orThrow("remote.txt"),
+          content: "from evolu",
+          contentHash: NonEmptyString100.orThrow("fake-hash"),
+        },
+        { ownerId: session.filesShardOwner.id },
+      );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -208,24 +218,32 @@ describe("GIVEN sync is running", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const fileId = createIdFromString("UpdateTestFile");
-      session.evolu.upsert("file", {
-        id: fileId,
-        path: NonEmptyString1000.orThrow("update.txt"),
-        content: "version 1",
-        contentHash: NonEmptyString100.orThrow("hash-v1"),
-      }, { ownerId: session.filesShardOwner.id });
+      session.evolu.upsert(
+        "file",
+        {
+          id: fileId,
+          path: NonEmptyString1000.orThrow("update.txt"),
+          content: "version 1",
+          contentHash: NonEmptyString100.orThrow("hash-v1"),
+        },
+        { ownerId: session.filesShardOwner.id },
+      );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       let content = await readFile(join(tempDir, "update.txt"), "utf-8");
       expect(content).toBe("version 1");
 
-      session.evolu.upsert("file", {
-        id: fileId,
-        path: NonEmptyString1000.orThrow("update.txt"),
-        content: "version 2",
-        contentHash: NonEmptyString100.orThrow("hash-v2"),
-      }, { ownerId: session.filesShardOwner.id });
+      session.evolu.upsert(
+        "file",
+        {
+          id: fileId,
+          path: NonEmptyString1000.orThrow("update.txt"),
+          content: "version 2",
+          contentHash: NonEmptyString100.orThrow("hash-v2"),
+        },
+        { ownerId: session.filesShardOwner.id },
+      );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -245,12 +263,16 @@ describe("GIVEN sync is running", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const fileId = createIdFromString("DeleteTestFile");
-      session.evolu.upsert("file", {
-        id: fileId,
-        path: NonEmptyString1000.orThrow("remote-delete.txt"),
-        content: "will be deleted",
-        contentHash: NonEmptyString100.orThrow("hash-delete"),
-      }, { ownerId: session.filesShardOwner.id });
+      session.evolu.upsert(
+        "file",
+        {
+          id: fileId,
+          path: NonEmptyString1000.orThrow("remote-delete.txt"),
+          content: "will be deleted",
+          contentHash: NonEmptyString100.orThrow("hash-delete"),
+        },
+        { ownerId: session.filesShardOwner.id },
+      );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -260,10 +282,14 @@ describe("GIVEN sync is running", () => {
       );
       expect(exists).toBe(true);
 
-      session.evolu.update("file", {
-        id: fileId,
-        isDeleted: sqliteTrue,
-      }, { ownerId: session.filesShardOwner.id });
+      session.evolu.update(
+        "file",
+        {
+          id: fileId,
+          isDeleted: sqliteTrue,
+        },
+        { ownerId: session.filesShardOwner.id },
+      );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -302,7 +328,11 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
-      session1.evolu.update("file", { id: fileId!, isDeleted: sqliteTrue }, { ownerId: session1.filesShardOwner.id });
+      session1.evolu.update(
+        "file",
+        { id: fileId!, isDeleted: sqliteTrue },
+        { ownerId: session1.filesShardOwner.id },
+      );
       await session1.flush();
       await session1.stop();
 
@@ -325,12 +355,16 @@ describe("GIVEN file exists in both Evolu and disk", () => {
 
   describe.skip("WHEN file is added to Evolu while offline", () => {
     test("THEN file is written to disk on startup", async () => {
-      session1.evolu.upsert("file", {
-        id: createIdFromString("OfflineAddTest"),
-        path: NonEmptyString1000.orThrow("offline-new.txt"),
-        content: "added offline",
-        contentHash: NonEmptyString100.orThrow("hash-offline"),
-      }, { ownerId: session1.filesShardOwner.id });
+      session1.evolu.upsert(
+        "file",
+        {
+          id: createIdFromString("OfflineAddTest"),
+          path: NonEmptyString1000.orThrow("offline-new.txt"),
+          content: "added offline",
+          contentHash: NonEmptyString100.orThrow("hash-offline"),
+        },
+        { ownerId: session1.filesShardOwner.id },
+      );
       await session1.flush();
       await session1.stop();
 
@@ -342,10 +376,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
 
       const session2 = result2.value;
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const content = await readFile(
-        join(tempDir, "offline-new.txt"),
-        "utf-8",
-      );
+      const content = await readFile(join(tempDir, "offline-new.txt"), "utf-8");
       expect(content).toBe("added offline");
       await session2.stop();
     });
@@ -389,12 +420,16 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
-      session1.evolu.upsert("file", {
-        id: fileId!,
-        path: NonEmptyString1000.orThrow("synced.txt"),
-        content: "evolu edit",
-        contentHash: NonEmptyString100.orThrow("hash-conflict"),
-      }, { ownerId: session1.filesShardOwner.id });
+      session1.evolu.upsert(
+        "file",
+        {
+          id: fileId!,
+          path: NonEmptyString1000.orThrow("synced.txt"),
+          content: "evolu edit",
+          contentHash: NonEmptyString100.orThrow("hash-conflict"),
+        },
+        { ownerId: session1.filesShardOwner.id },
+      );
       await session1.flush();
       await session1.stop();
 
@@ -428,10 +463,14 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
-      session1.evolu.update("file", {
-        id: fileId!,
-        isDeleted: sqliteTrue,
-      }, { ownerId: session1.filesShardOwner.id });
+      session1.evolu.update(
+        "file",
+        {
+          id: fileId!,
+          isDeleted: sqliteTrue,
+        },
+        { ownerId: session1.filesShardOwner.id },
+      );
       await session1.flush();
       await session1.stop();
 
@@ -467,12 +506,16 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
-      session1.evolu.upsert("file", {
-        id: fileId!,
-        path: NonEmptyString1000.orThrow("synced.txt"),
-        content: "evolu edit",
-        contentHash: NonEmptyString100.orThrow("hash-conflict"),
-      }, { ownerId: session1.filesShardOwner.id });
+      session1.evolu.upsert(
+        "file",
+        {
+          id: fileId!,
+          path: NonEmptyString1000.orThrow("synced.txt"),
+          content: "evolu edit",
+          contentHash: NonEmptyString100.orThrow("hash-conflict"),
+        },
+        { ownerId: session1.filesShardOwner.id },
+      );
       await session1.flush();
       await session1.stop();
 
