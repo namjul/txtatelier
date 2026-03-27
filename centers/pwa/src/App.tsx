@@ -17,14 +17,8 @@ import {
 } from "solid-js";
 import { defaultRelayUrl, evolu } from "./evolu/client";
 import { computeContentHash } from "./evolu/contentHash";
-import { createUseEvolu, EvoluProvider } from "./evolu/evolu";
+import { useEvolu, EvoluProvider } from "./evolu/evolu";
 import { type FilesRow, filesQuery } from "./evolu/files";
-
-// =============================================================================
-// SETUP
-// =============================================================================
-
-const useEvolu = createUseEvolu(evolu);
 
 // =============================================================================
 // TYPES
@@ -685,9 +679,9 @@ const SettingsPanel = (props: {
     }
 
     props.statusOps.setIdle("restoring…");
-    await evoluClient.restoreAppOwner(parsed.value);
     props.statusOps.setLastAction("restored from mnemonic");
     props.statusOps.setIdle("ready");
+    void evoluClient.restoreAppOwner(parsed.value);
   };
 
   const handleResetOwner = async () => {
