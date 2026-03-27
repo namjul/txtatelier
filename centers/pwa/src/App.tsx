@@ -13,7 +13,6 @@ import {
   createResource,
   createSignal,
   For,
-  onCleanup,
   Show,
 } from "solid-js";
 import { defaultRelayUrl, evolu } from "./evolu/client";
@@ -157,8 +156,6 @@ const useFileList = () => {
 
 type SaveUiState = "idle" | "saving" | "saved";
 
-const AUTO_SAVE_DEBOUNCE_MS = 500;
-
 // =============================================================================
 // HOOK: FILE EDITOR MANAGEMENT
 // =============================================================================
@@ -274,38 +271,11 @@ const useFileEditor = (
     return true;
   };
 
-  // Debounced auto-save when draft differs from persisted base
-  createEffect(() => {
-    const file = selectedFile();
-    if (file == null) return;
-
-    const d = draft();
-    const base = baseContent();
-    const conflict = hasConflict();
-
-    if (conflict || d === base) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        setSaveUi("saving");
-        const ok = await persistDraft();
-        if (ok) {
-          setSaveUi("saved");
-        }
-      })();
-    }, AUTO_SAVE_DEBOUNCE_MS);
-
-    onCleanup(() => {
-      clearTimeout(timer);
-    });
-  });
-
-  const setDraftTracked = (value: string) => {
-    setDraft(value);
-    if (saveUi() === "saved") {
-      setSaveUi("idle");
+  const save = async () => {
+    setSaveUi("saving");
+    const ok = await persistDraft();
+    if (ok) {
+      setSaveUi("saved");
     }
   };
 
@@ -371,10 +341,12 @@ const useFileEditor = (
 
   return {
     draft,
-    setDraft: setDraftTracked,
+    setDraft,
+    isDirty,
     hasConflict,
     conflictRemote,
     saveUi,
+    save,
     resolveConflict,
     saveDraftAsConflictArtifact,
   };
@@ -544,36 +516,39 @@ const FilePicker = (props: {
 const Editor = (props: {
   file: FilesRow;
   draft: string;
+  isDirty: boolean;
   hasConflict: boolean;
   conflictRemote: FilesRow | null;
   saveUi: SaveUiState;
   onDraftChange: (value: string) => void;
+  onSave: () => void;
   onResolveConflict: (strategy: ConflictStrategy) => void;
   onSaveConflictArtifact: () => void;
 }) => {
   return (
     <>
-      <div class="flex min-w-0 items-center gap-3">
+      <div class="flex min-w-0 items-center justify-between gap-3">
         <p class="min-w-0 flex-1 truncate text-sm">{props.file.path}</p>
-        <Show when={props.saveUi !== "idle"}>
-          <span
-            class="flex shrink-0 items-center gap-1.5 text-xs text-black/50 dark:text-white/50"
-            aria-live="polite"
+        <div class="flex shrink-0 items-center gap-2">
+          <Show when={props.saveUi === "saving"}>
+            <span class="text-xs text-black/50 dark:text-white/50">
+              saving…
+            </span>
+          </Show>
+          <Show when={props.saveUi === "saved"}>
+            <span class="text-[#0f6a31] dark:text-[#6fc38c]" title="Saved">
+              ✓
+            </span>
+          </Show>
+          <button
+            type="button"
+            class="rounded-none border border-black/25 px-3 py-1.5 text-xs hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/25 dark:hover:bg-white/10"
+            disabled={!props.isDirty || props.hasConflict}
+            onClick={() => void props.onSave()}
           >
-            <Show when={props.saveUi === "saving"}>
-              <span
-                class="inline-block size-1.5 animate-pulse rounded-full bg-[#0047cc] dark:bg-[#6ea8ff]"
-                title="Saving"
-              />
-              <span>saving…</span>
-            </Show>
-            <Show when={props.saveUi === "saved"}>
-              <span class="text-[#0f6a31] dark:text-[#6fc38c]" title="Saved">
-                ✓
-              </span>
-            </Show>
-          </span>
-        </Show>
+            save
+          </button>
+        </div>
       </div>
 
       <Show when={props.hasConflict}>
@@ -661,10 +636,12 @@ const FileWorkspace = (props: {
           <Editor
             file={file()}
             draft={editor.draft()}
+            isDirty={editor.isDirty()}
             hasConflict={editor.hasConflict()}
             conflictRemote={editor.conflictRemote()}
             saveUi={editor.saveUi()}
             onDraftChange={editor.setDraft}
+            onSave={editor.save}
             onResolveConflict={editor.resolveConflict}
             onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
           />
