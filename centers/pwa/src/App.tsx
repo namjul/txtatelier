@@ -801,11 +801,14 @@ const SettingsPanel = (props: {
           </button>
         </div>
 
-        <Show when={showMnemonic() && props.owner()?.mnemonic}>
+        <Show when={showMnemonic()}>
           <textarea
             class="mt-1 min-h-24 w-full rounded-none border border-black/25 bg-transparent p-2 font-mono text-xs dark:border-white/25"
             rows={3}
             readOnly
+            placeholder={
+              props.owner()?.mnemonic ? undefined : "mnemonic not available"
+            }
             value={props.owner()?.mnemonic ?? ""}
           />
         </Show>
