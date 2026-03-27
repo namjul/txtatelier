@@ -1,10 +1,11 @@
+import { Combobox, createListCollection } from "@ark-ui/solid";
 import {
   createFormatTypeError,
   type MaxLengthError,
   type MinLengthError,
   Mnemonic,
 } from "@evolu/common";
-import { Combobox, createListCollection } from "@ark-ui/solid";
+import { createVirtualizer } from "@tanstack/solid-virtual";
 import type { Accessor } from "solid-js";
 import {
   createEffect,
@@ -370,7 +371,7 @@ const useFileEditor = (
 };
 
 // =============================================================================
-// COMPONENT: FILE PICKER
+// COMPONENT: FILE PICKER (Virtualized)
 // =============================================================================
 
 interface FileOption {
@@ -384,7 +385,10 @@ const FilePicker = (props: {
   onSelect: (id: FilesRow["id"]) => void;
 }) => {
   const [search, setSearch] = createSignal("");
+  const [isOpen, setIsOpen] = createSignal(false);
+  let scrollRef: HTMLDivElement | undefined;
 
+  // Filter files based on search (show all when empty)
   const fileOptions = createMemo<ReadonlyArray<FileOption>>(() => {
     const searchTerm = search().trim().toLowerCase();
     return props.files
@@ -398,6 +402,7 @@ const FilePicker = (props: {
       }));
   });
 
+  // Create collection with filtered items
   const collection = createMemo(() =>
     createListCollection<FileOption>({
       items: fileOptions(),
@@ -405,6 +410,31 @@ const FilePicker = (props: {
       itemToValue: (item) => item.value,
     }),
   );
+
+  // Virtualizer setup: 32px per item, 288px viewport (9 items), 5 overscan
+  const virtualizer = createVirtualizer({
+    get count() {
+      return fileOptions().length;
+    },
+    getScrollElement: () => scrollRef ?? null,
+    estimateSize: () => 32,
+    overscan: 5,
+  });
+
+  // Subscribe to virtual items and total size - makes them reactive
+  const virtualItems = createMemo(() => virtualizer.getVirtualItems());
+  const totalSize = createMemo(() => virtualizer.getTotalSize());
+
+  // Re-measure when dropdown opens or files change
+  createEffect(() => {
+    // Trigger when open state changes or file count changes
+    const open = isOpen();
+    const count = fileOptions().length;
+    if (open && scrollRef && count > 0) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => virtualizer.measure(), 0);
+    }
+  });
 
   const value = createMemo(() =>
     props.selectedFileId == null ? [] : [String(props.selectedFileId)],
@@ -417,6 +447,7 @@ const FilePicker = (props: {
         value={value()}
         openOnClick
         positioning={{ placement: "bottom-start" }}
+        onOpenChange={(details) => setIsOpen(details.open)}
         onInputValueChange={(details) => setSearch(details.inputValue)}
         onValueChange={(details) => {
           const selectedValue = details.value.at(0);
@@ -428,6 +459,9 @@ const FilePicker = (props: {
           if (!selected) return;
 
           props.onSelect(selected.id);
+        }}
+        scrollToIndexFn={(details) => {
+          virtualizer.scrollToIndex(details.index, { align: "start" });
         }}
       >
         <Combobox.Label class="mb-1 block text-xs">Search files</Combobox.Label>
@@ -444,20 +478,49 @@ const FilePicker = (props: {
           </Combobox.Trigger>
         </Combobox.Control>
         <Combobox.Positioner class="z-10">
-          <Show when={fileOptions().length > 0}>
-            <Combobox.Content class="max-h-72 overflow-auto border border-black/25 bg-[#f2f1ee] p-1 dark:border-white/25 dark:bg-[#151617]">
-              <For each={fileOptions()}>
-                {(item) => (
-                  <Combobox.Item
-                    item={item}
-                    class="cursor-pointer px-2 py-1 text-sm data-[highlighted]:bg-black/10 dark:data-[highlighted]:bg-white/10"
-                  >
-                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                  </Combobox.Item>
-                )}
-              </For>
-            </Combobox.Content>
-          </Show>
+          <Combobox.Content class="border border-black/25 bg-[#f2f1ee] dark:border-white/25 dark:bg-[#151617]">
+            <Show
+              when={fileOptions().length > 0}
+              fallback={
+                <div class="px-2 py-3 text-sm text-black/65 dark:text-white/65">
+                  No result found for "{search()}"
+                </div>
+              }
+            >
+              <div ref={scrollRef} class="h-72 overflow-auto">
+                <div
+                  style={{
+                    height: `${totalSize()}px`,
+                    position: "relative",
+                  }}
+                >
+                  <For each={virtualItems()}>
+                    {(virtualItem) => {
+                      const item = fileOptions()[virtualItem.index];
+                      if (!item) return null;
+                      const isSelected = value().includes(item.value);
+                      return (
+                        <Combobox.Item
+                          item={item}
+                          class={`
+                            absolute left-0 w-full cursor-pointer px-2 py-1 text-sm
+                            data-[highlighted]:bg-black/10 dark:data-[highlighted]:bg-white/10
+                            ${isSelected ? "bg-black/5 dark:bg-white/5 font-medium" : ""}
+                          `}
+                          style={{
+                            height: `${virtualItem.size}px`,
+                            transform: `translateY(${virtualItem.start}px)`,
+                          }}
+                        >
+                          <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                        </Combobox.Item>
+                      );
+                    }}
+                  </For>
+                </div>
+              </div>
+            </Show>
+          </Combobox.Content>
         </Combobox.Positioner>
       </Combobox.Root>
     </div>
@@ -495,10 +558,7 @@ const Editor = (props: {
               <span>saving…</span>
             </Show>
             <Show when={props.saveUi === "saved"}>
-              <span
-                class="text-[#0f6a31] dark:text-[#6fc38c]"
-                title="Saved"
-              >
+              <span class="text-[#0f6a31] dark:text-[#6fc38c]" title="Saved">
                 ✓
               </span>
             </Show>
@@ -803,7 +863,12 @@ const AppShell = () => {
 
   const statusOps: StatusOps = {
     setOk: (message) =>
-      setStatus((prev) => ({ ...prev, message, tone: "ok", lastAction: message })),
+      setStatus((prev) => ({
+        ...prev,
+        message,
+        tone: "ok",
+        lastAction: message,
+      })),
     setError: (message) =>
       setStatus((prev) => ({ ...prev, message, tone: "error" })),
     setIdle: (message) =>
