@@ -154,6 +154,10 @@ run_device() {
 
   printf '%s\n' "${device_name}" > "${LAST_DEVICE_FILE}"
 
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux split-window -h -d -c "${watch_dir}"
+  fi
+
   echo "Device: ${device_name}"
   echo "Home: ${home_dir}"
   echo "DB: ${db_path}"
@@ -226,6 +230,8 @@ run_device() {
     cd "${PROJECT_ROOT}"
     TXTATELIER_LOG_LEVEL=DEBUG TXTATELIER_DB_PATH="${db_path}" ${CLI_CMD} --watch-dir "${watch_dir}"
   )
+
+  cd "${watch_dir}"
 }
 
 mode="new"
