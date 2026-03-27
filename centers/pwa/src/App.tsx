@@ -15,7 +15,7 @@ import {
   For,
   Show,
 } from "solid-js";
-import { evolu } from "./evolu/client";
+import { defaultRelayUrl, evolu } from "./evolu/client";
 import { computeContentHash } from "./evolu/contentHash";
 import { createUseEvolu, EvoluProvider } from "./evolu/evolu";
 import { type FilesRow, filesQuery } from "./evolu/files";
@@ -657,7 +657,7 @@ const AppShell = () => {
             <input
               type="text"
               class="w-full rounded-none border border-black/25 bg-transparent px-2.5 py-2 text-sm outline-none focus:border-black dark:border-white/25 dark:focus:border-white"
-              placeholder="wss://free.evoluhq.com (default)"
+              placeholder={defaultRelayUrl}
               value={transportUrl()}
               onInput={(e) => setTransportUrl(e.currentTarget.value)}
             />

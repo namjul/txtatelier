@@ -4,8 +4,10 @@ import { evoluWebDeps } from "@evolu/web";
 import { env } from "../env";
 import { Schema } from "./schema";
 
+export const defaultRelayUrl = "wss://free.evoluhq.com";
+
 export const createEvoluClient = (transportUrl?: string) => {
-  const trimmedTransportUrl = transportUrl?.trim();
+  const trimmedTransportUrl = transportUrl?.trim() || defaultRelayUrl;
   const evolu = createEvolu(evoluWebDeps)(Schema, {
     name: SimpleName.orThrow("txtatelier"),
     transports: trimmedTransportUrl
