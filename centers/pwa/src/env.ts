@@ -12,9 +12,10 @@ const EnvInput = object({
 const formatTypeError = createFormatTypeError();
 
 const parseEnv = () => {
-  const processEnv = process.env as Record<string, string | undefined>;
   // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
-  const basePath = processEnv["TXTATELIER_BASE_PATH"];
+  const basePath = import.meta.env['VITE_TXTATELIER_BASE_PATH']
+
+  console.log("basePath", basePath);
 
   const envInput = {
     ...(basePath !== undefined ? { TXTATELIER_BASE_PATH: basePath } : {}),
