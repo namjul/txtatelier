@@ -5,7 +5,6 @@ import { env } from "./env.js";
 import {
   createOwnerSession,
   resetOwner,
-  restoreOwnerFromMnemonic,
   showOwnerContext,
   showOwnerMnemonic,
   startFileSync,
@@ -16,7 +15,6 @@ const runStart = async (watchDir?: string): Promise<void> => {
 
   const result = await startFileSync(
     { ...(watchDir && { watchDir }) },
-    env.mnemonic,
   );
 
   if (!result.ok) {
@@ -54,11 +52,6 @@ bin("txtatelier", "Local-first file synchronization CLI")
   .command("owner", "Manage owner identity")
   .option("--show", "Show owner mnemonic")
   .option("--where", "Show path of owner/mnemonic files")
-  .option({
-    name: "--restore <words...>",
-    description: "Restore owner from mnemonic",
-    eager: true,
-  })
   .option("--reset", "Reset owner (destructive)")
   .option("--yes", "Confirm destructive operation (for --reset)")
   .action(async (options) => {
@@ -74,14 +67,6 @@ bin("txtatelier", "Local-first file synchronization CLI")
 
     if (options.where) {
       await showOwnerContext(session);
-      process.exit(0);
-    }
-
-    if (options.restore) {
-      const mnemonic = Array.isArray(options.restore)
-        ? options.restore.join(" ")
-        : options.restore;
-      await restoreOwnerFromMnemonic(session, mnemonic as string);
       process.exit(0);
     }
 

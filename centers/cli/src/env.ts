@@ -1,7 +1,6 @@
 import {
   createFormatTypeError,
   String as EvoluString,
-  Mnemonic,
   object,
   optional,
   union,
@@ -13,7 +12,6 @@ export type LogLevel = typeof LogLevel.Type;
 const EnvInput = object({
   TXTATELIER_DB_PATH: optional(EvoluString),
   TXTATELIER_LOG_LEVEL: optional(LogLevel),
-  TXTATELIER_MNEMONIC: optional(Mnemonic),
   TXTATELIER_RELAY_URL: optional(EvoluString),
   TXTATELIER_WATCH_DIR: optional(EvoluString),
 });
@@ -23,21 +21,17 @@ const formatTypeError = createFormatTypeError();
 const parseEnv = () => {
   const processEnv = process.env as Record<string, string | undefined>;
   // biome-ignore-start lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
-  const mnemonicInput = processEnv["TXTATELIER_MNEMONIC"];
   const dbPathInput = processEnv["TXTATELIER_DB_PATH"];
   const logLevelInput = processEnv["TXTATELIER_LOG_LEVEL"];
   const relayUrlInput = processEnv["TXTATELIER_RELAY_URL"];
   const watchDirInput = processEnv["TXTATELIER_WATCH_DIR"];
   // biome-ignore-end lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
-  const mnemonic =
-    mnemonicInput && mnemonicInput.trim() !== "" ? mnemonicInput : undefined;
 
   const envInput = {
     ...(dbPathInput !== undefined ? { TXTATELIER_DB_PATH: dbPathInput } : {}),
     ...(logLevelInput !== undefined
       ? { TXTATELIER_LOG_LEVEL: logLevelInput.toUpperCase() }
       : {}),
-    ...(mnemonic !== undefined ? { TXTATELIER_MNEMONIC: mnemonic } : {}),
     ...(relayUrlInput !== undefined
       ? { TXTATELIER_RELAY_URL: relayUrlInput }
       : {}),
@@ -61,7 +55,6 @@ const parseEnv = () => {
   return {
     dbPath: raw.TXTATELIER_DB_PATH,
     logLevel: raw.TXTATELIER_LOG_LEVEL ?? "ERROR",
-    mnemonic: raw.TXTATELIER_MNEMONIC,
     relayUrl: raw.TXTATELIER_RELAY_URL,
     watchDir: raw.TXTATELIER_WATCH_DIR,
   } as const;

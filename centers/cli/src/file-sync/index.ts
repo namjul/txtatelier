@@ -7,16 +7,14 @@ import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  type AppOwner,
   createFormatTypeError,
   type Evolu,
   err,
   Mnemonic,
   ok,
   type Result,
-  tryAsync,
 } from "@evolu/common";
-import type { ShardOwner } from "@evolu/common/local-first";
+import { deriveShardOwner } from "@evolu/common/local-first";
 import envPaths from "env-paths";
 import { env } from "../env";
 import { logger } from "../logger";
@@ -64,8 +62,6 @@ export type StartupFatalError = {
 export interface OwnerSession {
   readonly evolu: Evolu<typeof Schema>;
   readonly flush: () => Promise<Result<void, FlushError>>;
-  readonly owner: AppOwner;
-  readonly filesShardOwner: ShardOwner;
   readonly config: FileSyncConfig;
 }
 
@@ -85,7 +81,7 @@ export interface FileSyncSession extends OwnerSession {
 export const createOwnerSession = async (
   config?: Partial<FileSyncConfig>,
 ): Promise<OwnerSession> => {
-  const resolvedWatchDir = config?.watchDir ?? env.watchDir ?? defaultWatchDir;
+  const resolvedWatchDir = config?.watchDir ?? env.watchDir ?? defaultWatchDir
   const resolvedDbPath =
     config?.dbPath ?? env.dbPath ?? defaultDbPath(resolvedWatchDir);
   const resolvedRelayUrl = config?.relayUrl ?? env.relayUrl ?? defaultRelayUrl;
@@ -98,8 +94,6 @@ export const createOwnerSession = async (
 
   return {
     evolu: client.evolu,
-    owner: client.owner,
-    filesShardOwner: client.filesShardOwner,
     flush: client.flush,
     config: {
       dbPath: resolvedDbPath,
@@ -111,68 +105,29 @@ export const createOwnerSession = async (
 
 export const startFileSync = async (
   config?: Partial<FileSyncConfig>,
-  restoreMnemonic?: Mnemonic,
 ): Promise<Result<FileSyncSession, StartupFatalError>> => {
   logger.info("[lifecycle] Initializing...");
 
   // Create base owner session
   const ownerSession = await createOwnerSession(config);
-  const {
-    evolu,
-    owner,
-    filesShardOwner,
-    flush: closeDb,
-    config: resolvedConfig,
-  } = ownerSession;
-  const resolvedWatchDir = resolvedConfig.watchDir;
-  const resolvedDbPath = resolvedConfig.dbPath;
-  const resolvedrelayUrl = resolvedConfig.relayUrl;
+  const { evolu, flush: closeDb, config: { watchDir, dbPath, relayUrl } } = ownerSession;
+
+  const owner = await evolu.appOwner;
+  const filesShardOwner = deriveShardOwner(owner, ["files", 1]);
 
   const syncCtx: FileSyncContext = {
     evolu,
-    watchDir: resolvedWatchDir,
+    watchDir,
     filesOwnerId: filesShardOwner.id,
   };
 
-  if (restoreMnemonic) {
-    logger.debug("[lifecycle] Restoring from provided mnemonic...");
-
-    const restoreResult = await tryAsync(
-      () => evolu.restoreAppOwner(restoreMnemonic, { reload: false }),
-      (error) => error as Error,
-    );
-
-    if (restoreResult.ok) {
-      logger.debug("[lifecycle] Mnemonic restored to database");
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      logger.debug("[lifecycle] Flushing database...");
-
-      const flushResult = await closeDb();
-      if (!flushResult.ok) {
-        logger.error(
-          "[error] Failed to flush restored mnemonic:",
-          flushResult.error,
-        );
-      } else {
-        logger.debug("[lifecycle] Mnemonic restore persisted");
-      }
-      logger.info("[lifecycle] Restart required to activate restored owner");
-      process.exit(flushResult.ok ? 0 : 1);
-    } else {
-      logger.warn(
-        "[lifecycle] Failed to restore mnemonic, using generated owner:",
-        restoreResult.error,
-      );
-    }
-  }
-
   // Detect first run (check if DB file exists)
-  const isFirstRun = !(await access(resolvedDbPath).then(
+  const isFirstRun = !(await access(dbPath).then(
     () => true,
     () => false,
   ));
 
-  if (isFirstRun && !restoreMnemonic) {
+  if (isFirstRun) {
     logger.info("[lifecycle]");
     logger.info("[lifecycle] First run detected!");
     logger.info("[lifecycle]");
@@ -240,9 +195,9 @@ export const startFileSync = async (
   const failedSyncs = new Set<string>();
 
   // Start Change Capture: watch filesystem and reflect into Evolu
-  logger.info(`[lifecycle] Watching directory: ${resolvedWatchDir}`);
+  logger.info(`[lifecycle] Watching directory: ${watchDir}`);
   const stopWatching = await startWatching(
-    resolvedWatchDir,
+    watchDir,
     async (filePath) => {
       const result = await captureChange(syncCtx, filePath);
       if (!result.ok) {
@@ -274,8 +229,6 @@ export const startFileSync = async (
   // Return session with bundled cleanup
   return ok({
     evolu,
-    owner,
-    filesShardOwner,
     flush: closeDb,
     failedSyncs,
     startupReconciliation: {
@@ -283,9 +236,9 @@ export const startFileSync = async (
       evolu: evolResult.value,
     },
     config: {
-      dbPath: resolvedDbPath,
-      watchDir: resolvedWatchDir,
-      relayUrl: resolvedrelayUrl,
+      dbPath,
+      watchDir,
+      relayUrl,
     },
     stop: async (): Promise<void> => {
       logger.info("[lifecycle] Shutting down...");
@@ -321,17 +274,19 @@ export const startFileSync = async (
 export const showOwnerMnemonic = async (
   session: OwnerSession,
 ): Promise<void> => {
-  console.log(session.owner.mnemonic);
+  const owner = await session.evolu.appOwner;
+  console.log(owner.mnemonic);
 };
 
 export const showOwnerContext = async (
   session: OwnerSession,
 ): Promise<void> => {
+  const owner = await session.evolu.appOwner;
   console.log("Active context:");
   console.log(`  DB path: ${session.config.dbPath}`);
   console.log(`  Watch dir: ${session.config.watchDir}`);
   console.log(`  Relay URL: ${session.config.relayUrl}`);
-  console.log(`  Owner ID: ${session.owner.id}`);
+  console.log(`  Owner ID: ${owner.id}`);
 };
 
 export const restoreOwnerFromMnemonic = async (

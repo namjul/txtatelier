@@ -16,6 +16,7 @@ import {
   NonEmptyString1000,
   sqliteTrue,
 } from "@evolu/common";
+import { deriveShardOwner } from "@evolu/common/local-first";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { resetEvolu } from "./evolu";
 import { defaultRelayUrl, type FileSyncSession, startFileSync } from "./index";
@@ -197,7 +198,10 @@ describe("GIVEN sync is running", () => {
           content: "from evolu",
           contentHash: NonEmptyString100.orThrow("fake-hash"),
         },
-        { ownerId: session.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -226,7 +230,10 @@ describe("GIVEN sync is running", () => {
           content: "version 1",
           contentHash: NonEmptyString100.orThrow("hash-v1"),
         },
-        { ownerId: session.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -242,7 +249,10 @@ describe("GIVEN sync is running", () => {
           content: "version 2",
           contentHash: NonEmptyString100.orThrow("hash-v2"),
         },
-        { ownerId: session.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -271,7 +281,10 @@ describe("GIVEN sync is running", () => {
           content: "will be deleted",
           contentHash: NonEmptyString100.orThrow("hash-delete"),
         },
-        { ownerId: session.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -288,7 +301,10 @@ describe("GIVEN sync is running", () => {
           id: fileId,
           isDeleted: sqliteTrue,
         },
-        { ownerId: session.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -331,7 +347,10 @@ describe("GIVEN file exists in both Evolu and disk", () => {
       session1.evolu.update(
         "file",
         { id: fileId!, isDeleted: sqliteTrue },
-        { ownerId: session1.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
       await session1.flush();
       await session1.stop();
@@ -363,7 +382,10 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           content: "added offline",
           contentHash: NonEmptyString100.orThrow("hash-offline"),
         },
-        { ownerId: session1.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
       await session1.flush();
       await session1.stop();
@@ -428,7 +450,10 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           content: "evolu edit",
           contentHash: NonEmptyString100.orThrow("hash-conflict"),
         },
-        { ownerId: session1.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
       await session1.flush();
       await session1.stop();
@@ -469,7 +494,10 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           id: fileId!,
           isDeleted: sqliteTrue,
         },
-        { ownerId: session1.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
       await session1.flush();
       await session1.stop();
@@ -514,7 +542,10 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           content: "evolu edit",
           contentHash: NonEmptyString100.orThrow("hash-conflict"),
         },
-        { ownerId: session1.filesShardOwner.id },
+        {
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+            .id,
+        },
       );
       await session1.flush();
       await session1.stop();
