@@ -5,12 +5,14 @@ import {
   Mnemonic,
 } from "@evolu/common";
 import { Combobox, createListCollection } from "@ark-ui/solid";
+import type { Accessor } from "solid-js";
 import {
   createEffect,
   createMemo,
   createResource,
   createSignal,
   For,
+  onCleanup,
   Show,
 } from "solid-js";
 import { defaultRelayUrl, evolu } from "./evolu/client";
@@ -35,12 +37,14 @@ type ConflictStrategy = "local" | "remote";
 interface StatusState {
   readonly message: string;
   readonly tone: StatusTone;
+  readonly lastAction: string | null;
 }
 
 interface StatusOps {
   readonly setOk: (message: string) => void;
   readonly setError: (message: string) => void;
   readonly setIdle: (message: string) => void;
+  readonly setLastAction: (action: string) => void;
 }
 
 // =============================================================================
@@ -150,6 +154,10 @@ const useFileList = () => {
   };
 };
 
+type SaveUiState = "idle" | "saving" | "saved";
+
+const AUTO_SAVE_DEBOUNCE_MS = 500;
+
 // =============================================================================
 // HOOK: FILE EDITOR MANAGEMENT
 // =============================================================================
@@ -171,6 +179,7 @@ const useFileEditor = (
   const [conflictRemote, setConflictRemote] = createSignal<FilesRow | null>(
     null,
   );
+  const [saveUi, setSaveUi] = createSignal<SaveUiState>("idle");
 
   const isDirty = createMemo(() => {
     if (selectedFile() == null) return false;
@@ -189,6 +198,7 @@ const useFileEditor = (
       setBaseFingerprint(null);
       setConflictRemote(null);
       setDraft("");
+      setSaveUi("idle");
       return;
     }
 
@@ -201,6 +211,7 @@ const useFileEditor = (
       setBaseFingerprint(file.contentHash);
       setConflictRemote(null);
       setDraft(currentContent);
+      setSaveUi("idle");
       return;
     }
 
@@ -215,6 +226,7 @@ const useFileEditor = (
         status.setError("conflict detected");
       }
       setConflictRemote(file);
+      setSaveUi("idle");
       return;
     }
 
@@ -223,13 +235,13 @@ const useFileEditor = (
     setBaseFingerprint(file.contentHash);
     setConflictRemote(null);
     setDraft(currentContent);
+    setSaveUi("idle");
   });
 
-  const save = async () => {
+  const persistDraft = async (): Promise<boolean> => {
     const file = selectedFile();
-    if (file == null || !isDirty() || hasConflict()) return;
+    if (file == null || !isDirty() || hasConflict()) return false;
 
-    status.setIdle("saving");
     const content = draft();
     const contentHash = await computeContentHash(content);
     const result = evoluClient.update("file", {
@@ -240,12 +252,50 @@ const useFileEditor = (
 
     if (!result.ok) {
       status.setError("invalid value");
-      return;
+      setSaveUi("idle");
+      return false;
     }
 
     setBaseContent(content);
     setBaseFingerprint(contentHash);
-    status.setOk("saved");
+    status.setLastAction(`saved ${file.path}`);
+    status.setIdle("ready");
+    return true;
+  };
+
+  // Debounced auto-save when draft differs from persisted base
+  createEffect(() => {
+    const file = selectedFile();
+    if (file == null) return;
+
+    const d = draft();
+    const base = baseContent();
+    const conflict = hasConflict();
+
+    if (conflict || d === base) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setSaveUi("saving");
+        const ok = await persistDraft();
+        if (ok) {
+          setSaveUi("saved");
+        }
+      })();
+    }, AUTO_SAVE_DEBOUNCE_MS);
+
+    onCleanup(() => {
+      clearTimeout(timer);
+    });
+  });
+
+  const setDraftTracked = (value: string) => {
+    setDraft(value);
+    if (saveUi() === "saved") {
+      setSaveUi("idle");
+    }
   };
 
   const resolveConflict = (strategy: ConflictStrategy) => {
@@ -260,11 +310,12 @@ const useFileEditor = (
     }
 
     setConflictRemote(null);
-    status.setOk(
+    const detail =
       strategy === "remote"
         ? "draft replaced with remote"
-        : "conflict dismissed",
-    );
+        : "conflict dismissed";
+    status.setLastAction(detail);
+    status.setIdle("ready");
   };
 
   const saveDraftAsConflictArtifact = async () => {
@@ -277,7 +328,7 @@ const useFileEditor = (
       return;
     }
 
-    status.setIdle("saving conflict artifact");
+    status.setIdle("saving conflict artifact…");
     const draftContent = draft();
     const draftHash = await computeContentHash(draftContent);
     const artifactPath = createConflictArtifactPath(
@@ -302,16 +353,17 @@ const useFileEditor = (
     setBaseContent(remoteContent);
     setBaseFingerprint(file.contentHash);
     setConflictRemote(null);
-    status.setOk("conflict artifact saved");
+    const msg = `saved conflict artifact ${artifactPath}`;
+    status.setLastAction(msg);
+    status.setIdle("ready");
   };
 
   return {
     draft,
-    setDraft,
-    isDirty,
+    setDraft: setDraftTracked,
     hasConflict,
     conflictRemote,
-    save,
+    saveUi,
     resolveConflict,
     saveDraftAsConflictArtifact,
   };
@@ -359,7 +411,7 @@ const FilePicker = (props: {
   );
 
   return (
-    <div class="relative max-w-3xl">
+    <div class="relative w-full">
       <Combobox.Root
         collection={collection()}
         value={value()}
@@ -419,26 +471,39 @@ const FilePicker = (props: {
 const Editor = (props: {
   file: FilesRow;
   draft: string;
-  isDirty: boolean;
   hasConflict: boolean;
   conflictRemote: FilesRow | null;
+  saveUi: SaveUiState;
   onDraftChange: (value: string) => void;
-  onSave: () => void;
   onResolveConflict: (strategy: ConflictStrategy) => void;
   onSaveConflictArtifact: () => void;
 }) => {
   return (
     <>
-      <div class="flex items-center justify-between gap-4">
-        <p>{props.file.path}</p>
-        <button
-          type="button"
-          class="rounded-none border border-black/25 px-3 py-1.5 text-xs hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/25 dark:hover:bg-white/10"
-          disabled={!props.isDirty || props.hasConflict}
-          onClick={() => void props.onSave()}
-        >
-          save
-        </button>
+      <div class="flex min-w-0 items-center gap-3">
+        <p class="min-w-0 flex-1 truncate text-sm">{props.file.path}</p>
+        <Show when={props.saveUi !== "idle"}>
+          <span
+            class="flex shrink-0 items-center gap-1.5 text-xs text-black/50 dark:text-white/50"
+            aria-live="polite"
+          >
+            <Show when={props.saveUi === "saving"}>
+              <span
+                class="inline-block size-1.5 animate-pulse rounded-full bg-[#0047cc] dark:bg-[#6ea8ff]"
+                title="Saving"
+              />
+              <span>saving…</span>
+            </Show>
+            <Show when={props.saveUi === "saved"}>
+              <span
+                class="text-[#0f6a31] dark:text-[#6fc38c]"
+                title="Saved"
+              >
+                ✓
+              </span>
+            </Show>
+          </span>
+        </Show>
       </div>
 
       <Show when={props.hasConflict}>
@@ -491,68 +556,51 @@ const FileWorkspace = (props: {
   );
 
   return (
-    <>
-      <section class="space-y-5 text-sm leading-6">
-        <div class="space-y-2">
-          <h2 class="text-base font-bold">Files</h2>
-          <Show
-            when={!fileList.isLoading()}
-            fallback={
-              <p class="text-sm text-black/65 dark:text-white/65">
-                loading files
-              </p>
-            }
-          >
-            <Show
-              when={fileList.files().length > 0}
-              fallback={
-                <p class="text-sm text-black/65 dark:text-white/65">
-                  no files available
-                </p>
-              }
-            >
-              <FilePicker
-                files={fileList.files()}
-                selectedFileId={fileList.selectedFileId()}
-                onSelect={fileList.selectFile}
-              />
-            </Show>
-          </Show>
-        </div>
+    <section class="w-full space-y-5 text-sm leading-6">
+      <Show
+        when={!fileList.isLoading()}
+        fallback={
+          <p class="text-sm text-black/65 dark:text-white/65">loading files</p>
+        }
+      >
+        <Show
+          when={fileList.files().length > 0}
+          fallback={
+            <p class="text-sm text-black/65 dark:text-white/65">
+              no files available
+            </p>
+          }
+        >
+          <FilePicker
+            files={fileList.files()}
+            selectedFileId={fileList.selectedFileId()}
+            onSelect={fileList.selectFile}
+          />
+        </Show>
+      </Show>
 
-        <div class="space-y-3">
-          <h3 class="text-base font-bold">Open File</h3>
-          <Show
-            when={fileList.selectedFile()}
-            fallback={
-              <p class="text-black/65 dark:text-white/65">
-                select a file to open its content
-              </p>
-            }
-          >
-            {(file) => (
-              <Editor
-                file={file()}
-                draft={editor.draft()}
-                isDirty={editor.isDirty()}
-                hasConflict={editor.hasConflict()}
-                conflictRemote={editor.conflictRemote()}
-                onDraftChange={editor.setDraft}
-                onSave={editor.save}
-                onResolveConflict={editor.resolveConflict}
-                onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
-              />
-            )}
-          </Show>
-        </div>
-      </section>
-
-      <section class="mt-6 space-y-3 text-sm leading-6">
-        <h2 class="text-base font-bold">Files</h2>
-        <p>Read, write, and conflict guard baseline are active.</p>
-        <p>Current owner: {props.ownerId() ?? "loading"}</p>
-      </section>
-    </>
+      <Show
+        when={fileList.selectedFile()}
+        fallback={
+          <p class="text-black/65 dark:text-white/65">
+            select a file to open its content
+          </p>
+        }
+      >
+        {(file) => (
+          <Editor
+            file={file()}
+            draft={editor.draft()}
+            hasConflict={editor.hasConflict()}
+            conflictRemote={editor.conflictRemote()}
+            saveUi={editor.saveUi()}
+            onDraftChange={editor.setDraft}
+            onResolveConflict={editor.resolveConflict}
+            onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
+          />
+        )}
+      </Show>
+    </section>
   );
 };
 
@@ -569,7 +617,9 @@ type OwnerResource = ReturnType<typeof createResource<OwnerData>>;
 
 const SettingsPanel = (props: {
   owner: OwnerResource[0];
-  status: StatusOps;
+  ownerId: () => string | undefined;
+  appStatus: Accessor<StatusState>;
+  statusOps: StatusOps;
 }) => {
   const evoluClient = useEvolu();
   const [showMnemonic, setShowMnemonic] = createSignal(false);
@@ -583,13 +633,14 @@ const SettingsPanel = (props: {
 
     const parsed = Mnemonic.from(value.trim());
     if (!parsed.ok) {
-      props.status.setError(formatTypeError(parsed.error));
+      props.statusOps.setError(formatTypeError(parsed.error));
       return;
     }
 
-    props.status.setIdle("restoring");
+    props.statusOps.setIdle("restoring…");
     await evoluClient.restoreAppOwner(parsed.value);
-    props.status.setOk("restored");
+    props.statusOps.setLastAction("restored from mnemonic");
+    props.statusOps.setIdle("ready");
   };
 
   const handleResetOwner = async () => {
@@ -598,13 +649,14 @@ const SettingsPanel = (props: {
     );
     if (!confirmed) return;
 
-    props.status.setIdle("resetting");
+    props.statusOps.setIdle("resetting…");
     await evoluClient.resetAppOwner();
-    props.status.setOk("reset complete");
+    props.statusOps.setLastAction("reset local owner");
+    props.statusOps.setIdle("ready");
   };
 
   const handleExportDatabase = async () => {
-    props.status.setIdle("exporting backup");
+    props.statusOps.setIdle("exporting backup…");
     const array = await evoluClient.exportDatabase();
     const blob = new Blob([array], { type: "application/x-sqlite3" });
     const url = window.URL.createObjectURL(blob);
@@ -613,25 +665,52 @@ const SettingsPanel = (props: {
     anchor.download = "txtatelier-pwa.sqlite3";
     anchor.click();
     window.URL.revokeObjectURL(url);
-    props.status.setOk("backup exported");
+    props.statusOps.setLastAction("backup exported");
+    props.statusOps.setIdle("ready");
   };
 
   const handleSaveTransport = () => {
     const url = transportUrl().trim();
     localStorage.setItem("transportUrl", url);
-    props.status.setOk("transport saved - reload page to apply");
+    props.statusOps.setLastAction("transport saved — reload to apply");
+    props.statusOps.setIdle("ready");
   };
 
   return (
-    <>
-      <section class="space-y-4 text-sm leading-6">
-        <h2 class="text-base font-bold">Mnemonic Settings</h2>
-        <p>
-          Mnemonic remains hidden by default. Use restore, reset, and backup
-          actions from this page.
+    <div class="w-full space-y-10 text-sm leading-6">
+      <section class="space-y-3">
+        <h2 class="text-base font-bold">Status</h2>
+        <dl class="grid gap-1 text-black/80 dark:text-white/80">
+          <div class="flex flex-wrap gap-x-2">
+            <dt class="text-black/55 dark:text-white/55">current:</dt>
+            <dd
+              class="data-[tone=error]:text-[#a32222] data-[tone=ok]:text-[#0f6a31] dark:data-[tone=error]:text-[#ff8f8f] dark:data-[tone=ok]:text-[#6fc38c]"
+              data-tone={props.appStatus().tone}
+            >
+              {props.appStatus().message}
+            </dd>
+          </div>
+          <div class="flex flex-wrap gap-x-2">
+            <dt class="text-black/55 dark:text-white/55">last action:</dt>
+            <dd>
+              {props.appStatus().lastAction ?? (
+                <span class="text-black/45 dark:text-white/45">—</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="space-y-3">
+        <h2 class="text-base font-bold">Identity</h2>
+        <p class="break-all font-mono text-xs">
+          owner: {props.ownerId() ?? "loading…"}
+        </p>
+        <p class="text-black/65 dark:text-white/65">
+          Mnemonic stays hidden until you choose show.
         </p>
 
-        <div class="grid max-w-sm gap-2">
+        <div class="grid w-full gap-2">
           <button
             type="button"
             class="rounded-none border border-black/25 px-3 py-2 text-left text-sm hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
@@ -644,27 +723,27 @@ const SettingsPanel = (props: {
             class="rounded-none border border-black/25 px-3 py-2 text-left text-sm hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
             onClick={() => void handleRestoreFromMnemonic()}
           >
-            restore from mnemonic
+            restore
           </button>
           <button
             type="button"
             class="rounded-none border border-black/25 px-3 py-2 text-left text-sm hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
             onClick={() => void handleResetOwner()}
           >
-            reset local owner
+            reset
           </button>
           <button
             type="button"
             class="rounded-none border border-black/25 px-3 py-2 text-left text-sm hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
             onClick={() => void handleExportDatabase()}
           >
-            download backup
+            backup
           </button>
         </div>
 
         <Show when={showMnemonic() && props.owner()?.mnemonic}>
           <textarea
-            class="mt-1 min-h-24 w-full max-w-2xl rounded-none border border-black/25 bg-transparent p-2 font-mono text-xs dark:border-white/25"
+            class="mt-1 min-h-24 w-full rounded-none border border-black/25 bg-transparent p-2 font-mono text-xs dark:border-white/25"
             rows={3}
             readOnly
             value={props.owner()?.mnemonic ?? ""}
@@ -672,13 +751,15 @@ const SettingsPanel = (props: {
         </Show>
       </section>
 
-      <section class="mt-6 space-y-4 text-sm leading-6">
-        <h2 class="text-base font-bold">Sync Transport</h2>
-        <div class="max-w-lg space-y-2">
-          <div class="block text-xs">WebSocket URL</div>
+      <section class="space-y-3">
+        <h2 class="text-base font-bold">Sync</h2>
+        <div class="w-full space-y-2">
+          <div class="block text-xs text-black/65 dark:text-white/65">
+            websocket
+          </div>
           <input
             type="text"
-            class="w-full rounded-none border border-black/25 bg-transparent px-2.5 py-2 text-sm outline-none focus:border-black dark:border-white/25 dark:focus:border-white"
+            class="w-full rounded-none border border-black/25 bg-transparent px-2.5 py-2 font-mono text-xs outline-none focus:border-black dark:border-white/25 dark:focus:border-white"
             placeholder={defaultRelayUrl}
             value={transportUrl()}
             onInput={(e) => setTransportUrl(e.currentTarget.value)}
@@ -688,11 +769,11 @@ const SettingsPanel = (props: {
             class="rounded-none border border-black/25 px-3 py-2 text-sm hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
             onClick={handleSaveTransport}
           >
-            apply (requires reload)
+            apply
           </button>
         </div>
       </section>
-    </>
+    </div>
   );
 };
 
@@ -714,26 +795,27 @@ const AppShell = () => {
   const [status, setStatus] = createSignal<StatusState>({
     message: "ready",
     tone: "idle",
+    lastAction: null,
   });
 
   const [owner] = createResource(async () => evoluClient.appOwner);
   const ownerId = () => owner()?.id;
 
   const statusOps: StatusOps = {
-    setOk: (message) => setStatus({ message, tone: "ok" }),
-    setError: (message) => setStatus({ message, tone: "error" }),
-    setIdle: (message) => setStatus({ message, tone: "idle" }),
+    setOk: (message) =>
+      setStatus((prev) => ({ ...prev, message, tone: "ok", lastAction: message })),
+    setError: (message) =>
+      setStatus((prev) => ({ ...prev, message, tone: "error" })),
+    setIdle: (message) =>
+      setStatus((prev) => ({ ...prev, message, tone: "idle" })),
+    setLastAction: (lastAction) =>
+      setStatus((prev) => ({ ...prev, lastAction })),
   };
 
   return (
     <main class="min-h-screen w-full bg-[#f2f1ee] px-4 py-8 font-mono text-[#111111] sm:px-6 lg:px-8 dark:bg-[#151617] dark:text-[#efefef]">
       <header class="mb-9 flex flex-col justify-between gap-4 md:flex-row md:items-start">
-        <div>
-          <h1 class="text-2xl font-bold tracking-tight">txtatelier</h1>
-          <p class="mt-2 text-sm text-black/65 dark:text-white/65">
-            PWA baseline: Phase 6.0
-          </p>
-        </div>
+        <h1 class="text-2xl font-bold tracking-tight">txtatelier</h1>
         <nav class="flex gap-4 text-sm">
           <button
             type="button"
@@ -754,19 +836,17 @@ const AppShell = () => {
         </nav>
       </header>
 
-      <p
-        class="mb-9 text-sm text-black/65 data-[tone=error]:text-[#a32222] data-[tone=ok]:text-[#0f6a31] dark:text-white/65 dark:data-[tone=error]:text-[#ff8f8f] dark:data-[tone=ok]:text-[#6fc38c]"
-        data-tone={status().tone}
-      >
-        status: {status().message}
-      </p>
-
       <Show when={page() === "files"}>
         <FileWorkspace ownerId={ownerId} status={statusOps} />
       </Show>
 
       <Show when={page() === "settings"}>
-        <SettingsPanel owner={owner} status={statusOps} />
+        <SettingsPanel
+          owner={owner}
+          ownerId={ownerId}
+          appStatus={status}
+          statusOps={statusOps}
+        />
       </Show>
     </main>
   );
