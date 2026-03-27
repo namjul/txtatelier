@@ -1,6 +1,7 @@
 import { createEvolu, SimpleName } from "@evolu/common";
 import { deriveShardOwner } from "@evolu/common/local-first";
 import { evoluWebDeps } from "@evolu/web";
+import { env } from "../env";
 import { Schema } from "./schema";
 
 export const createEvoluClient = (transportUrl?: string) => {
@@ -10,6 +11,7 @@ export const createEvoluClient = (transportUrl?: string) => {
     transports: trimmedTransportUrl
       ? [{ type: "WebSocket" as const, url: trimmedTransportUrl }]
       : [],
+    reloadUrl: env.basePath ?? "/",
   });
 
   // Use same shard owner as CLI for file sync compatibility
