@@ -39,7 +39,7 @@ jobs:
       - name: Build PWA
         working-directory: centers/pwa
         env:
-          BASE_PATH: /${{ github.event.repository.name }}/
+          TXTATELIER_BASE_PATH: /${{ github.event.repository.name }}/
         run: bun run build
 
       - name: Upload Pages artifact
