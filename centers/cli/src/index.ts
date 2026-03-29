@@ -53,7 +53,7 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
 
   console.log("[txtatelier] Running (press Ctrl+C to stop)");
   await new Promise(() => {});
-  return undefined
+  return undefined;
 };
 
 abstract class BaseCommand extends Command {

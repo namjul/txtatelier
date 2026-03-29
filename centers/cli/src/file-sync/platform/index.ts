@@ -8,4 +8,4 @@ export {
   type InstanceLockError,
 } from "./InstanceLock";
 export { createPlatformIO, type PlatformIO } from "./PlatformIO";
-export { createPersistentSqliteDriver } from "./SqliteDriver";
+export { createSqlJsDriver } from "./SqlJsDriver";

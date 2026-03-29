@@ -11,7 +11,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node --format esm --external better-sqlite3 --external clipanion --external typanion",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm --external clipanion --external typanion",
     "prepublishOnly": "bun run build",
     "dev": "bun --watch src/index.ts",
     "dev:inspect": "bun --inspect --watch src/index.ts",
@@ -20,16 +20,16 @@
   },
   "dependencies": {
     "@evolu/common": "^7.4.0",
-    "better-sqlite3": "^12.6.2",
     "chokidar": "^5.0.0",
     "clipanion": "^4.0.0-rc.4",
     "env-paths": "^4.0.0",
     "picomatch": "^4.0.3",
+    "sql.js": "^1.13.0",
     "tsx": "^4.21.0",
     "untildify": "^6.0.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/sql.js": "^1.4.9",
     "@types/picomatch": "^4.0.2",
     "vitest": "^4.1.0"
   },

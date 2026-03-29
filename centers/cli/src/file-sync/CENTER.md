@@ -2,7 +2,7 @@
 
 **Status:** Strong
 **Created:** 2026-03-01
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-29
 
 ---
 
@@ -14,8 +14,8 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
 
 **Implemented:**
 - **Phase 0 (Change Capture: Filesystem → Evolu)**
-  - Custom Evolu platform layer for Bun CLI
-  - SQLite driver with debounced persistence (5 sec delay)
+  - Custom Evolu platform layer for CLI (Node and Bun)
+  - sql.js (ASM) SQLite driver with debounced persistence (5 sec delay)
   - PlatformIO abstraction for file I/O
   - Schema definition for file records
   - Mnemonic management (auto-generated, persisted by Evolu)
@@ -88,6 +88,23 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 ---
 
 ## Interventions
+
+### 2026-03-29 - Unify CLI SQLite on sql.js (ASM)
+
+**Aim:** One SQLite implementation for Node and Bun; drop native drivers and temp-file DB bootstrap.
+
+**Claim:** sql.js matches debounced snapshot persistence; removes WAL/temp-file workarounds.
+
+**Changes:**
+- Added `platform/SqlJsDriver.ts` — loads DB from `Uint8Array`, `exec` via prepared statements + `run`, debounced `export` → `PlatformIO.writeFile`, `[db:sqlite:sqljs]` logging.
+- Removed `SqliteDriverFactory.ts`, `SqliteDriver.ts` (better-sqlite3), `BunSqliteDriver.ts`; `EvoluDeps.ts` wires `createSqlJsDriver(io)` only.
+- CLI `package.json`: `sql.js` + `@types/sql.js`; removed `better-sqlite3` and `@types/better-sqlite3`.
+
+**Contact test:** Success-if: `bun test` (same pass/skip profile as before this change), `bun run build` in `centers/cli`, cold `bun run start -- --help`. Failure-if: driver fails to open existing DB or persist after mutations.
+
+**Status:** Completed
+
+---
 
 ### 2026-03-01 - Create Blank Canvas
 
@@ -385,7 +402,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 **Uses:**
 - Evolu `@evolu/common` - CRDT storage and replication
 - Evolu relay `wss://free.evoluhq.com` - Multi-device sync transport
-- Bun `bun:sqlite` - Native SQLite database (WAL mode, safeIntegers disabled for Evolu compat)
+- `sql.js` (`dist/sql-asm.js`) - SQLite in-process (ASM build); debounced `export` to disk via PlatformIO (no WAL; no runtime-specific native driver)
 - Bun file APIs - For PlatformIO (atomic writes via temp-file + rename)
 
 **Strengthened by:**
@@ -506,7 +523,7 @@ See IMPLEMENTATION_PLAN.md for full details.
 - ✅ Debounce duration: 100ms filesystem watch, 500ms subscription - balances responsiveness and stability
 - ✅ Watch strategy: Node.js fs.watch() - more stable than Bun.watch
 - ✅ Echo prevention: lastAppliedHash-based (not ownerId) - enables same-mnemonic multi-device sync
-- ✅ BigInt compatibility: Disable safeIntegers in BunSqliteDriver for Evolu Protocol.js compatibility
+- ✅ BigInt / Protocol.js: prior Bun native `safeIntegers` tuning superseded by unified sql.js driver
 - ✅ Mnemonic restore: Two-stage flow (restore + exit, then start) - Evolu reload() is browser-native
 - ✅ Concurrency control: Max 10 parallel file operations prevents filesystem overload
 - ✅ Conflict-file propagation reliability: direct Change Capture sync fallback after conflict creation

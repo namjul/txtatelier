@@ -12,16 +12,11 @@ import {
 } from "@evolu/common";
 import { createDbWorkerForPlatform } from "@evolu/common/local-first";
 import { logger } from "../../logger";
-import { createBunSqliteDriver } from "./BunSqliteDriver";
+import { createSqlJsDriver } from "./SqlJsDriver";
 import type { PlatformIO } from "./PlatformIO";
-import { createPersistentSqliteDriver } from "./SqliteDriver";
 
 export const createEvoluDeps = (io: PlatformIO): EvoluDeps => {
-  // Detect runtime and use appropriate driver
-  const isBun = typeof Bun !== "undefined";
-  const sqliteDriverFactory = isBun
-    ? createBunSqliteDriver(io)
-    : createPersistentSqliteDriver(io);
+  const sqliteDriverFactory = createSqlJsDriver(io);
 
   const createLoggedWebSocket: CreateWebSocket = (url, options) => {
     const ws = createWebSocket(url, {

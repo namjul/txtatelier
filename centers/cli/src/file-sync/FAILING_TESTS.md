@@ -86,7 +86,7 @@ Ctrl+C sends SIGINT → graceful shutdown → `stop()` is called → `flush()` p
 `_syncState` → no bug. The bug requires `_syncState` to NOT be persisted, which happens
 when the process exits without calling `flush()`. `kill -9` (or a crash) bypasses it.
 
-The 5s save debounce in `BunSqliteDriver` (`SAVE_DEBOUNCE_MS = 5000`) means you have a
+The 5s save debounce in `SqlJsDriver` (`SAVE_DEBOUNCE_MS = 5000`) means you have a
 ~5s window after the file is first synced where killing the process will leave `_syncState`
 unpersisted.
 
