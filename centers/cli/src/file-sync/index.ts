@@ -6,7 +6,6 @@ import { createHash } from "node:crypto";
 import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import path, { join, resolve } from "node:path";
-import untildify from 'untildify';
 import {
   createFormatTypeError,
   type Evolu,
@@ -17,6 +16,7 @@ import {
 } from "@evolu/common";
 import { deriveShardOwner } from "@evolu/common/local-first";
 import envPaths from "env-paths";
+import untildify from "untildify";
 import { env } from "../env";
 import { logger } from "../logger";
 import type { FlushError } from "./errors";
@@ -44,6 +44,14 @@ export const defaultDbPath = (watchDir: string) =>
   join(paths.data, `txtatelier-${hashWatchDir(watchDir)}.db`);
 export const defaultRelayUrl = "wss://free.evoluhq.com";
 export const defaultWatchDir = join(homedir(), "Documents", "Txtatelier");
+
+/**
+ * Resolve the watch directory for CLI and file-sync startup (same rules as {@link createOwnerSession}).
+ */
+export const resolveConfiguredWatchDir = (
+  config?: Partial<Pick<FileSyncConfig, "watchDir">>,
+): string =>
+  path.resolve(untildify(config?.watchDir ?? env.watchDir ?? defaultWatchDir));
 
 export interface FileSyncConfig {
   readonly dbPath: string;
@@ -82,7 +90,7 @@ export interface FileSyncSession extends OwnerSession {
 export const createOwnerSession = async (
   config?: Partial<FileSyncConfig>,
 ): Promise<OwnerSession> => {
-  const resolvedWatchDir = path.resolve(untildify(config?.watchDir ?? env.watchDir ?? defaultWatchDir));
+  const resolvedWatchDir = resolveConfiguredWatchDir(config);
   const resolvedDbPath =
     config?.dbPath ?? env.dbPath ?? defaultDbPath(resolvedWatchDir);
   const resolvedRelayUrl = config?.relayUrl ?? env.relayUrl ?? defaultRelayUrl;
@@ -111,7 +119,11 @@ export const startFileSync = async (
 
   // Create base owner session
   const ownerSession = await createOwnerSession(config);
-  const { evolu, flush: closeDb, config: { watchDir, dbPath, relayUrl } } = ownerSession;
+  const {
+    evolu,
+    flush: closeDb,
+    config: { watchDir, dbPath, relayUrl },
+  } = ownerSession;
 
   const owner = await evolu.appOwner;
   const filesShardOwner = deriveShardOwner(owner, ["files", 1]);
@@ -197,19 +209,16 @@ export const startFileSync = async (
 
   // Start Change Capture: watch filesystem and reflect into Evolu
   logger.info(`[lifecycle] Watching directory: ${watchDir}`);
-  const stopWatching = await startWatching(
-    watchDir,
-    async (filePath) => {
-      const result = await captureChange(syncCtx, filePath);
-      if (!result.ok) {
-        failedSyncs.add(filePath);
-        logger.error(
-          `[capture:fs→evolu] Failed to capture ${filePath}:`,
-          result.error,
-        );
-      }
-    },
-  );
+  const stopWatching = await startWatching(watchDir, async (filePath) => {
+    const result = await captureChange(syncCtx, filePath);
+    if (!result.ok) {
+      failedSyncs.add(filePath);
+      logger.error(
+        `[capture:fs→evolu] Failed to capture ${filePath}:`,
+        result.error,
+      );
+    }
+  });
 
   // Start State Materialization: apply replicated rows to filesystem
   const stopSyncing = startStateMaterialization(syncCtx, {

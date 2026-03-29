@@ -4,19 +4,35 @@ import packageJson from "../package.json" with { type: "json" };
 import {
   createOwnerSession,
   resetOwner,
+  resolveConfiguredWatchDir,
   showOwnerContext,
   showOwnerMnemonic,
   startFileSync,
 } from "./file-sync/index.js";
+import {
+  createInstanceLock,
+  formatDuplicateInstanceMessage,
+} from "./file-sync/platform/index.js";
 
 const runStart = async (watchDir?: string): Promise<void> => {
   console.log("[txtatelier] Starting...");
 
-  const result = await startFileSync(
-    { ...(watchDir && { watchDir }) },
+  const resolvedWatchDir = resolveConfiguredWatchDir(
+    watchDir !== undefined ? { watchDir } : {},
   );
+  const instanceLock = createInstanceLock(resolvedWatchDir);
+  const lockResult = await instanceLock.acquire();
+  if (!lockResult.ok) {
+    console.error(
+      formatDuplicateInstanceMessage(resolvedWatchDir, lockResult.error),
+    );
+    process.exit(2);
+  }
+
+  const result = await startFileSync({ watchDir: resolvedWatchDir });
 
   if (!result.ok) {
+    await instanceLock.release();
     console.error("[txtatelier] Fatal error during startup:");
     console.error(result.error);
     process.exit(1);
@@ -27,6 +43,7 @@ const runStart = async (watchDir?: string): Promise<void> => {
   const shutdown = async (signal: string) => {
     console.log(`[txtatelier] Received ${signal}, shutting down gracefully...`);
     await session.stop();
+    await instanceLock.release();
     process.exit(0);
   };
 
