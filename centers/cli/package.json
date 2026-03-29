@@ -11,7 +11,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node --format esm",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm --external better-sqlite3 --external clipanion --external typanion",
     "prepublishOnly": "bun run build",
     "dev": "bun --watch src/index.ts",
     "dev:inspect": "bun --inspect --watch src/index.ts",
