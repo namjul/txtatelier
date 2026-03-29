@@ -17,7 +17,7 @@ import {
 } from "solid-js";
 import { defaultRelayUrl, evolu } from "./evolu/client";
 import { computeContentHash } from "./evolu/contentHash";
-import { useEvolu, EvoluProvider } from "./evolu/evolu";
+import { EvoluProvider, useEvolu } from "./evolu/evolu";
 import { type FilesRow, filesQuery } from "./evolu/files";
 
 // =============================================================================

@@ -8,8 +8,7 @@ import type { PlatformIO } from "./PlatformIO";
 
 const SAVE_DEBOUNCE_MS = 5_000;
 
-// Runtime-agnostic database interface (duck typing over runtime-specific implementations)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: Runtime-agnostic database interface (duck typing over runtime-specific implementations)
 type SqliteDatabase = any;
 
 // Adapter interface for runtime-specific implementations

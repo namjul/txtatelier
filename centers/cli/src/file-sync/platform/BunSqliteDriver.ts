@@ -5,17 +5,11 @@ import type { CreateSqliteDriver } from "@evolu/common";
 import type { PlatformIO } from "./PlatformIO";
 import { createSqliteDriver } from "./SqliteDriverFactory";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type BunDatabase = any;
-
 export const createBunSqliteDriver = (io: PlatformIO): CreateSqliteDriver => {
   let tempDbPath: string | undefined;
 
   const bunAdapter = {
-    loadDatabase: async (
-      existingData: Uint8Array | null,
-      memory?: boolean,
-    ): Promise<BunDatabase> => {
+    loadDatabase: async (existingData: Uint8Array | null, memory?: boolean) => {
       // Dynamically import bun:sqlite (only available in Bun runtime)
       const { Database } = await import("bun:sqlite");
 

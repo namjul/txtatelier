@@ -15,7 +15,7 @@ import {
 } from "./file-sync/platform/index.js";
 
 /** Returns an exit code when startup must stop; otherwise never resolves. */
-const runStart = async (watchDir?: string): Promise<number | void> => {
+const runStart = async (watchDir?: string): Promise<number | undefined> => {
   console.log("[txtatelier] Starting...");
 
   const resolvedWatchDir = resolveConfiguredWatchDir(
@@ -53,6 +53,7 @@ const runStart = async (watchDir?: string): Promise<number | void> => {
 
   console.log("[txtatelier] Running (press Ctrl+C to stop)");
   await new Promise(() => {});
+  return undefined
 };
 
 abstract class BaseCommand extends Command {
@@ -68,7 +69,7 @@ class StartCommand extends BaseCommand {
       "Local-first file synchronization CLI. Runs file sync until interrupted.",
   });
 
-  async execute(): Promise<number | void> {
+  async execute(): Promise<number | undefined> {
     return runStart(this.watchDir);
   }
 }
@@ -127,9 +128,9 @@ class OwnerCommand extends BaseCommand {
 void runExit(
   {
     binaryName: packageJson.name,
-    binaryLabel: 'TXTAelier',
+    binaryLabel: "TXTAelier",
     binaryVersion: packageJson.version,
     enableColors: false,
   },
   [StartCommand, OwnerCommand],
-)
+);
