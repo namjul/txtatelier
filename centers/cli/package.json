@@ -13,8 +13,9 @@
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target node --format esm --external better-sqlite3",
     "prepublishOnly": "bun run build",
-    "dev": "node --import tsx/esm --watch src/index.ts",
-    "start": "node --import tsx/esm src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "dev:inspect": "bun --inspect --watch src/index.ts",
+    "start": "bun src/index.ts",
     "test": "vitest run"
   },
   "dependencies": {
