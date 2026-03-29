@@ -66,6 +66,13 @@ export const createEvoluClient = async ({
     transports: [{ type: "WebSocket", url: relayUrl }],
   });
 
+  evolu.subscribeError(() => {
+    const error = evolu.getError();
+    if (error != null) {
+      logger.error("[txtatelier] Evolu error:", error);
+    }
+  });
+
   // Get owner (Evolu handles persistence internally)
   const owner = await evolu.appOwner;
 
