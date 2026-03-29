@@ -96,16 +96,18 @@ class OwnerCommand extends BaseCommand {
   async execute(): Promise<number> {
     const session = await createOwnerSession({
       ...(this.watchDir ? { watchDir: this.watchDir } : {}),
+      // Avoid relay WebSocket + module cache for one-shot commands so the process can exit.
+      subscribeFilesShard: false,
     });
 
     if (this.show) {
       await showOwnerMnemonic(session);
-      return 0;
+      process.exit(0);
     }
 
     if (this.where) {
       await showOwnerContext(session);
-      return 0;
+      process.exit(0);
     }
 
     if (this.reset) {
@@ -113,15 +115,15 @@ class OwnerCommand extends BaseCommand {
         console.error(
           "Reset is destructive. Re-run with: txtatelier owner --reset --yes",
         );
-        return 1;
+        process.exit(1);
       }
 
       await resetOwner(session);
-      return 0;
+      process.exit(0);
     }
 
     console.error("No action specified. Use --help to see available options.");
-    return 1;
+    process.exit(1);
   }
 }
 

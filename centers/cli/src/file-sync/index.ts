@@ -86,19 +86,24 @@ export interface FileSyncSession extends OwnerSession {
 /**
  * Create a lightweight session for owner queries without starting sync.
  * Use this for commands that only need to read/modify owner information.
+ *
+ * @param config.subscribeFilesShard - When `false`, skips registering the files shard with
+ *   Evolu sync (no relay WebSocket). Default `true` for {@link startFileSync}.
  */
 export const createOwnerSession = async (
-  config?: Partial<FileSyncConfig>,
+  config?: Partial<FileSyncConfig> & { readonly subscribeFilesShard?: boolean },
 ): Promise<OwnerSession> => {
   const resolvedWatchDir = resolveConfiguredWatchDir(config);
   const resolvedDbPath =
     config?.dbPath ?? env.dbPath ?? defaultDbPath(resolvedWatchDir);
   const resolvedRelayUrl = config?.relayUrl ?? env.relayUrl ?? defaultRelayUrl;
+  const subscribeFilesShard = config?.subscribeFilesShard ?? true;
 
   // Create Evolu client (handles owner persistence internally)
   const client = await createEvoluClient({
     dbPath: resolvedDbPath,
     relayUrl: resolvedRelayUrl,
+    subscribeFilesShard,
   });
 
   return {

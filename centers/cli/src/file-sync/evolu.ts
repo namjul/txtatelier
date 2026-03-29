@@ -35,10 +35,16 @@ export const createEvoluClient = async ({
   dbPath,
   relayUrl,
   forceNew = false,
+  subscribeFilesShard = true,
 }: {
   dbPath: string;
   relayUrl: string;
   forceNew?: boolean;
+  /**
+   * When false, do not register the files shard with sync transports (no relay WebSocket).
+   * Use for one-shot `owner` CLI commands so the process can exit. Default true for sync.
+   */
+  subscribeFilesShard?: boolean;
 }) => {
   if (_cached && !forceNew) {
     return _cached;
@@ -77,7 +83,9 @@ export const createEvoluClient = async ({
   const owner = await evolu.appOwner;
 
   const filesShardOwner = deriveShardOwner(owner, ["files", 1]);
-  evolu.useOwner(filesShardOwner);
+  if (subscribeFilesShard) {
+    evolu.useOwner(filesShardOwner);
+  }
 
   // Flush function - for now, just export and write the database
   const flush = async (): Promise<Result<void, FlushError>> => {
@@ -105,9 +113,12 @@ export const createEvoluClient = async ({
     return ok();
   };
 
-  _cached = { evolu, flush, owner, filesShardOwner };
+  if (subscribeFilesShard) {
+    _cached = { evolu, flush, owner, filesShardOwner };
+    return _cached;
+  }
 
-  return _cached;
+  return { evolu, flush, owner, filesShardOwner };
 };
 
 export const resetEvolu = async (dbPath: string, relayUrl: string) => {
