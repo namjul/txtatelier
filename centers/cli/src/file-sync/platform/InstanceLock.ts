@@ -100,7 +100,6 @@ export const createInstanceLock = (watchDir: string): InstanceLock => {
       unlock = null;
       await releaseLock();
 
-      console.log("released");
       return undefined;
     },
   };
