@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { bin } from "specialist";
+import { Command, Option, runExit } from "clipanion";
 import packageJson from "../package.json" with { type: "json" };
 import {
   createOwnerSession,
@@ -14,7 +14,8 @@ import {
   formatDuplicateInstanceMessage,
 } from "./file-sync/platform/index.js";
 
-const runStart = async (watchDir?: string): Promise<void> => {
+/** Returns an exit code when startup must stop; otherwise never resolves. */
+const runStart = async (watchDir?: string): Promise<number | void> => {
   console.log("[txtatelier] Starting...");
 
   const resolvedWatchDir = resolveConfiguredWatchDir(
@@ -26,7 +27,7 @@ const runStart = async (watchDir?: string): Promise<void> => {
     console.error(
       formatDuplicateInstanceMessage(resolvedWatchDir, lockResult.error),
     );
-    process.exit(2);
+    return 2;
   }
 
   const result = await startFileSync({ watchDir: resolvedWatchDir });
@@ -35,7 +36,7 @@ const runStart = async (watchDir?: string): Promise<void> => {
     await instanceLock.release();
     console.error("[txtatelier] Fatal error during startup:");
     console.error(result.error);
-    process.exit(1);
+    return 1;
   }
 
   const session = result.value;
@@ -54,52 +55,81 @@ const runStart = async (watchDir?: string): Promise<void> => {
   await new Promise(() => {});
 };
 
-bin("txtatelier", "Local-first file synchronization CLI")
-  .config({
-    package: packageJson.name,
-    version: packageJson.version,
-    colors: false,
-  })
-  .option("--watch-dir <path>", "Override the default watched directory")
-  .action(async (options) => {
-    await runStart(options.watchDir);
-  })
+abstract class BaseCommand extends Command {
+  watchDir = Option.String("--watch-dir", {
+    description: "Override the default watched directory",
+  });
+}
 
-  .command("owner", "Manage owner identity")
-  .option("--show", "Show owner mnemonic")
-  .option("--where", "Show path of owner/mnemonic files")
-  .option("--reset", "Reset owner (destructive)")
-  .option("--yes", "Confirm destructive operation (for --reset)")
-  .action(async (options) => {
-    // Use lightweight session for owner queries (doesn't start file sync)
+class StartCommand extends BaseCommand {
+  static override paths = [Command.Default];
+  static override usage = Command.Usage({
+    description:
+      "Local-first file synchronization CLI. Runs file sync until interrupted.",
+  });
+
+  async execute(): Promise<number | void> {
+    return runStart(this.watchDir);
+  }
+}
+
+class OwnerCommand extends BaseCommand {
+  static override paths = [["owner"]];
+  static override usage = Command.Usage({
+    description: "Manage owner identity",
+  });
+
+  show = Option.Boolean("--show", {
+    description: "Show owner mnemonic",
+  });
+  where = Option.Boolean("--where", {
+    description: "Show path of owner/mnemonic files",
+  });
+  reset = Option.Boolean("--reset", {
+    description: "Reset owner (destructive)",
+  });
+  yes = Option.Boolean("--yes", {
+    description: "Confirm destructive operation (for --reset)",
+  });
+
+  async execute(): Promise<number> {
     const session = await createOwnerSession({
-      ...(options.watchDir && { watchDir: options.watchDir }),
+      ...(this.watchDir ? { watchDir: this.watchDir } : {}),
     });
 
-    if (options.show) {
+    if (this.show) {
       await showOwnerMnemonic(session);
-      process.exit(0);
+      return 0;
     }
 
-    if (options.where) {
+    if (this.where) {
       await showOwnerContext(session);
-      process.exit(0);
+      return 0;
     }
 
-    if (options.reset) {
-      if (!options.yes) {
+    if (this.reset) {
+      if (!this.yes) {
         console.error(
           "Reset is destructive. Re-run with: txtatelier owner --reset --yes",
         );
-        process.exit(1);
+        return 1;
       }
 
       await resetOwner(session);
-      process.exit(0);
+      return 0;
     }
 
     console.error("No action specified. Use --help to see available options.");
-    process.exit(1);
-  })
+    return 1;
+  }
+}
 
-  .run();
+void runExit(
+  {
+    binaryName: packageJson.name,
+    binaryLabel: 'TXTAelier',
+    binaryVersion: packageJson.version,
+    enableColors: false,
+  },
+  [StartCommand, OwnerCommand],
+)

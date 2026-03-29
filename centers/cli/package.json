@@ -11,7 +11,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target node --format esm --external better-sqlite3",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm",
     "prepublishOnly": "bun run build",
     "dev": "bun --watch src/index.ts",
     "dev:inspect": "bun --inspect --watch src/index.ts",
@@ -22,9 +22,9 @@
     "@evolu/common": "^7.4.0",
     "better-sqlite3": "^12.6.2",
     "chokidar": "^5.0.0",
+    "clipanion": "^4.0.0-rc.4",
     "env-paths": "^4.0.0",
     "picomatch": "^4.0.3",
-    "specialist": "^2.0.0",
     "tsx": "^4.21.0",
     "untildify": "^6.0.0"
   },
