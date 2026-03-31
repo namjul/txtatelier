@@ -2,7 +2,7 @@
 
 **Status:** Strong
 **Created:** 2026-03-01
-**Last Updated:** 2026-03-29
+**Last Updated:** 2026-03-31
 
 ---
 
@@ -21,7 +21,7 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
   - Mnemonic management (auto-generated, persisted by Evolu)
   - Mnemonic restore via TXTATELIER_MNEMONIC env var
   - Filesystem watching (Node.js fs.watch, debounced 100ms)
-  - Content hashing (Bun.hash with xxHash64)
+  - Content hashing (SHA-256 hex via Node `crypto`, aligned with PWA `computeContentHash`)
   - Evolu mutation logic (insert new files, update changed files, skip unchanged)
   - Concurrency control (max 10 parallel file operations)
 
@@ -88,6 +88,16 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 ---
 
 ## Interventions
+
+### 2026-03-31 - Align `contentHash` with PWA (SHA-256)
+
+**Aim:** CLI `file.contentHash` matches the PWA Web Crypto SHA-256 so Change Capture does not fight replicated rows.
+
+**Claim:** `computeFileHash` / `computeContentHash` must use the same algorithm and hex encoding as the PWA.
+
+**Changes:** `hash.ts` uses Node `crypto` SHA-256 hex.
+
+**Contact test:** Success-if: `bun test` in `centers/cli` (same pass/skip profile as before this change). Failure-if: hash mismatch loops or regressions in Change Capture.
 
 ### 2026-03-29 - Unify CLI SQLite on sql.js (ASM)
 
@@ -156,10 +166,10 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 **Aim:** Watch filesystem directory for changes and sync file records to Evolu when content differs
 
-**Claim:** Change Capture with 100ms debounce, xxHash64 hashing, and Node.js fs.watch will provide reliable single-device sync without excessive CPU usage
+**Claim:** Change Capture with 100ms debounce, SHA-256 hashing, and Node.js fs.watch will provide reliable single-device sync without excessive CPU usage
 
 **Changes:**
-- Created `hash.ts` - Content hashing utilities using Bun.hash() (xxHash64, returns hex string)
+- Created `hash.ts` - Content hashing utilities using SHA-256 hex (Node `crypto`, matches PWA)
   - `computeFileHash(filePath)` - Hash file from disk
   - `computeContentHash(content)` - Hash string content directly
 - Created `watch.ts` - Filesystem watching with debounce
@@ -179,7 +189,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
   - Passes `syncFileToEvolu` callback to watcher
 
 **Design decisions:**
-- **Hash algorithm:** xxHash64 via Bun.hash() (fast, non-cryptographic, sufficient for change detection)
+- **Hash algorithm:** SHA-256 hex (must match PWA `file.contentHash` or Evolu↔disk↔watch loops)
 - **Debounce:** 100ms (balances instant feedback with stability)
 - **Watch API:** Node.js fs.watch() (more stable than Bun.watch for now)
 - **Initial scan:** None - only watch changes (Phase 5 will add startup reconciliation)
@@ -519,7 +529,7 @@ See IMPLEMENTATION_PLAN.md for full details.
 ## Open Questions
 
 ### Resolved
-- ✅ Hash algorithm: xxHash64 (via Bun.hash) - fast, sufficient for change detection
+- ✅ Hash algorithm: SHA-256 hex (aligned with PWA; required for cross-device `contentHash`)
 - ✅ Debounce duration: 100ms filesystem watch, 500ms subscription - balances responsiveness and stability
 - ✅ Watch strategy: Node.js fs.watch() - more stable than Bun.watch
 - ✅ Echo prevention: lastAppliedHash-based (not ownerId) - enables same-mnemonic multi-device sync
