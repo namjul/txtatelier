@@ -17,7 +17,11 @@ import {
   Show,
   Suspense,
 } from "solid-js";
-import { defaultRelayUrl, evolu } from "./evolu/client";
+import {
+  defaultRelayUrl,
+  evolu,
+  getFilesShardMutationOptions,
+} from "./evolu/client";
 import { computeContentHash } from "./evolu/contentHash";
 import {
   EvoluProvider,
@@ -244,11 +248,16 @@ const useFileEditor = (
     const content = draft();
     const contentHash = await computeContentHash(content);
 
-    const result = evoluClient.update("file", {
-      id: file.id,
-      content,
-      contentHash,
-    });
+    const shard = await getFilesShardMutationOptions(evoluClient);
+    const result = evoluClient.update(
+      "file",
+      {
+        id: file.id,
+        content,
+        contentHash,
+      },
+      shard,
+    );
 
     if (!result.ok) {
       setIsSaving(false);
@@ -312,11 +321,16 @@ const useFileEditor = (
       Date.now(),
     );
 
-    const result = evoluClient.insert("file", {
-      path: artifactPath,
-      content: draftContent,
-      contentHash: draftHash,
-    });
+    const shard = await getFilesShardMutationOptions(evoluClient);
+    const result = evoluClient.insert(
+      "file",
+      {
+        path: artifactPath,
+        content: draftContent,
+        contentHash: draftHash,
+      },
+      shard,
+    );
 
     if (!result.ok) {
       status.setError("could not save conflict artifact");
