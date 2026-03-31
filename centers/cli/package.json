@@ -24,6 +24,7 @@
     "clipanion": "^4.0.0-rc.4",
     "env-paths": "^4.0.0",
     "picomatch": "^4.0.3",
+    "proper-lockfile": "^4.1.2",
     "sql.js": "^1.13.0",
     "tsx": "^4.21.0",
     "untildify": "^6.0.0"
