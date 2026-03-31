@@ -65,68 +65,66 @@ const FilesWorkspace = (props: {
   return (
     <>
       <FileSwitcherHint />
-      <section class="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Editor">
-        <Suspense
-          fallback={
-            <p class="p-3 text-sm text-black/65 dark:text-white/65">
-              loading files
-            </p>
-          }
-        >
-          <Show when={!fileList.fileRows.loading}>
+      <Suspense
+        fallback={
+          <p class="p-3 text-sm text-black/65 dark:text-white/65">
+            loading files
+          </p>
+        }
+      >
+        <section class="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Editor">
+          <Show
+            when={fileList.files().length > 0}
+            fallback={
+              <p class="p-3 text-sm text-black/65 dark:text-white/65">
+                no files available
+              </p>
+            }
+          >
             <Show
-              when={fileList.files().length > 0}
+              when={fileList.selectedFile()}
               fallback={
-                <p class="p-3 text-sm text-black/65 dark:text-white/65">
-                  no files available
+                <p class="p-3 text-black/65 dark:text-white/65">
+                  select a file to open its content
                 </p>
               }
             >
-              <Show
-                when={fileList.selectedFile()}
-                fallback={
-                  <p class="p-3 text-black/65 dark:text-white/65">
-                    select a file to open its content
-                  </p>
-                }
-              >
-                {(file) => (
-                  <FileEditor
-                    file={file()}
-                    draft={editor.draft()}
-                    hasConflict={editor.hasConflict()}
-                    conflictRemote={editor.conflictRemote()}
-                    autoSaveUi={editor.autoSaveUi()}
-                    saveFailedFinal={editor.saveFailedFinal()}
-                    editorRef={(el) => {
-                      editorTextAreaEl = el;
-                      props.onEditorTextAreaRef?.(el ?? null);
-                    }}
-                    onDraftChange={editor.setDraft}
-                    onResolveConflict={editor.resolveConflict}
-                    onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
-                  />
-                )}
-              </Show>
+              {(file) => (
+                <FileEditor
+                  file={file()}
+                  draft={editor.draft()}
+                  hasConflict={editor.hasConflict()}
+                  conflictRemote={editor.conflictRemote()}
+                  autoSaveUi={editor.autoSaveUi()}
+                  saveFailedFinal={editor.saveFailedFinal()}
+                  editorRef={(el) => {
+                    editorTextAreaEl = el;
+                    props.onEditorTextAreaRef?.(el ?? null);
+                  }}
+                  onDraftChange={editor.setDraft}
+                  onResolveConflict={editor.resolveConflict}
+                  onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
+                />
+              )}
             </Show>
           </Show>
-        </Suspense>
-      </section>
+        </section>
 
-      <MobileCommandAffordance
-        commandMenuOpen={props.commandMenuOpen}
-        onOpenRequest={() => props.onCommandMenuOpenChange(true)}
-      />
+        <MobileCommandAffordance
+          commandMenuOpen={props.commandMenuOpen}
+          onOpenRequest={() => props.onCommandMenuOpenChange(true)}
+        />
 
-      <CommandMenuDialog
-        open={props.commandMenuOpen}
-        onOpenChange={props.onCommandMenuOpenChange}
-        files={fileList.files()}
-        selectedFileId={fileList.selectedFileId()}
-        onSelectFile={fileList.selectFile}
-        onOpenSettings={props.onOpenSettings}
-        editorTextArea={() => editorTextAreaEl ?? null}
-      />
+        <CommandMenuDialog
+          open={props.commandMenuOpen}
+          onOpenChange={props.onCommandMenuOpenChange}
+          files={fileList.files()}
+          selectedFileId={fileList.selectedFileId()}
+          onSelectFile={fileList.selectFile}
+          onOpenSettings={props.onOpenSettings}
+          editorTextArea={() => editorTextAreaEl ?? null}
+        />
+      </Suspense>
     </>
   );
 };
