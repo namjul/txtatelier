@@ -6,8 +6,8 @@ describe("decideReconcileAction - pure reconciliation logic", () => {
   const hash = "abc123";
 
   describe("SKIP cases", () => {
-    test("skips when already processed", () => {
-      const decision = decideReconcileAction("xyz", hash, hash, content);
+    test("skips when already processed and disk matches last applied", () => {
+      const decision = decideReconcileAction(hash, hash, hash, content);
       expect(decision).toEqual({ type: "SKIP", reason: "already-processed" });
     });
 
@@ -47,6 +47,16 @@ describe("decideReconcileAction - pure reconciliation logic", () => {
         hash,
         content,
       );
+      expect(decision).toEqual({
+        type: "CONFLICT",
+        diskHash,
+        evolHash: hash,
+      });
+    });
+
+    test("detects conflict when evolu matches last applied but disk diverged offline", () => {
+      const diskHash = "disk-only-edit";
+      const decision = decideReconcileAction(diskHash, hash, hash, content);
       expect(decision).toEqual({
         type: "CONFLICT",
         diskHash,

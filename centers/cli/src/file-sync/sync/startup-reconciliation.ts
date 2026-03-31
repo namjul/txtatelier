@@ -86,6 +86,30 @@ export type ReconcileDecision =
     };
 
 /**
+ * Evolu's row hash matches `_syncState.lastAppliedHash` (nothing new to pull from Evolu).
+ */
+const evoluMatchesLastApplied = (
+  lastAppliedHash: string | null,
+  evolHash: string,
+): boolean => lastAppliedHash != null && lastAppliedHash === evolHash;
+
+/**
+ * Disk bytes still match what we last applied from Evolu (no offline local edit).
+ */
+const diskMatchesLastApplied = (
+  diskHash: string | null,
+  lastAppliedHash: string | null,
+): boolean => diskHash != null && lastAppliedHash != null && diskHash === lastAppliedHash;
+
+/**
+ * Nothing on disk, or disk still at the last-applied snapshot (safe to write Evolu over).
+ */
+const diskMissingOrStillAtLastApply = (
+  diskHash: string | null,
+  lastAppliedHash: string | null,
+): boolean => !diskHash || diskHash === lastAppliedHash;
+
+/**
  * Decide what to do with a file during startup (pure function).
  */
 export const decideReconcileAction = (
@@ -94,8 +118,13 @@ export const decideReconcileAction = (
   evolHash: string,
   content: string,
 ): ReconcileDecision => {
-  // Already processed
-  if (lastAppliedHash === evolHash) {
+  // Skip only when tracking and Evolu agree *and* disk still reflects that snapshot.
+  // If the user edited or deleted the file offline, diskHash will differ from lastAppliedHash
+  // even when lastAppliedHash === evolHash.
+  if (
+    evoluMatchesLastApplied(lastAppliedHash, evolHash) &&
+    diskMatchesLastApplied(diskHash, lastAppliedHash)
+  ) {
     return { type: "SKIP", reason: "already-processed" };
   }
 
@@ -105,12 +134,12 @@ export const decideReconcileAction = (
   }
 
   // File doesn't exist on disk OR disk unchanged from last applied
-  if (!diskHash || diskHash === lastAppliedHash) {
+  if (diskMissingOrStillAtLastApply(diskHash, lastAppliedHash)) {
     return { type: "WRITE_FROM_EVOLU", content, hash: evolHash };
   }
 
-  // Conflict: disk differs from both lastAppliedHash and evolHash
-  return { type: "CONFLICT", diskHash, evolHash };
+  // Earlier branches handle null diskHash; here disk differs from both Evolu and lastApplied.
+  return { type: "CONFLICT", diskHash: diskHash!, evolHash };
 };
 
 export const reconcileStartupFilesystemState = async (

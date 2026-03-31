@@ -58,8 +58,9 @@ export const executeAction = async (
     }
 
     case "CREATE_CONFLICT": {
+      const absoluteConflictPath = join(watchDir, action.conflictPath);
       return tryAsync(
-        () => writeFileAtomic(action.conflictPath, action.content),
+        () => writeFileAtomic(absoluteConflictPath, action.content),
         (cause): ExecutionError => ({
           type: "ExecutionFailed",
           action,

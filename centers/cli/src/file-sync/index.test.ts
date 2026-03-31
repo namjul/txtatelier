@@ -19,6 +19,7 @@ import {
 import { deriveShardOwner } from "@evolu/common/local-first";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { resetEvolu } from "./evolu";
+import { computeContentHash } from "./hash";
 import { defaultRelayUrl, type FileSyncSession, startFileSync } from "./index";
 
 let tempDir: string;
@@ -437,24 +438,28 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt"))
+          .where("isDeleted", "is not", sqliteTrue),
       );
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
-      session1.evolu.upsert(
+      const evoluEdit = "evolu edit";
+      session1.evolu.update(
         "file",
         {
           id: fileId!,
           path: NonEmptyString1000.orThrow("synced.txt"),
-          content: "evolu edit",
-          contentHash: NonEmptyString100.orThrow("hash-conflict"),
+          content: evoluEdit,
+          contentHash: NonEmptyString100.orThrow(computeContentHash(evoluEdit)),
         },
         {
           ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
             .id,
         },
       );
+      // Allow Loop B + _syncState to settle before offline disk edit (500ms debounce + margin)
+      await new Promise((resolve) => setTimeout(resolve, 1500));
       await session1.flush();
       await session1.stop();
 
@@ -529,24 +534,27 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt"))
+          .where("isDeleted", "is not", sqliteTrue),
       );
       const rows = await session1.evolu.loadQuery(query);
       const fileId = rows[0]?.id;
 
-      session1.evolu.upsert(
+      const evoluEdit = "evolu edit";
+      session1.evolu.update(
         "file",
         {
           id: fileId!,
           path: NonEmptyString1000.orThrow("synced.txt"),
-          content: "evolu edit",
-          contentHash: NonEmptyString100.orThrow("hash-conflict"),
+          content: evoluEdit,
+          contentHash: NonEmptyString100.orThrow(computeContentHash(evoluEdit)),
         },
         {
           ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
             .id,
         },
       );
+      await new Promise((resolve) => setTimeout(resolve, 1500));
       await session1.flush();
       await session1.stop();
 
@@ -565,7 +573,8 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         db
           .selectFrom("file")
           .selectAll()
-          .where("path", "=", NonEmptyString1000.orThrow("synced.txt")),
+          .where("path", "=", NonEmptyString1000.orThrow("synced.txt"))
+          .where("isDeleted", "is not", sqliteTrue),
       );
       const rows2 = await session2.evolu.loadQuery(query2);
       expect(rows2).toHaveLength(1);

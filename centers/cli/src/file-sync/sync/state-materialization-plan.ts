@@ -34,9 +34,18 @@ export const planStateMaterialization = (
 
   // Null content means empty file — treat as empty string for write operations.
   const evolContent = state.evolContent ?? "";
+  const { diskHash, lastAppliedHash } = state;
 
-  // Already processed?
-  if (state.lastAppliedHash === evolHash) {
+  const evoluMatchesLastApplied =
+    lastAppliedHash != null && lastAppliedHash === evolHash;
+
+  const diskStillMatchesLastApply =
+    diskHash != null &&
+    lastAppliedHash != null &&
+    diskHash === lastAppliedHash;
+
+  // Nothing new in Evolu vs tracking, and disk still shows that version — no write.
+  if (evoluMatchesLastApplied && diskStillMatchesLastApply) {
     return [
       log(
         "debug",
@@ -46,8 +55,7 @@ export const planStateMaterialization = (
     ];
   }
 
-  // Disk matches Evolu? Just update tracking
-  if (state.diskHash === evolHash) {
+  if (diskHash === evolHash) {
     return [
       log(
         "debug",
@@ -57,8 +65,18 @@ export const planStateMaterialization = (
     ];
   }
 
-  // Conflict detection
-  if (detectConflict(state.diskHash, state.lastAppliedHash, evolHash)) {
+  // detectConflict() needs both local and remote to differ from base. When Evolu still
+  // matches lastApplied (remote unchanged from last apply) but disk does not, remoteChanged is false — so we handle that case here.
+  const offlineDiskDivergedWhileEvoluUnchanged =
+    evoluMatchesLastApplied &&
+    diskHash != null &&
+    lastAppliedHash != null &&
+    diskHash !== lastAppliedHash;
+
+  if (
+    offlineDiskDivergedWhileEvoluUnchanged ||
+    detectConflict(diskHash, lastAppliedHash, evolHash)
+  ) {
     const conflictPath = generateConflictPath(state.path, state.ownerId);
     return [
       log("debug", `[materialize:evolu→fs] Conflict detected: ${state.path}`),

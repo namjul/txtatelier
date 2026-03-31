@@ -99,6 +99,16 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 **Contact test:** Success-if: `bun test` in `centers/cli` (same pass/skip profile as before this change). Failure-if: hash mismatch loops or regressions in Change Capture.
 
+### 2026-03-31 - Harden startup reconciliation and conflict writes
+
+**Aim:** Correct conflict paths under `watchDir`; skip materialization only when disk still matches last applied; surface offline disk divergence when Evolu matches last applied.
+
+**Claim:** `CREATE_CONFLICT` must `join(watchDir, conflictPath)` like `WRITE_FILE`. `decideReconcileAction` must not treat “Evolu unchanged” as “nothing to do” when disk diverged offline.
+
+**Changes:** `executor.ts` joins watch dir for conflict writes; materialization skip + offline-divergence planning in `state-materialization-plan.ts`; clearer guards in `startup-reconciliation.ts`; integration tests use `update`, live-row queries, and settle delays.
+
+**Contact test:** Success-if: `bun test` in `centers/cli`; conflict files land under the watch directory; startup reconciliation covers offline-edit cases. Failure-if: wrong absolute/relative paths for conflicts; skipped rows when disk changed while Evolu stayed at last applied.
+
 ### 2026-03-29 - Unify CLI SQLite on sql.js (ASM)
 
 **Aim:** One SQLite implementation for Node and Bun; drop native drivers and temp-file DB bootstrap.
