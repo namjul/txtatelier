@@ -11,6 +11,8 @@
     "jsxImportSource": "solid-js",
     "allowJs": true,
 
+    "types": ["vite/client", "bun"],
+
     // Bundler mode
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
