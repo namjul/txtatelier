@@ -90,21 +90,46 @@ const FilesWorkspace = (props: {
               }
             >
               {(file) => (
-                <FileEditor
-                  file={file()}
-                  draft={editor.draft()}
-                  hasConflict={editor.hasConflict()}
-                  conflictRemote={editor.conflictRemote()}
-                  autoSaveUi={editor.autoSaveUi()}
-                  saveFailedFinal={editor.saveFailedFinal()}
-                  editorRef={(el) => {
-                    editorTextAreaEl = el;
-                    props.onEditorTextAreaRef?.(el ?? null);
-                  }}
-                  onDraftChange={editor.setDraft}
-                  onResolveConflict={editor.resolveConflict}
-                  onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
-                />
+                <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                  <FileEditor
+                    file={file()}
+                    draft={editor.draft()}
+                    hasConflict={editor.hasConflict()}
+                    conflictRemote={editor.conflictRemote()}
+                    editorRef={(el) => {
+                      editorTextAreaEl = el;
+                      props.onEditorTextAreaRef?.(el ?? null);
+                    }}
+                    onDraftChange={editor.setDraft}
+                    onResolveConflict={editor.resolveConflict}
+                    onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
+                  />
+                  <Show when={editor.autoSaveUi() !== "idle"}>
+                    <div
+                      class="pointer-events-none absolute bottom-2 right-0 max-w-[40%] truncate text-right text-[10px] text-black/45 dark:text-white/45"
+                      aria-live="polite"
+                    >
+                      <Show when={editor.autoSaveUi() === "saving"}>
+                        <span>Saving…</span>
+                      </Show>
+                      <Show when={editor.autoSaveUi() === "saved"}>
+                        <span class="text-[#0f6a31] dark:text-[#6fc38c]">
+                          Saved
+                        </span>
+                      </Show>
+                      <Show when={editor.autoSaveUi() === "error"}>
+                        <span
+                          class="text-[#a32222] dark:text-[#ff8f8f]"
+                          title="Save failed"
+                        >
+                          {editor.saveFailedFinal()
+                            ? "Save failed"
+                            : "Error — retrying…"}
+                        </span>
+                      </Show>
+                    </div>
+                  </Show>
+                </div>
               )}
             </Show>
           </Show>

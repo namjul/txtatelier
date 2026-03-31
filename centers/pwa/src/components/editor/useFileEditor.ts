@@ -128,7 +128,9 @@ export const useFileEditor = (
     setBaseContent(currentContent);
     setBaseFingerprint(file.contentHash);
     setConflictRemote(null);
-    setDraft(currentContent);
+    if (draft() !== currentContent) {
+      setDraft(currentContent);
+    }
     autoSave.send({ type: "RESET" });
   });
 

@@ -1,19 +1,25 @@
 import { Show } from "solid-js";
 import type { FilesRow } from "../../evolu/files";
-import type { AutoSaveUiState, ConflictStrategy } from "./types";
+import type { ConflictStrategy } from "./types";
+import { useControlledTextareaCaret } from "./useControlledTextareaCaret";
 
 export const FileEditor = (props: {
   file: FilesRow;
   draft: string;
   hasConflict: boolean;
   conflictRemote: FilesRow | null;
-  autoSaveUi: AutoSaveUiState;
-  saveFailedFinal: boolean;
   editorRef: (el: HTMLTextAreaElement) => void;
   onDraftChange: (value: string) => void;
   onResolveConflict: (strategy: ConflictStrategy) => void;
   onSaveConflictArtifact: () => void;
 }) => {
+  const ta = useControlledTextareaCaret({
+    value: () => props.draft,
+    scopeId: () => String(props.file.id),
+    forwardRef: props.editorRef,
+    onValueChange: props.onDraftChange,
+  });
+
   return (
     <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <Show when={props.hasConflict}>
@@ -41,36 +47,18 @@ export const FileEditor = (props: {
         </div>
       </Show>
 
-      <div class="relative min-h-0 min-w-0 flex-1">
+      <div class="min-h-0 min-w-0 flex-1">
         <textarea
-          ref={props.editorRef}
+          ref={ta.textareaRef}
           id="txtatelier-editor"
           aria-label="File content"
           class="box-border h-full min-h-0 w-full resize-none border-0 bg-transparent p-0 font-mono text-sm leading-relaxed outline-none focus:ring-0 md:text-xs md:leading-5"
           value={props.draft}
-          onInput={(event) => props.onDraftChange(event.currentTarget.value)}
+          onInput={ta.onInput}
+          onSelect={ta.onSelect}
+          onKeyUp={ta.onKeyUp}
+          onClick={ta.onClick}
         />
-        <Show when={props.autoSaveUi !== "idle"}>
-          <div
-            class="pointer-events-none absolute right-0 top-0 max-w-[40%] truncate text-right text-[10px] text-black/45 dark:text-white/45"
-            aria-live="polite"
-          >
-            <Show when={props.autoSaveUi === "saving"}>
-              <span>Saving…</span>
-            </Show>
-            <Show when={props.autoSaveUi === "saved"}>
-              <span class="text-[#0f6a31] dark:text-[#6fc38c]">Saved</span>
-            </Show>
-            <Show when={props.autoSaveUi === "error"}>
-              <span
-                class="text-[#a32222] dark:text-[#ff8f8f]"
-                title="Save failed"
-              >
-                {props.saveFailedFinal ? "Save failed" : "Error — retrying…"}
-              </span>
-            </Show>
-          </div>
-        </Show>
       </div>
     </div>
   );
