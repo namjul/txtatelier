@@ -3,7 +3,7 @@ import { useContext } from "solid-js";
 import { EvoluContext } from "./EvoluContext.js";
 
 /**
- * React Hook returning a generic instance of {@link Evolu}.
+ * Solid hook returning a generic instance of {@link Evolu}.
  *
  * This is intended for internal usage. Applications should use
  * {@link createUseEvolu}, which provides a correctly typed instance.

@@ -1,6 +1,7 @@
 import { Combobox, createListCollection } from "@ark-ui/solid";
 import {
   createFormatTypeError,
+  type EvoluError,
   type MaxLengthError,
   type MinLengthError,
   Mnemonic,
@@ -14,11 +15,23 @@ import {
   createSignal,
   For,
   Show,
+  Suspense,
 } from "solid-js";
 import { defaultRelayUrl, evolu } from "./evolu/client";
 import { computeContentHash } from "./evolu/contentHash";
-import { EvoluProvider, useEvolu } from "./evolu/evolu";
+import {
+  EvoluProvider,
+  createUseEvolu,
+  useEvoluError,
+  useQuery,
+} from "./evolu/evolu";
 import { type FilesRow, filesQuery } from "./evolu/files";
+
+// =============================================================================
+// SETUP
+// =============================================================================
+
+const useEvolu = createUseEvolu(evolu);
 
 // =============================================================================
 // TYPES
@@ -76,14 +89,23 @@ const formatTypeError = createFormatTypeError<MinLengthError | MaxLengthError>(
   },
 );
 
+const formatEvoluError = (error: EvoluError): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return String((error as { readonly message: unknown }).message);
+  }
+  return JSON.stringify(error);
+};
+
 // =============================================================================
 // HOOK: FILE LIST MANAGEMENT
 // =============================================================================
 
 const useFileList = () => {
-  const evoluClient = useEvolu();
-  const [files, setFiles] = createSignal<ReadonlyArray<FilesRow>>([]);
-  const [isLoading, setIsLoading] = createSignal(true);
+  const fileRows = useQuery(filesQuery);
+  const files = createMemo(
+    () => (fileRows() ?? [])
+  );
   const [selectedFileId, setSelectedFileId] = createSignal<
     FilesRow["id"] | null
   >(null);
@@ -92,28 +114,6 @@ const useFileList = () => {
     const id = selectedFileId();
     if (id == null) return null;
     return files().find((file) => file.id === id) ?? null;
-  });
-
-  // Load files from Evolu
-  createEffect(() => {
-    let isActive = true;
-
-    void evoluClient.loadQuery(filesQuery).then((rows) => {
-      if (!isActive) return;
-      setFiles(rows);
-      setIsLoading(false);
-    });
-
-    const unsubscribe = evoluClient.subscribeQuery(filesQuery)(() => {
-      if (!isActive) return;
-      setFiles(evoluClient.getQueryRows(filesQuery));
-      setIsLoading(false);
-    });
-
-    return () => {
-      isActive = false;
-      unsubscribe();
-    };
   });
 
   // Auto-select first file when list changes
@@ -140,8 +140,8 @@ const useFileList = () => {
   });
 
   return {
+    fileRows,
     files,
-    isLoading,
     selectedFileId,
     selectedFile,
     selectFile: setSelectedFileId,
@@ -587,6 +587,23 @@ const FileWorkspace = (props: {
   ownerId: () => string | undefined;
   status: StatusOps;
 }) => {
+  return (
+    <section class="w-full space-y-5 text-sm leading-6">
+      <Suspense
+        fallback={
+          <p class="text-sm text-black/65 dark:text-white/65">loading files</p>
+        }
+      >
+        <FileWorkspaceContent {...props} />
+      </Suspense>
+    </section>
+  );
+};
+
+const FileWorkspaceContent = (props: {
+  ownerId: () => string | undefined;
+  status: StatusOps;
+}) => {
   const fileList = useFileList();
   const editor = useFileEditor(
     props.ownerId,
@@ -595,13 +612,8 @@ const FileWorkspace = (props: {
   );
 
   return (
-    <section class="w-full space-y-5 text-sm leading-6">
-      <Show
-        when={!fileList.isLoading()}
-        fallback={
-          <p class="text-sm text-black/65 dark:text-white/65">loading files</p>
-        }
-      >
+    <>
+      <Show when={!fileList.fileRows.loading}>
         <Show
           when={fileList.files().length > 0}
           fallback={
@@ -641,7 +653,7 @@ const FileWorkspace = (props: {
           />
         )}
       </Show>
-    </section>
+    </>
   );
 };
 
@@ -679,9 +691,9 @@ const SettingsPanel = (props: {
     }
 
     props.statusOps.setIdle("restoring…");
+    await evoluClient.restoreAppOwner(parsed.value);
     props.statusOps.setLastAction("restored from mnemonic");
     props.statusOps.setIdle("ready");
-    void evoluClient.restoreAppOwner(parsed.value);
   };
 
   const handleResetOwner = async () => {
@@ -860,6 +872,17 @@ const AppShell = () => {
     setLastAction: (lastAction) =>
       setStatus((prev) => ({ ...prev, lastAction })),
   };
+
+  const evoluError = useEvoluError();
+  createEffect(() => {
+    const err = evoluError();
+    if (err == null) return;
+    setStatus((prev) => ({
+      ...prev,
+      message: formatEvoluError(err),
+      tone: "error",
+    }));
+  });
 
   return (
     <main class="min-h-screen w-full bg-[#f2f1ee] px-4 py-8 font-mono text-[#111111] sm:px-6 lg:px-8 dark:bg-[#151617] dark:text-[#efefef]">
