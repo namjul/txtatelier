@@ -40,7 +40,9 @@ jobs:
         working-directory: centers/pwa
         env:
           VITE_TXTATELIER_BASE_PATH: /${{ github.event.repository.name }}/
-        run: bun run build
+        run: |
+          export VITE_COMMIT_SHA="${GITHUB_SHA:0:7}"
+          bun run build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
