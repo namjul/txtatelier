@@ -1,5 +1,6 @@
 import { Dialog } from "@ark-ui/solid";
 import type { Accessor, Resource } from "solid-js";
+import { Suspense } from "solid-js";
 import type { StatusOps, StatusState } from "../editor/types";
 import { SettingsPanel } from "./SettingsPanel";
 
@@ -43,12 +44,20 @@ export const SettingsDialog = (props: {
             Application status, identity, and sync. Press Escape or use Back to
             return to the editor.
           </Dialog.Description>
-          <SettingsPanel
-            owner={props.owner}
-            appStatus={props.appStatus}
-            statusOps={props.statusOps}
-            onBack={() => props.onOpenChange(false)}
-          />
+          <Suspense
+            fallback={
+              <p class="px-4 py-4 text-sm text-black/65 dark:text-white/65">
+                loading settings…
+              </p>
+            }
+          >
+            <SettingsPanel
+              owner={props.owner}
+              appStatus={props.appStatus}
+              statusOps={props.statusOps}
+              onBack={() => props.onOpenChange(false)}
+            />
+          </Suspense>
         </Dialog.Content>
       </Dialog.Positioner>
     </Dialog.Root>

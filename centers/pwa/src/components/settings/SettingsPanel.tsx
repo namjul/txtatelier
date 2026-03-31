@@ -1,16 +1,34 @@
 import {
   createFormatTypeError,
+  createIdFromString,
   type MaxLengthError,
   type MinLengthError,
   Mnemonic,
+  NonEmptyString1000,
 } from "@evolu/common";
 import type { Accessor, Resource } from "solid-js";
-import { createSignal, Match, Show, Switch } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  Match,
+  Show,
+  Switch,
+} from "solid-js";
 import { defaultRelayUrl, evolu } from "../../evolu/client";
-import { createUseEvolu } from "../../evolu/evolu";
+import { createUseEvolu, useQuery } from "../../evolu/evolu";
+import { settingsQuery } from "../../evolu/settings";
+import {
+  DEFAULT_INBOX_PATH,
+  formatInboxPathValidationError,
+  validateInboxPath,
+} from "../../share-target/inbox-path-validation";
 import type { StatusOps, StatusState } from "../editor/types";
 
 const useEvolu = createUseEvolu(evolu);
+
+/** Stable row id for the single local `_settings` inbox path preference */
+const inboxSettingsRowId = createIdFromString("txtatelier-pwa-inbox-path");
 
 const formatTypeError = createFormatTypeError<MinLengthError | MaxLengthError>(
   (error): string => {
@@ -46,10 +64,45 @@ export const SettingsPanel = (props: {
   onBack: () => void;
 }) => {
   const evoluClient = useEvolu();
+  const settingsRows = useQuery(settingsQuery);
+  const persistedInboxPath = createMemo(() => {
+    const rows = settingsRows();
+    return rows?.[0]?.inboxPath ?? DEFAULT_INBOX_PATH;
+  });
+  const [inboxPathDraft, setInboxPathDraft] = createSignal(DEFAULT_INBOX_PATH);
+
+  createEffect(() => {
+    setInboxPathDraft(persistedInboxPath());
+  });
+
   const [showMnemonic, setShowMnemonic] = createSignal(false);
   const [transportUrl, setTransportUrl] = createSignal(
     localStorage.getItem("transportUrl") ?? "",
   );
+
+  const handleSaveInboxPath = async () => {
+    const validated = validateInboxPath(inboxPathDraft());
+    if (!validated.ok) {
+      props.statusOps.setError(formatInboxPathValidationError(validated.error));
+      return;
+    }
+
+    props.statusOps.setIdle("saving inbox path…");
+
+    const inboxPath = NonEmptyString1000.orThrow(validated.value);
+    const result = evoluClient.upsert("_settings", {
+      id: inboxSettingsRowId,
+      inboxPath,
+    });
+
+    if (!result.ok) {
+      props.statusOps.setError("could not save inbox path");
+      return;
+    }
+
+    props.statusOps.setLastAction("inbox path saved");
+    props.statusOps.setIdle("ready");
+  };
 
   const handleRestoreFromMnemonic = async () => {
     const value = window.prompt("Enter mnemonic");
@@ -223,6 +276,37 @@ export const SettingsPanel = (props: {
               value={props.owner()?.mnemonic ?? ""}
             />
           </Show>
+        </section>
+
+        <section class="space-y-3">
+          <h2 class="text-base font-bold">Capture</h2>
+          <p class="text-black/65 dark:text-white/65">
+            Web Share Target prepends shared text to this markdown path
+            (relative to your synced folder).
+          </p>
+          <div class="w-full space-y-2">
+            <label
+              class="block text-xs text-black/65 dark:text-white/65"
+              for="txtatelier-inbox-path"
+            >
+              inbox path
+            </label>
+            <input
+              id="txtatelier-inbox-path"
+              type="text"
+              class="w-full rounded-none border border-black/25 bg-transparent px-2.5 py-2 font-mono text-xs outline-none focus:border-black dark:border-white/25 dark:focus:border-white"
+              placeholder={DEFAULT_INBOX_PATH}
+              value={inboxPathDraft()}
+              onInput={(e) => setInboxPathDraft(e.currentTarget.value)}
+            />
+            <button
+              type="button"
+              class="rounded-none border border-black/25 px-3 py-2 text-sm hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
+              onClick={() => void handleSaveInboxPath()}
+            >
+              save inbox path
+            </button>
+          </div>
         </section>
 
         <section class="space-y-3">

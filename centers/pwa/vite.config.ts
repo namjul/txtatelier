@@ -6,6 +6,12 @@ import solidPlugin from "vite-plugin-solid";
 // biome-ignore lint/complexity/useLiteralKeys: process.env is typed via index signature; dot access triggers TS4111.
 const basePath = process.env["VITE_TXTATELIER_BASE_PATH"] ?? "/";
 
+const shareTargetActionPath = (): string => {
+  const normalized = basePath === "/" ? "" : basePath.replace(/\/?$/, "");
+  return new URL("/share-target", `https://placeholder.invalid${normalized}`)
+    .pathname;
+};
+
 export default defineConfig({
   base: basePath,
   worker: {
@@ -18,6 +24,9 @@ export default defineConfig({
       // autoUpdate + registerSW: bare register() never activates waiting SW ("prompt" needs onNeedRefresh UI).
       registerType: "autoUpdate",
       injectRegister: null,
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       manifest: {
         name: "TXTAtelier",
         short_name: "TXTAtelier",
@@ -36,9 +45,21 @@ export default defineConfig({
             purpose: "any",
           },
         ],
+        share_target: {
+          action: shareTargetActionPath(),
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: {
+            title: "title",
+            text: "text",
+            url: "url",
+          },
+        },
+      },
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm,webmanifest}"],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm,webmanifest}"],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
       },

@@ -16,6 +16,9 @@ export type SyncStateId = typeof SyncStateId.Type;
 export const HistoryCursorId = Evolu.id("HistoryCursor");
 export type HistoryCursorId = typeof HistoryCursorId.Type;
 
+export const SettingsId = Evolu.id("Settings");
+export type SettingsId = typeof SettingsId.Type;
+
 export type FilePath = typeof Evolu.NonEmptyString1000.Type;
 
 // Schema definition
@@ -57,6 +60,12 @@ export const Schema = {
     // Last evolu_history timestamp we processed
     // Used to query: WHERE timestamp > lastTimestamp
     lastTimestamp: Evolu.nullOr(TimestampBytes),
+  },
+
+  // Local-only PWA preferences (underscore prefix: not replicated)
+  _settings: {
+    id: SettingsId,
+    inboxPath: Evolu.NonEmptyString1000,
   },
 };
 

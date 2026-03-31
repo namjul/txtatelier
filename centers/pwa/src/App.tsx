@@ -1,10 +1,12 @@
 import type { EvoluError } from "@evolu/common";
 import { deriveShardOwner } from "@evolu/common/local-first";
 import { createShortcut } from "@solid-primitives/keyboard";
+import { createPageVisibility } from "@solid-primitives/page-visibility";
 import {
   createEffect,
   createResource,
   createSignal,
+  onCleanup,
   Show,
   Suspense,
 } from "solid-js";
@@ -18,6 +20,11 @@ import { useFileList } from "./components/editor/useFileList";
 import { SettingsDialog } from "./components/settings/SettingsDialog";
 import { evolu } from "./evolu/client";
 import { createUseEvolu, EvoluProvider, useEvoluError } from "./evolu/evolu";
+import { PENDING_SHARE_MESSAGE_TYPE } from "./share-target/constants";
+import { tryProcessPendingShare } from "./share-target/process-pending-share";
+
+/** Interval (ms) to poll for pending shares when page is visible */
+const PENDING_SHARE_POLL_MS = 8000;
 
 const useEvolu = createUseEvolu(evolu);
 
@@ -72,7 +79,10 @@ const FilesWorkspace = (props: {
           </p>
         }
       >
-        <section class="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Editor">
+        <section
+          class="flex min-h-0 min-w-0 flex-1 flex-col"
+          aria-label="Editor"
+        >
           <Show
             when={fileList.files().length > 0}
             fallback={
@@ -164,6 +174,7 @@ export const App = () => {
 
 const AppShell = () => {
   const evoluClient = useEvolu();
+  const pageVisible = createPageVisibility();
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [commandMenuOpen, setCommandMenuOpen] = createSignal(false);
   const [editorTextArea, setEditorTextArea] =
@@ -219,6 +230,27 @@ const AppShell = () => {
 
   createEffect(() => {
     if (settingsOpen()) setCommandMenuOpen(false);
+  });
+
+  createEffect(() => {
+    const handler = (ev: MessageEvent): void => {
+      if (ev.data?.type === PENDING_SHARE_MESSAGE_TYPE) {
+        void tryProcessPendingShare(evoluClient);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    onCleanup(() => {
+      navigator.serviceWorker.removeEventListener("message", handler);
+    });
+  });
+
+  createEffect(() => {
+    if (!pageVisible()) return;
+    void tryProcessPendingShare(evoluClient);
+    const id = window.setInterval(() => {
+      void tryProcessPendingShare(evoluClient);
+    }, PENDING_SHARE_POLL_MS);
+    onCleanup(() => window.clearInterval(id));
   });
 
   createShortcut(["META", "K"], () => openCommandMenu(), {
