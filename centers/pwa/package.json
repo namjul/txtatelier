@@ -8,12 +8,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test src/components/command-menu/filterFiles.test.ts"
   },
   "dependencies": {
     "@ark-ui/solid": "^5.35.0",
     "@evolu/common": "^7.4.0",
     "@evolu/web": "^2.4.0",
+    "@solid-primitives/keyboard": "^1.3.5",
+    "@solid-primitives/pointer": "^0.3.5",
     "@solid-primitives/scheduled": "^1.5.3",
     "@tanstack/solid-virtual": "^3.0.0",
     "@zag-js/core": "^1.38.2",
