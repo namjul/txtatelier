@@ -4,8 +4,8 @@ import {
   type MinLengthError,
   Mnemonic,
 } from "@evolu/common";
-import type { Accessor } from "solid-js";
-import { type createResource, createSignal, Show } from "solid-js";
+import type { Accessor, Resource } from "solid-js";
+import { createSignal, Match, Show, Switch } from "solid-js";
 import { defaultRelayUrl, evolu } from "../../evolu/client";
 import { createUseEvolu } from "../../evolu/evolu";
 import type { StatusOps, StatusState } from "../editor/types";
@@ -29,11 +29,18 @@ interface OwnerData {
   readonly mnemonic?: string | null;
 }
 
-type OwnerResourceSlot = ReturnType<typeof createResource<OwnerData>>[0];
+type OwnerResourceSlot = Resource<OwnerData>;
+
+const formatOwnerResourceError = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return String((error as { readonly message: unknown }).message);
+  }
+  return typeof error === "string" ? error : JSON.stringify(error);
+};
 
 export const SettingsPanel = (props: {
   owner: OwnerResourceSlot;
-  ownerId: () => string | undefined;
   appStatus: Accessor<StatusState>;
   statusOps: StatusOps;
   onBack: () => void;
@@ -55,9 +62,17 @@ export const SettingsPanel = (props: {
     }
 
     props.statusOps.setIdle("restoring…");
-    await evoluClient.restoreAppOwner(parsed.value);
-    props.statusOps.setLastAction("restored from mnemonic");
-    props.statusOps.setIdle("ready");
+    try {
+      // reload: false so the promise resolves; Evolu's default reload skips onComplete.
+      await evoluClient.restoreAppOwner(parsed.value, { reload: false });
+      props.statusOps.setLastAction("restored from mnemonic");
+      props.statusOps.setIdle("ready");
+      evoluClient.reloadApp();
+    } catch (error) {
+      props.statusOps.setError(
+        error instanceof Error ? error.message : "restore failed",
+      );
+    }
   };
 
   const handleResetOwner = async () => {
@@ -67,9 +82,16 @@ export const SettingsPanel = (props: {
     if (!confirmed) return;
 
     props.statusOps.setIdle("resetting…");
-    await evoluClient.resetAppOwner();
-    props.statusOps.setLastAction("reset local owner");
-    props.statusOps.setIdle("ready");
+    try {
+      await evoluClient.resetAppOwner({ reload: false });
+      props.statusOps.setLastAction("reset local owner");
+      props.statusOps.setIdle("ready");
+      evoluClient.reloadApp();
+    } catch (error) {
+      props.statusOps.setError(
+        error instanceof Error ? error.message : "reset failed",
+      );
+    }
   };
 
   const handleExportDatabase = async () => {
@@ -129,7 +151,31 @@ export const SettingsPanel = (props: {
         <section class="space-y-3">
           <h2 class="text-base font-bold">Identity</h2>
           <p class="break-all font-mono text-xs">
-            owner: {props.ownerId() ?? "loading…"}
+            owner:{" "}
+            <Switch>
+              <Match when={props.owner.state === "errored"}>
+                <span class="text-[#a32222] dark:text-[#ff8f8f]">
+                  error — {formatOwnerResourceError(props.owner.error)}
+                </span>
+              </Match>
+              <Match
+                when={
+                  props.owner.state === "ready" ||
+                  props.owner.state === "refreshing"
+                    ? props.owner()
+                    : false
+                }
+              >
+                {(o) => {
+                  const row = o();
+                  const id = row.id;
+                  return <span>{id !== "" ? id : "unavailable"}</span>;
+                }}
+              </Match>
+              <Match when={true}>
+                <span class="text-black/55 dark:text-white/55">loading…</span>
+              </Match>
+            </Switch>
           </p>
           <p class="text-black/65 dark:text-white/65">
             Mnemonic stays hidden until you choose show.

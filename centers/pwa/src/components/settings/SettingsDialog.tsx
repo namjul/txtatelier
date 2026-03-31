@@ -1,5 +1,5 @@
 import { Dialog } from "@ark-ui/solid";
-import type { Accessor, createResource } from "solid-js";
+import type { Accessor, Resource } from "solid-js";
 import type { StatusOps, StatusState } from "../editor/types";
 import { SettingsPanel } from "./SettingsPanel";
 
@@ -8,14 +8,13 @@ interface OwnerData {
   readonly mnemonic?: string | null;
 }
 
-type OwnerResourceSlot = ReturnType<typeof createResource<OwnerData>>[0];
+type OwnerResourceSlot = Resource<OwnerData>;
 
 export const SettingsDialog = (props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editorTextArea: () => HTMLTextAreaElement | null;
   owner: OwnerResourceSlot;
-  ownerId: () => string | undefined;
   appStatus: Accessor<StatusState>;
   statusOps: StatusOps;
 }) => {
@@ -46,7 +45,6 @@ export const SettingsDialog = (props: {
           </Dialog.Description>
           <SettingsPanel
             owner={props.owner}
-            ownerId={props.ownerId}
             appStatus={props.appStatus}
             statusOps={props.statusOps}
             onBack={() => props.onOpenChange(false)}

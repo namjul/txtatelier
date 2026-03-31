@@ -224,7 +224,6 @@ const AppShell = () => {
         onOpenChange={setSettingsOpen}
         editorTextArea={() => editorTextArea()}
         owner={owner}
-        ownerId={ownerId}
         appStatus={status}
         statusOps={statusOps}
       />
