@@ -300,6 +300,11 @@ export const SettingsPanel = (props: {
             Web Share Target prepends shared text to this markdown path
             (relative to your synced folder).
           </p>
+          <p class="text-black/65 dark:text-white/65">
+            On Android, install the app to your home screen (Chrome menu → Install
+            app or Add to Home screen) so TXTAtelier appears in the system Share
+            sheet.
+          </p>
           <div class="w-full space-y-2">
             <label
               class="block text-xs text-black/65 dark:text-white/65"
