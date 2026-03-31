@@ -15,7 +15,8 @@ export default defineConfig({
     tailwindcss(),
     solidPlugin(),
     VitePWA({
-      registerType: "prompt",
+      // autoUpdate + registerSW: bare register() never activates waiting SW ("prompt" needs onNeedRefresh UI).
+      registerType: "autoUpdate",
       injectRegister: null,
       manifest: {
         name: "TXTAtelier",
