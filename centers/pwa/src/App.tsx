@@ -6,6 +6,8 @@ import {
   type MinLengthError,
   Mnemonic,
 } from "@evolu/common";
+import { deriveShardOwner } from "@evolu/common/local-first";
+import { debounce } from "@solid-primitives/scheduled";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import type { Accessor } from "solid-js";
 import {
@@ -14,6 +16,7 @@ import {
   createResource,
   createSignal,
   For,
+  onCleanup,
   Show,
   Suspense,
 } from "solid-js";
@@ -30,6 +33,7 @@ import {
   useQuery,
 } from "./evolu/evolu";
 import { type FilesRow, filesQuery } from "./evolu/files";
+import { useAutoSaveMachine } from "./machines/useAutoSaveMachine";
 
 // =============================================================================
 // SETUP
@@ -152,13 +156,14 @@ const useFileList = () => {
   };
 };
 
-type SaveUiState = "idle" | "saving" | "saved";
+type AutoSaveUiState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 // =============================================================================
 // HOOK: FILE EDITOR MANAGEMENT
 // =============================================================================
 
 const useFileEditor = (
+  filesShardOwnerId: () => string | undefined,
   ownerId: () => string | undefined,
   selectedFile: () => FilesRow | null,
   status: StatusOps,
@@ -175,8 +180,10 @@ const useFileEditor = (
   const [conflictRemote, setConflictRemote] = createSignal<FilesRow | null>(
     null,
   );
-  const [saveUi, setSaveUi] = createSignal<SaveUiState>("idle");
   const [isSaving, setIsSaving] = createSignal(false);
+  const [saveFailedFinal, setSaveFailedFinal] = createSignal(false);
+  /** Counts failed persist attempts for exponential backoff (see runScheduledPersist). */
+  let persistRetryCount = 0;
 
   const isDirty = createMemo(() => {
     if (selectedFile() == null) return false;
@@ -185,17 +192,44 @@ const useFileEditor = (
 
   const hasConflict = createMemo(() => conflictRemote() != null);
 
+  // Row `ownerId` is the files shard id (see getFilesShardMutationOptions), not appOwner.id.
+  const canSaveAsOwner = createMemo(() => {
+    const file = selectedFile();
+    const shardOid = filesShardOwnerId();
+    if (file == null || shardOid == null) return false;
+    return file.ownerId === shardOid;
+  });
+
+  // FSM for indicator text; debounced work below decides when to call Evolu.
+  const autoSave = useAutoSaveMachine({
+    isDirty,
+    hasConflict,
+    canSaveAsOwner,
+  });
+
+  const autoSaveUi = createMemo((): AutoSaveUiState => {
+    if (autoSave.state.matches("saving")) return "saving";
+    if (autoSave.state.matches("saved")) return "saved";
+    if (autoSave.state.matches("error")) return "error";
+    if (autoSave.state.matches("dirty")) return "dirty";
+    return "idle";
+  });
+
   // Sync editor with selected file
   createEffect(() => {
     const file = selectedFile();
 
     if (file == null) {
+      // Pending debounced save must not run after the editor is closed or file list empties.
+      scheduleAutoSave.clear();
+      persistRetryCount = 0;
+      setSaveFailedFinal(false);
+      autoSave.send({ type: "RESET" });
       setEditorFileId(null);
       setBaseContent("");
       setBaseFingerprint(null);
       setConflictRemote(null);
       setDraft("");
-      setSaveUi("idle");
       return;
     }
 
@@ -203,12 +237,15 @@ const useFileEditor = (
 
     // New file selected - reset editor
     if (editorFileId() !== file.id) {
+      scheduleAutoSave.clear();
+      persistRetryCount = 0;
+      setSaveFailedFinal(false);
+      autoSave.send({ type: "RESET" });
       setEditorFileId(file.id);
       setBaseContent(currentContent);
       setBaseFingerprint(file.contentHash);
       setConflictRemote(null);
       setDraft(currentContent);
-      setSaveUi("idle");
       return;
     }
 
@@ -236,17 +273,30 @@ const useFileEditor = (
     setBaseFingerprint(file.contentHash);
     setConflictRemote(null);
     setDraft(currentContent);
-    setSaveUi("idle");
+    autoSave.send({ type: "RESET" });
   });
 
   const persistDraft = async (): Promise<boolean> => {
     const file = selectedFile();
-    if (file == null || !isDirty() || hasConflict()) return false;
-
-    setIsSaving(true);
+    if (
+      file == null ||
+      !isDirty() ||
+      hasConflict() ||
+      !canSaveAsOwner()
+    ) {
+      return false;
+    }
 
     const content = draft();
     const contentHash = await computeContentHash(content);
+    if (contentHash === file.contentHash) {
+      // No Evolu mutation needed; still align baseline so the sync effect stays quiet.
+      setBaseContent(content);
+      setBaseFingerprint(contentHash);
+      return true;
+    }
+
+    setIsSaving(true);
 
     const shard = await getFilesShardMutationOptions(evoluClient);
     const result = evoluClient.update(
@@ -262,7 +312,6 @@ const useFileEditor = (
     if (!result.ok) {
       setIsSaving(false);
       status.setError("invalid value");
-      setSaveUi("idle");
       return false;
     }
 
@@ -274,13 +323,65 @@ const useFileEditor = (
     return true;
   };
 
-  const save = async () => {
-    setSaveUi("saving");
+  const runScheduledPersist = async (): Promise<void> => {
+    if (!isDirty() || hasConflict() || !canSaveAsOwner()) {
+      autoSave.send({ type: "RESET" });
+      return;
+    }
+
+    autoSave.send({ type: "SAVE" });
+    // Zag applies transitions in a microtask; without this, matches("saving") is still stale.
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    if (!autoSave.state.matches("saving")) return; // SAVE didn't pass guards (e.g. race with cleared draft)
+
     const ok = await persistDraft();
     if (ok) {
-      setSaveUi("saved");
+      persistRetryCount = 0;
+      setSaveFailedFinal(false);
+      autoSave.send({ type: "SAVE_SUCCESS" });
+      return;
+    }
+
+    autoSave.send({ type: "SAVE_ERROR" });
+    if (persistRetryCount < 3) {
+      persistRetryCount += 1;
+      const delayMs = 1000 * 2 ** (persistRetryCount - 1);
+      window.setTimeout(() => void runScheduledPersist(), delayMs);
+    } else {
+      setSaveFailedFinal(true);
     }
   };
+
+  const scheduleAutoSave = debounce(() => {
+    void runScheduledPersist();
+  }, 300); // trailing edge; cleared on file close/switch or when persist is disallowed
+
+  createEffect(() => {
+    const file = selectedFile();
+    draft();
+    baseContent();
+
+    if (file == null) return;
+
+    // Keep FSM in sync with the editor; debounce only arms when a persist is actually allowed.
+    autoSave.send({ type: "TYPE" });
+
+    if (!isDirty() || hasConflict() || !canSaveAsOwner()) {
+      scheduleAutoSave.clear();
+      return;
+    }
+
+    scheduleAutoSave();
+  });
+
+  createEffect(() => {
+    if (!autoSave.state.matches("saved")) return;
+    // Brief "Saved" label without leaving the UI stuck in saved forever.
+    const handle = window.setTimeout(() => {
+      autoSave.send({ type: "RESET" });
+    }, 2000);
+    onCleanup(() => window.clearTimeout(handle));
+  });
 
   const resolveConflict = (strategy: ConflictStrategy) => {
     const remote = conflictRemote();
@@ -353,8 +454,8 @@ const useFileEditor = (
     isDirty,
     hasConflict,
     conflictRemote,
-    saveUi,
-    save,
+    autoSaveUi,
+    saveFailedFinal,
     resolveConflict,
     saveDraftAsConflictArtifact,
   };
@@ -527,9 +628,9 @@ const Editor = (props: {
   isDirty: boolean;
   hasConflict: boolean;
   conflictRemote: FilesRow | null;
-  saveUi: SaveUiState;
+  autoSaveUi: AutoSaveUiState;
+  saveFailedFinal: boolean;
   onDraftChange: (value: string) => void;
-  onSave: () => void;
   onResolveConflict: (strategy: ConflictStrategy) => void;
   onSaveConflictArtifact: () => void;
 }) => {
@@ -537,25 +638,19 @@ const Editor = (props: {
     <>
       <div class="flex min-w-0 items-center justify-between gap-3">
         <p class="min-w-0 flex-1 truncate text-sm">{props.file.path}</p>
-        <div class="flex shrink-0 items-center gap-2">
-          <Show when={props.saveUi === "saving"}>
-            <span class="text-xs text-black/50 dark:text-white/50">
-              saving…
+        {/* Persistence is debounced in useFileEditor; conflict actions stay below. */}
+        <div class="shrink-0 text-right text-xs text-black/55 dark:text-white/55">
+          <Show when={props.autoSaveUi === "saving"}>
+            <span class="text-black/50 dark:text-white/50">Saving…</span>
+          </Show>
+          <Show when={props.autoSaveUi === "saved"}>
+            <span class="text-[#0f6a31] dark:text-[#6fc38c]">Saved</span>
+          </Show>
+          <Show when={props.autoSaveUi === "error"}>
+            <span class="text-[#a32222] dark:text-[#ff8f8f]" title="Save failed">
+              {props.saveFailedFinal ? "Save failed" : "Error — retrying…"}
             </span>
           </Show>
-          <Show when={props.saveUi === "saved"}>
-            <span class="text-[#0f6a31] dark:text-[#6fc38c]" title="Saved">
-              ✓
-            </span>
-          </Show>
-          <button
-            type="button"
-            class="rounded-none border border-black/25 px-3 py-1.5 text-xs hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-45 dark:border-white/25 dark:hover:bg-white/10"
-            disabled={!props.isDirty || props.hasConflict}
-            onClick={() => void props.onSave()}
-          >
-            save
-          </button>
         </div>
       </div>
 
@@ -598,6 +693,7 @@ const Editor = (props: {
 // =============================================================================
 
 const FileWorkspace = (props: {
+  filesShardOwnerId: () => string | undefined;
   ownerId: () => string | undefined;
   status: StatusOps;
 }) => {
@@ -615,11 +711,13 @@ const FileWorkspace = (props: {
 };
 
 const FileWorkspaceContent = (props: {
+  filesShardOwnerId: () => string | undefined;
   ownerId: () => string | undefined;
   status: StatusOps;
 }) => {
   const fileList = useFileList();
   const editor = useFileEditor(
+    props.filesShardOwnerId,
     props.ownerId,
     () => fileList.selectedFile(),
     props.status,
@@ -659,9 +757,9 @@ const FileWorkspaceContent = (props: {
             isDirty={editor.isDirty()}
             hasConflict={editor.hasConflict()}
             conflictRemote={editor.conflictRemote()}
-            saveUi={editor.saveUi()}
+            autoSaveUi={editor.autoSaveUi()}
+            saveFailedFinal={editor.saveFailedFinal()}
             onDraftChange={editor.setDraft}
-            onSave={editor.save}
             onResolveConflict={editor.resolveConflict}
             onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
           />
@@ -870,6 +968,11 @@ const AppShell = () => {
 
   const [owner] = createResource(async () => evoluClient.appOwner);
   const ownerId = () => owner()?.id;
+  const filesShardOwnerId = () => {
+    const o = owner();
+    if (o == null) return undefined;
+    return deriveShardOwner(o, ["files", 1]).id;
+  };
 
   const statusOps: StatusOps = {
     setOk: (message) =>
@@ -923,7 +1026,11 @@ const AppShell = () => {
       </header>
 
       <Show when={page() === "files"}>
-        <FileWorkspace ownerId={ownerId} status={statusOps} />
+        <FileWorkspace
+          filesShardOwnerId={filesShardOwnerId}
+          ownerId={ownerId}
+          status={statusOps}
+        />
       </Show>
 
       <Show when={page() === "settings"}>
