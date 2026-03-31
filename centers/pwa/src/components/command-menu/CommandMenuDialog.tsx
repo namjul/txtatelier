@@ -9,6 +9,7 @@ export const CommandMenuDialog = (props: {
   selectedFileId: FilesRow["id"] | null;
   onOpenChange: (open: boolean) => void;
   onSelectFile: (id: FilesRow["id"]) => void;
+  onOpenSettings: () => void;
   editorTextArea: () => HTMLTextAreaElement | null;
 }) => {
   let inputEl: HTMLInputElement | undefined;
@@ -53,14 +54,19 @@ export const CommandMenuDialog = (props: {
               File switcher
             </Dialog.Title>
             <Dialog.Description class="sr-only">
-              Type to filter files by path. Use arrow keys to move, Enter to
-              open, Escape to close.
+              Type to filter files by path. Type a question mark for actions
+              including settings. Use arrow keys to move, Enter to open, Escape
+              to close.
             </Dialog.Description>
             <CommandMenuCombobox
               files={props.files}
               selectedFileId={props.selectedFileId}
               onSelect={(id) => {
                 props.onSelectFile(id);
+                props.onOpenChange(false);
+              }}
+              onOpenSettings={() => {
+                props.onOpenSettings();
                 props.onOpenChange(false);
               }}
               inputRef={(el) => {

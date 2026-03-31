@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test src/components/command-menu/filterFiles.test.ts"
+    "test": "bun test src/components/command-menu/"
   },
   "dependencies": {
     "@ark-ui/solid": "^5.35.0",

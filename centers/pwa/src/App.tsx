@@ -35,6 +35,7 @@ const FilesWorkspace = (props: {
   status: StatusOps;
   commandMenuOpen: boolean;
   onCommandMenuOpenChange: (open: boolean) => void;
+  onOpenSettings: () => void;
   onEditorTextAreaRef?: (el: HTMLTextAreaElement | null) => void;
 }) => {
   const fileList = useFileList();
@@ -123,6 +124,7 @@ const FilesWorkspace = (props: {
         files={fileList.files()}
         selectedFileId={fileList.selectedFileId()}
         onSelectFile={fileList.selectFile}
+        onOpenSettings={props.onOpenSettings}
         editorTextArea={() => editorTextAreaEl ?? null}
       />
     </>
@@ -215,6 +217,7 @@ const AppShell = () => {
         status={statusOps}
         commandMenuOpen={commandMenuOpen()}
         onCommandMenuOpenChange={setCommandMenuOpen}
+        onOpenSettings={() => setSettingsOpen(true)}
         onEditorTextAreaRef={setEditorTextArea}
       />
 
