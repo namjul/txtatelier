@@ -8,3 +8,4 @@ export {
   type RemoteChangeClass,
 } from "./classifyRemoteChange.ts";
 export { detectConflict } from "./detectConflict.ts";
+export { FILES_SHARD } from "./filesShard.ts";

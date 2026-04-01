@@ -13,6 +13,7 @@ import {
   tryAsync,
 } from "@evolu/common";
 import { deriveShardOwner, type ShardOwner } from "@evolu/common/local-first";
+import { FILES_SHARD } from "@txtatelier/sync-invariants";
 import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { Schema } from "./evolu-schema";
@@ -82,7 +83,7 @@ export const createEvoluClient = async ({
   // Get owner (Evolu handles persistence internally)
   const owner = await evolu.appOwner;
 
-  const filesShardOwner = deriveShardOwner(owner, ["files", 1]);
+  const filesShardOwner = deriveShardOwner(owner, FILES_SHARD);
   if (subscribeFilesShard) {
     evolu.useOwner(filesShardOwner);
   }

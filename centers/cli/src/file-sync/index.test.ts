@@ -17,6 +17,7 @@ import {
   sqliteTrue,
 } from "@evolu/common";
 import { deriveShardOwner } from "@evolu/common/local-first";
+import { FILES_SHARD } from "@txtatelier/sync-invariants";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { resetEvolu } from "./evolu";
 import { computeContentHash } from "./hash";
@@ -200,7 +201,7 @@ describe("GIVEN sync is running", () => {
           contentHash: NonEmptyString100.orThrow("fake-hash"),
         },
         {
-          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -232,7 +233,7 @@ describe("GIVEN sync is running", () => {
           contentHash: NonEmptyString100.orThrow("hash-v1"),
         },
         {
-          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -251,7 +252,7 @@ describe("GIVEN sync is running", () => {
           contentHash: NonEmptyString100.orThrow("hash-v2"),
         },
         {
-          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -283,7 +284,7 @@ describe("GIVEN sync is running", () => {
           contentHash: NonEmptyString100.orThrow("hash-delete"),
         },
         {
-          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -303,7 +304,7 @@ describe("GIVEN sync is running", () => {
           isDeleted: sqliteTrue,
         },
         {
-          ownerId: deriveShardOwner(await session.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -349,7 +350,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
         "file",
         { id: fileId!, isDeleted: sqliteTrue },
         {
-          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -384,7 +385,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           contentHash: NonEmptyString100.orThrow("hash-offline"),
         },
         {
-          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -456,7 +457,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           ),
         },
         {
-          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -502,7 +503,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           isDeleted: sqliteTrue,
         },
         {
-          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );
@@ -554,7 +555,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           ),
         },
         {
-          ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
+          ownerId: deriveShardOwner(await session1.evolu.appOwner, FILES_SHARD)
             .id,
         },
       );

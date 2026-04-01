@@ -22,6 +22,7 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
   - Mnemonic restore via TXTATELIER_MNEMONIC env var
   - Filesystem watching (Node.js fs.watch, debounced 100ms)
   - Content hashing: string/byte SHA-256 hex from `@txtatelier/sync-invariants`; `hash.ts` adds `computeFileHash` (read file → `computeHash`)
+  - Files shard: `FILES_SHARD` from `@txtatelier/sync-invariants` for `deriveShardOwner` (same path as PWA)
   - Evolu mutation logic (insert new files, update changed files, skip unchanged)
   - Concurrency control (max 10 parallel file operations)
 

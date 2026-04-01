@@ -15,6 +15,7 @@ import {
   type Result,
 } from "@evolu/common";
 import { deriveShardOwner } from "@evolu/common/local-first";
+import { FILES_SHARD } from "@txtatelier/sync-invariants";
 import envPaths from "env-paths";
 import untildify from "untildify";
 import { env } from "../env";
@@ -131,7 +132,7 @@ export const startFileSync = async (
   } = ownerSession;
 
   const owner = await evolu.appOwner;
-  const filesShardOwner = deriveShardOwner(owner, ["files", 1]);
+  const filesShardOwner = deriveShardOwner(owner, FILES_SHARD);
 
   const syncCtx: FileSyncContext = {
     evolu,

@@ -1,5 +1,6 @@
 import type { EvoluError } from "@evolu/common";
 import { deriveShardOwner } from "@evolu/common/local-first";
+import { FILES_SHARD } from "@txtatelier/sync-invariants";
 import { createShortcut } from "@solid-primitives/keyboard";
 import { createPageVisibility } from "@solid-primitives/page-visibility";
 import {
@@ -196,7 +197,7 @@ const AppShell = () => {
   const filesShardOwnerId = () => {
     const o = owner();
     if (o == null) return undefined;
-    return deriveShardOwner(o, ["files", 1]).id;
+    return deriveShardOwner(o, FILES_SHARD).id;
   };
 
   const statusOps: StatusOps = {

@@ -14,7 +14,7 @@
 |---------|-------------|--------------|------------------|
 | `file` table schema | `file-sync/evolu-schema.ts:22-38` | `evolu/schema.ts:12-18` | Sync breaks |
 | Content hashing | `@txtatelier/sync-invariants` (CLI: `file-sync/hash.ts` adds `computeFileHash`) | `@txtatelier/sync-invariants` (PWA may re-export via `evolu/contentHash.ts`) | Infinite sync loops |
-| Files shard owner | `evolu.ts` | `evolu/client.ts:19-24` | Rows invisible to other side |
+| Files shard owner | `@txtatelier/sync-invariants` `FILES_SHARD` (CLI: `evolu.ts`, `index.ts`) | same + `evolu/client.ts` | Rows invisible to other side |
 | Default relay URL | AGENTS.md | `evolu/client.ts:26` | Connection failures |
 
 All use **SHA-256 hex** (64 chars) over UTF-8 content. This is the primary cross-surface invariant.
@@ -63,7 +63,7 @@ Trigger signals:
 Obvious candidates (in priority order):
 
 1. **Schema contract** — `FileId`, file table shape as minimal module
-2. **Shard constant** — `FILES_SHARD = ["files", 1]` as named export
+2. **Shard constant** — implemented as `FILES_SHARD` in `@txtatelier/sync-invariants`
 3. **Hash contract** — Test vectors or algorithm spec (not implementation)
 4. **Query helpers** — Only if patterns truly stabilize
 
@@ -78,6 +78,7 @@ Extraction would live at `centers/common-evolu/` with its own `CENTER.md` justif
 - `centers/cli/src/file-sync/evolu-schema.ts` — CLI schema (lines 22-38)
 - `centers/pwa/src/evolu/schema.ts` — PWA schema (lines 12-18)
 - `centers/sync-invariants/src/contentHash.ts` — canonical SHA-256 (Web Crypto)
+- `centers/sync-invariants/src/filesShard.ts` — `FILES_SHARD` for `deriveShardOwner`
 - `centers/cli/src/file-sync/hash.ts` — re-exports + `computeFileHash`
 - `centers/pwa/src/evolu/contentHash.ts` — optional re-export barrel
 - `centers/cli/src/file-sync/evolu-queries.ts` — CLI query patterns
