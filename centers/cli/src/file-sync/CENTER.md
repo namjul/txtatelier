@@ -21,7 +21,7 @@ Implements bidirectional sync between filesystem and Evolu CRDT database.
   - Mnemonic management (auto-generated, persisted by Evolu)
   - Mnemonic restore via TXTATELIER_MNEMONIC env var
   - Filesystem watching (Node.js fs.watch, debounced 100ms)
-  - Content hashing (SHA-256 hex via Node `crypto`, aligned with PWA `computeContentHash`)
+  - Content hashing: string/byte SHA-256 hex from `@txtatelier/sync-invariants`; `hash.ts` adds `computeFileHash` (read file → `computeHash`)
   - Evolu mutation logic (insert new files, update changed files, skip unchanged)
   - Concurrency control (max 10 parallel file operations)
 
@@ -56,7 +56,7 @@ The file-sync center will organize the core synchronization logic from filesyste
 
 **This center:**
 - Watches filesystem for changes (debounced, 50-200ms)
-- Computes content hashes (SHA-256 or similar)
+- Computes content hashes (SHA-256 hex via `@txtatelier/sync-invariants`; disk via `computeFileHash`)
 - Updates Evolu rows when hash differs from stored value
 - Respects "filesystem is canonical" principle
 
@@ -95,7 +95,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 
 **Claim:** `computeFileHash` / `computeContentHash` must use the same algorithm and hex encoding as the PWA.
 
-**Changes:** `hash.ts` uses Node `crypto` SHA-256 hex.
+**Changes:** `hash.ts` re-exports `computeContentHash` / `computeHash` from `@txtatelier/sync-invariants` and implements `computeFileHash` only (disk bytes → hash).
 
 **Contact test:** Success-if: `bun test` in `centers/cli` (same pass/skip profile as before this change). Failure-if: hash mismatch loops or regressions in Change Capture.
 
@@ -179,9 +179,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
 **Claim:** Change Capture with 100ms debounce, SHA-256 hashing, and Node.js fs.watch will provide reliable single-device sync without excessive CPU usage
 
 **Changes:**
-- Created `hash.ts` - Content hashing utilities using SHA-256 hex (Node `crypto`, matches PWA)
-  - `computeFileHash(filePath)` - Hash file from disk
-  - `computeContentHash(content)` - Hash string content directly
+- Created `hash.ts` - Content hashing: re-exports `@txtatelier/sync-invariants`; `computeFileHash(filePath)` reads disk bytes
 - Created `watch.ts` - Filesystem watching with debounce
   - Uses Node.js `fs.watch()` with recursive option (more stable than Bun.watch)
   - 100ms debounce per file path (balances responsiveness and stability)
@@ -199,7 +197,7 @@ Strong - Bidirectional sync complete, organizing power fully demonstrated
   - Passes `syncFileToEvolu` callback to watcher
 
 **Design decisions:**
-- **Hash algorithm:** SHA-256 hex (must match PWA `file.contentHash` or Evolu↔disk↔watch loops)
+- **Hash algorithm:** SHA-256 hex from `@txtatelier/sync-invariants` (must match PWA `file.contentHash` or Evolu↔disk↔watch loops)
 - **Debounce:** 100ms (balances instant feedback with stability)
 - **Watch API:** Node.js fs.watch() (more stable than Bun.watch for now)
 - **Initial scan:** None - only watch changes (Phase 5 will add startup reconciliation)

@@ -10,6 +10,7 @@
 
 **Isomorphic, dependency-free TypeScript** that encodes **normative sync invariants** — how to interpret content hashes when reconciling local state with a replicated row:
 
+- **`computeHash` / `computeContentHash`** — SHA-256, lowercase hex (64 chars); UTF-8 for strings via `TextEncoder` (Web Crypto `crypto.subtle`; Node 19+ / browsers).
 - **`detectConflict`** — pure 3-way merge math (`diskHash`, `lastAppliedHash`, `remoteHash`).
 - **`classifyRemoteChange`** — ordered causality layer (`lastPersistedHash` for self-echo); **only** caller of `detectConflict` for product rules.
 

@@ -2,7 +2,7 @@ import { classifyRemoteChange } from "@txtatelier/sync-invariants";
 import { debounce } from "@solid-primitives/scheduled";
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { evolu, getFilesShardMutationOptions } from "../../evolu/client";
-import { computeContentHash } from "../../evolu/contentHash";
+import { computeContentHash } from "@txtatelier/sync-invariants";
 import { createUseEvolu } from "../../evolu/evolu";
 import type { FilesRow } from "../../evolu/files";
 import { useFileEditorMachine } from "../../machines/useFileEditorMachine";

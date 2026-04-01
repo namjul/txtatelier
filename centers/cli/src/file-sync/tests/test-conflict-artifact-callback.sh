@@ -31,7 +31,7 @@ echo "LOCAL_OFFLINE_EDIT" > "$WATCH_DIR/shared-callback.txt"
 
 echo "[6/11] Simulating remote update in mirror state..."
 REMOTE_CONTENT="REMOTE_EDIT_FROM_DEVICE_B"
-REMOTE_HASH=$(bun -e "import { computeContentHash } from './src/file-sync/hash'; console.log(computeContentHash('${REMOTE_CONTENT}'));" 2>/dev/null)
+REMOTE_HASH=$(bun -e "import { computeContentHash } from './src/file-sync/hash'; console.log(await computeContentHash(process.argv[1]));" "$REMOTE_CONTENT" 2>/dev/null)
 
 sqlite3 "$DB_PATH" "
 UPDATE file

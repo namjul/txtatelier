@@ -451,7 +451,9 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           id: fileId!,
           path: NonEmptyString1000.orThrow("synced.txt"),
           content: evoluEdit,
-          contentHash: NonEmptyString100.orThrow(computeContentHash(evoluEdit)),
+          contentHash: NonEmptyString100.orThrow(
+            await computeContentHash(evoluEdit),
+          ),
         },
         {
           ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])
@@ -547,7 +549,9 @@ describe("GIVEN file exists in both Evolu and disk", () => {
           id: fileId!,
           path: NonEmptyString1000.orThrow("synced.txt"),
           content: evoluEdit,
-          contentHash: NonEmptyString100.orThrow(computeContentHash(evoluEdit)),
+          contentHash: NonEmptyString100.orThrow(
+            await computeContentHash(evoluEdit),
+          ),
         },
         {
           ownerId: deriveShardOwner(await session1.evolu.appOwner, ["files", 1])

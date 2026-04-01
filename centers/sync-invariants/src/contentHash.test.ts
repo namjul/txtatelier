@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { computeContentHash, computeHash } from "./hash";
+import { computeContentHash, computeHash } from "./contentHash.ts";
 
-describe("computeHash - pure byte hashing", () => {
+describe("computeHash", () => {
   test("computes hash from bytes", async () => {
     const bytes = new Uint8Array([1, 2, 3, 4]);
     const hash = await computeHash(bytes);
@@ -21,7 +21,7 @@ describe("computeHash - pure byte hashing", () => {
   });
 });
 
-describe("computeContentHash - pure string hashing", () => {
+describe("computeContentHash", () => {
   test("computes hash from string", async () => {
     const hash = await computeContentHash("test content");
     expect(typeof hash).toBe("string");
@@ -44,5 +44,13 @@ describe("computeContentHash - pure string hashing", () => {
   test("handles empty string", async () => {
     const hash = await computeContentHash("");
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("matches Node createHash utf-8 contract (golden)", async () => {
+    const content = "evolu edit";
+    const fromWebCrypto = await computeContentHash(content);
+    const { createHash } = await import("node:crypto");
+    const fromNode = createHash("sha256").update(content).digest("hex");
+    expect(fromWebCrypto).toBe(fromNode);
   });
 });

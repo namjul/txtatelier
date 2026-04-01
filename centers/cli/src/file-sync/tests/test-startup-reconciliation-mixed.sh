@@ -30,7 +30,7 @@ echo "[5/10] Preparing mixed startup state (offline)..."
 echo "disk-only startup file" > "$WATCH_DIR/nested/disk-only.txt"
 
 REMOTE_CONTENT="remote-only startup file"
-REMOTE_HASH=$(bun -e "import { computeContentHash } from './src/file-sync/hash'; console.log(computeContentHash('${REMOTE_CONTENT}'));" 2>/dev/null)
+REMOTE_HASH=$(bun -e "import { computeContentHash } from './src/file-sync/hash'; console.log(await computeContentHash(process.argv[1]));" "$REMOTE_CONTENT" 2>/dev/null)
 
 sqlite3 "$DB_PATH" "
 INSERT INTO file (id, path, content, contentHash, createdAt, updatedAt, isDeleted, ownerId)

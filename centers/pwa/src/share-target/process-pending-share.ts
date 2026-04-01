@@ -2,7 +2,7 @@ import {
   getFilesShardMutationOptions,
   type TxtatelierEvolu,
 } from "../evolu/client";
-import { computeContentHash } from "../evolu/contentHash";
+import { computeContentHash } from "@txtatelier/sync-invariants";
 import { createFileRowByPathQuery } from "../evolu/file-by-path-query";
 import { settingsQuery } from "../evolu/settings";
 import { formatSharedLine } from "./format-shared-line";
