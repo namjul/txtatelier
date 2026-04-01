@@ -15,4 +15,4 @@ export interface StatusOps {
 
 export type ConflictStrategy = "local" | "remote";
 
-export type AutoSaveUiState = "idle" | "dirty" | "saving" | "saved" | "error";
+export type AutoSaveUiState = "clean" | "dirty" | "saving" | "error";

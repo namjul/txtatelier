@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import {
   COMMAND_MENU_OPEN_SETTINGS_VALUE,
   isCommandMenuActionMode,

@@ -1,11 +1,12 @@
+import { classifyRemoteChange } from "@txtatelier/sync-invariants";
 import { debounce } from "@solid-primitives/scheduled";
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { evolu, getFilesShardMutationOptions } from "../../evolu/client";
 import { computeContentHash } from "../../evolu/contentHash";
 import { createUseEvolu } from "../../evolu/evolu";
 import type { FilesRow } from "../../evolu/files";
-import { useAutoSaveMachine } from "../../machines/useAutoSaveMachine";
-import type { AutoSaveUiState, ConflictStrategy, StatusOps } from "./types";
+import { useFileEditorMachine } from "../../machines/useFileEditorMachine";
+import type { AutoSaveUiState, StatusOps } from "./types";
 
 const useEvolu = createUseEvolu(evolu);
 
@@ -43,19 +44,18 @@ export const useFileEditor = (
   const [baseFingerprint, setBaseFingerprint] = createSignal<string | null>(
     null,
   );
-  const [conflictRemote, setConflictRemote] = createSignal<FilesRow | null>(
+  const [lastPersistedHash, setLastPersistedHash] = createSignal<string | null>(
     null,
   );
-  const [isSaving, setIsSaving] = createSignal(false);
+  const [draftHash, setDraftHash] = createSignal<string | null>(null);
   const [saveFailedFinal, setSaveFailedFinal] = createSignal(false);
+  const [savedFlash, setSavedFlash] = createSignal(false);
   let persistRetryCount = 0;
 
   const isDirty = createMemo(() => {
     if (selectedFile() == null) return false;
     return draft() !== baseContent();
   });
-
-  const hasConflict = createMemo(() => conflictRemote() != null);
 
   const canSaveAsOwner = createMemo(() => {
     const file = selectedFile();
@@ -64,18 +64,49 @@ export const useFileEditor = (
     return file.ownerId === shardOid;
   });
 
-  const autoSave = useAutoSaveMachine({
+  const session = useFileEditorMachine({
     isDirty,
-    hasConflict,
     canSaveAsOwner,
   });
 
+  const hasConflict = createMemo(() => session.state.matches("conflict"));
+
   const autoSaveUi = createMemo((): AutoSaveUiState => {
-    if (autoSave.state.matches("saving")) return "saving";
-    if (autoSave.state.matches("saved")) return "saved";
-    if (autoSave.state.matches("error")) return "error";
-    if (autoSave.state.matches("dirty")) return "dirty";
-    return "idle";
+    if (saveFailedFinal()) return "error";
+    if (session.state.matches("saving")) return "saving";
+    if (session.state.matches("dirty")) return "dirty";
+    if (session.state.matches("conflict")) return "dirty";
+    return "clean";
+  });
+
+  createEffect(() => {
+    const file = selectedFile();
+    const d = draft();
+    if (file == null) {
+      setDraftHash(null);
+      return;
+    }
+    let cancelled = false;
+    void computeContentHash(d).then((h) => {
+      if (!cancelled) {
+        setDraftHash(h);
+      }
+    });
+    onCleanup(() => {
+      cancelled = true;
+    });
+  });
+
+  let prevIsDirty = false;
+  createEffect(() => {
+    const d = isDirty();
+    const file = selectedFile();
+    if (prevIsDirty && !d && file != null && !hasConflict()) {
+      setSavedFlash(true);
+      const h = window.setTimeout(() => setSavedFlash(false), 2000);
+      onCleanup(() => window.clearTimeout(h));
+    }
+    prevIsDirty = d;
   });
 
   createEffect(() => {
@@ -85,11 +116,11 @@ export const useFileEditor = (
       scheduleAutoSave.clear();
       persistRetryCount = 0;
       setSaveFailedFinal(false);
-      autoSave.send({ type: "RESET" });
+      session.send({ type: "FILE_CONTEXT_RESET" });
       setEditorFileId(null);
       setBaseContent("");
       setBaseFingerprint(null);
-      setConflictRemote(null);
+      setLastPersistedHash(null);
       setDraft("");
       return;
     }
@@ -100,38 +131,61 @@ export const useFileEditor = (
       scheduleAutoSave.clear();
       persistRetryCount = 0;
       setSaveFailedFinal(false);
-      autoSave.send({ type: "RESET" });
+      session.send({ type: "FILE_CONTEXT_RESET" });
       setEditorFileId(file.id);
       setBaseContent(currentContent);
       setBaseFingerprint(file.contentHash);
-      setConflictRemote(null);
       setDraft(currentContent);
+      setLastPersistedHash(null);
       return;
     }
 
-    if (isSaving()) {
+    if (session.state.matches("saving")) {
       return;
     }
 
-    if (file.contentHash === baseFingerprint()) {
+    const base = baseFingerprint();
+    if (base !== null && file.contentHash === base) {
       return;
     }
 
-    if (isDirty()) {
-      if (!hasConflict()) {
-        status.setError("conflict detected");
+    const dh = draftHash();
+    if (dh === null || base === null) {
+      return;
+    }
+
+    const outcome = classifyRemoteChange({
+      diskHash: dh,
+      lastAppliedHash: base,
+      remoteHash: file.contentHash,
+      lastPersistedHash: lastPersistedHash(),
+    });
+
+    if (outcome === "true_divergence") {
+      if (isDirty()) {
+        if (!session.state.matches("conflict")) {
+          status.setError("conflict detected");
+        }
+        session.send({ type: "ROW_TRUE_DIVERGENCE" });
       }
-      setConflictRemote(file);
       return;
     }
 
-    setBaseContent(currentContent);
-    setBaseFingerprint(file.contentHash);
-    setConflictRemote(null);
-    if (draft() !== currentContent) {
+    if (file.contentHash === dh) {
+      const remoteBody = file.content ?? "";
+      setBaseContent(remoteBody);
+      setBaseFingerprint(file.contentHash);
+      if (draft() !== remoteBody) {
+        setDraft(remoteBody);
+      }
+      return;
+    }
+
+    if (!isDirty()) {
+      setBaseContent(currentContent);
+      setBaseFingerprint(file.contentHash);
       setDraft(currentContent);
     }
-    autoSave.send({ type: "RESET" });
   });
 
   const persistDraft = async (): Promise<boolean> => {
@@ -145,10 +199,9 @@ export const useFileEditor = (
     if (contentHash === file.contentHash) {
       setBaseContent(content);
       setBaseFingerprint(contentHash);
+      setLastPersistedHash(contentHash);
       return true;
     }
-
-    setIsSaving(true);
 
     const shard = await getFilesShardMutationOptions(evoluClient);
     const result = evoluClient.update(
@@ -162,14 +215,11 @@ export const useFileEditor = (
     );
 
     if (!result.ok) {
-      setIsSaving(false);
       status.setError("invalid value");
       return false;
     }
 
-    setBaseContent(content);
-    setBaseFingerprint(contentHash);
-    setIsSaving(false);
+    setLastPersistedHash(contentHash);
     status.setLastAction(`saved ${file.path}`);
     status.setIdle("ready");
     return true;
@@ -177,23 +227,22 @@ export const useFileEditor = (
 
   const runScheduledPersist = async (): Promise<void> => {
     if (!isDirty() || hasConflict() || !canSaveAsOwner()) {
-      autoSave.send({ type: "RESET" });
       return;
     }
 
-    autoSave.send({ type: "SAVE" });
+    session.send({ type: "PERSIST_REQUESTED" });
     await new Promise<void>((resolve) => queueMicrotask(resolve));
-    if (!autoSave.state.matches("saving")) return;
+    if (!session.state.matches("saving")) return;
 
     const ok = await persistDraft();
     if (ok) {
       persistRetryCount = 0;
       setSaveFailedFinal(false);
-      autoSave.send({ type: "SAVE_SUCCESS" });
+      session.send({ type: "PERSIST_COMPLETED" });
       return;
     }
 
-    autoSave.send({ type: "SAVE_ERROR" });
+    session.send({ type: "PERSIST_FAILED" });
     if (persistRetryCount < 3) {
       persistRetryCount += 1;
       const delayMs = 1000 * 2 ** (persistRetryCount - 1);
@@ -214,7 +263,7 @@ export const useFileEditor = (
 
     if (file == null) return;
 
-    autoSave.send({ type: "TYPE" });
+    session.send({ type: "DRAFT_CHANGED" });
 
     if (!isDirty() || hasConflict() || !canSaveAsOwner()) {
       scheduleAutoSave.clear();
@@ -224,31 +273,17 @@ export const useFileEditor = (
     scheduleAutoSave();
   });
 
-  createEffect(() => {
-    if (!autoSave.state.matches("saved")) return;
-    const handle = window.setTimeout(() => {
-      autoSave.send({ type: "RESET" });
-    }, 2000);
-    onCleanup(() => window.clearTimeout(handle));
-  });
+  const replaceDraftWithRemote = () => {
+    const file = selectedFile();
+    if (file == null || !hasConflict()) return;
 
-  const resolveConflict = (strategy: ConflictStrategy) => {
-    const remote = conflictRemote();
-    if (remote == null) return;
-
-    if (strategy === "remote") {
-      const remoteContent = remote.content ?? "";
-      setDraft(remoteContent);
-      setBaseContent(remoteContent);
-      setBaseFingerprint(remote.contentHash);
-    }
-
-    setConflictRemote(null);
-    const detail =
-      strategy === "remote"
-        ? "draft replaced with remote"
-        : "conflict dismissed";
-    status.setLastAction(detail);
+    const remoteContent = file.content ?? "";
+    setDraft(remoteContent);
+    setBaseContent(remoteContent);
+    setBaseFingerprint(file.contentHash);
+    setLastPersistedHash(null);
+    session.send({ type: "ADOPT_REMOTE" });
+    status.setLastAction("draft replaced with remote");
     status.setIdle("ready");
   };
 
@@ -264,7 +299,7 @@ export const useFileEditor = (
 
     status.setIdle("saving conflict artifact…");
     const draftContent = draft();
-    const draftHash = await computeContentHash(draftContent);
+    const draftHashValue = await computeContentHash(draftContent);
     const artifactPath = createConflictArtifactPath(
       file.path,
       appOwnerId.slice(0, 8),
@@ -277,7 +312,7 @@ export const useFileEditor = (
       {
         path: artifactPath,
         content: draftContent,
-        contentHash: draftHash,
+        contentHash: draftHashValue,
       },
       shard,
     );
@@ -291,7 +326,8 @@ export const useFileEditor = (
     setDraft(remoteContent);
     setBaseContent(remoteContent);
     setBaseFingerprint(file.contentHash);
-    setConflictRemote(null);
+    setLastPersistedHash(null);
+    session.send({ type: "LOCAL_PARKED_AS_NEW_FILE" });
     const msg = `saved conflict artifact ${artifactPath}`;
     status.setLastAction(msg);
     status.setIdle("ready");
@@ -302,10 +338,10 @@ export const useFileEditor = (
     setDraft,
     isDirty,
     hasConflict,
-    conflictRemote,
     autoSaveUi,
+    savedFlash,
     saveFailedFinal,
-    resolveConflict,
+    replaceDraftWithRemote,
     saveDraftAsConflictArtifact,
   };
 };

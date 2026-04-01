@@ -105,16 +105,19 @@ const FilesWorkspace = (props: {
                     file={file()}
                     draft={editor.draft()}
                     hasConflict={editor.hasConflict()}
-                    conflictRemote={editor.conflictRemote()}
                     editorRef={(el) => {
                       editorTextAreaEl = el;
                       props.onEditorTextAreaRef?.(el ?? null);
                     }}
                     onDraftChange={editor.setDraft}
-                    onResolveConflict={editor.resolveConflict}
+                    onReplaceDraftWithRemote={editor.replaceDraftWithRemote}
                     onSaveConflictArtifact={editor.saveDraftAsConflictArtifact}
                   />
-                  <Show when={editor.autoSaveUi() !== "idle"}>
+                  <Show
+                    when={
+                      editor.autoSaveUi() !== "clean" || editor.savedFlash()
+                    }
+                  >
                     <div
                       class="pointer-events-none absolute bottom-2 right-0 max-w-[40%] truncate text-right text-[10px] text-black/45 dark:text-white/45"
                       aria-live="polite"
@@ -122,7 +125,10 @@ const FilesWorkspace = (props: {
                       <Show when={editor.autoSaveUi() === "saving"}>
                         <span>Saving…</span>
                       </Show>
-                      <Show when={editor.autoSaveUi() === "saved"}>
+                      <Show when={editor.autoSaveUi() === "dirty"}>
+                        <span>Unsaved</span>
+                      </Show>
+                      <Show when={editor.savedFlash()}>
                         <span class="text-[#0f6a31] dark:text-[#6fc38c]">
                           Saved
                         </span>

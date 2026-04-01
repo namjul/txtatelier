@@ -54,10 +54,12 @@ bun run preview          # Preview production build
 
 ### Testing
 ```bash
-bun test                 # Run all tests
-bun test <file>          # Run single test file
-bun test --watch         # Run tests in watch mode
-bun test --coverage      # Run with coverage
+bun run test             # Run all Vitest projects (repo root, see vitest.config.ts)
+bun run test:watch       # Vitest watch (root)
+bun run test --project @txtatelier/pwa   # One workspace only (also: sync-invariants, cli)
+cd centers/pwa && bun run test           # Same, from a single center
+vitest run path/to/file.test.ts          # Single file (from repo root or center)
+bun run test --coverage                  # Coverage (when configured)
 ```
 
 ### Linting and Formatting

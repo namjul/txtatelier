@@ -8,6 +8,8 @@
     "centers/*"
   ],
   "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check": "bunx biome check .",
     "format": "bunx biome format --write .",
     "format:check": "bunx biome format .",
@@ -18,6 +20,7 @@
     "todo": "rg TODO --glob '*.ts'"
   },
   "devDependencies": {
+    "vitest": "^4.1.0",
     "@biomejs/biome": "^2.4.4",
     "@evolu/common": "^7.4.0",
     "@evolu/nodejs": "^2.4.0",

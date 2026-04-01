@@ -1,7 +1,8 @@
 // Pure planning functions for state materialization (Evolu → filesystem)
 // No I/O - just data transformation
 
-import { detectConflict, generateConflictPath } from "../conflicts";
+import { classifyRemoteChange } from "@txtatelier/sync-invariants";
+import { generateConflictPath } from "../conflicts";
 import type { SyncAction } from "./actions";
 import {
   createConflict,
@@ -65,18 +66,16 @@ export const planStateMaterialization = (
     ];
   }
 
-  // detectConflict() needs both local and remote to differ from base. When Evolu still
-  // matches lastApplied (remote unchanged from last apply) but disk does not, remoteChanged is false — so we handle that case here.
-  const offlineDiskDivergedWhileEvoluUnchanged =
-    evoluMatchesLastApplied &&
-    diskHash != null &&
-    lastAppliedHash != null &&
-    diskHash !== lastAppliedHash;
+  // Layer 2 classification: `remote_behind` covers disk diverged while Evolu still matches
+  // lastApplied; `true_divergence` covers 3-way fork. See centers/sync-invariants + CONFLICT_RULES.md.
+  const remoteClass = classifyRemoteChange({
+    diskHash,
+    lastAppliedHash,
+    remoteHash: evolHash,
+    lastPersistedHash: null,
+  });
 
-  if (
-    offlineDiskDivergedWhileEvoluUnchanged ||
-    detectConflict(diskHash, lastAppliedHash, evolHash)
-  ) {
+  if (remoteClass === "true_divergence" || remoteClass === "remote_behind") {
     const conflictPath = generateConflictPath(state.path, state.ownerId);
     return [
       log("debug", `[materialize:evolu→fs] Conflict detected: ${state.path}`),

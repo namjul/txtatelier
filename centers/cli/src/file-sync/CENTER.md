@@ -491,7 +491,7 @@ const results = await executePlan(evolu, watchDir, actions);
 - `sync/actions.ts` - Action type definitions
 - `sync/state-types.ts` - State structure definitions
 - `sync/change-capture-plan.ts` - Planning for Filesystem → Evolu
-- `sync/state-materialization-plan.ts` - Planning for Evolu → Filesystem
+- `sync/state-materialization-plan.ts` - Planning for Evolu → Filesystem (uses `@txtatelier/sync-invariants` `classifyRemoteChange`)
 - `sync/state-collector.ts` - I/O for gathering state
 - `sync/executor.ts` - I/O for executing actions
 - `sync/*.test.ts` - Fast unit tests (no I/O)

@@ -19,6 +19,8 @@ The PWA center is the web interaction surface for txtatelier. It is responsible 
 - Preserves the system contract that filesystem writes happen through CLI synchronization loops.
 - Makes sync and conflict state legible to users through explicit UI feedback and actions.
 
+**Editor conflict policy:** [`CONFLICT_RULES.md`](../../openspec/changes/archive/2026-04-01-pwa-editor-fsm-zag-unify/CONFLICT_RULES.md) (archived change) — `classifyRemoteChange` / `detectConflict` via `@txtatelier/sync-invariants`; session FSM in [`EDITOR_SESSION_FSM.md`](../../openspec/changes/archive/2026-04-01-pwa-editor-fsm-zag-unify/EDITOR_SESSION_FSM.md). Main spec: [`openspec/specs/pwa-editor-session/spec.md`](../../openspec/specs/pwa-editor-session/spec.md).
+
 **Contact test for "is this a center?"**
 - Success-if: Web editing concerns (query, editing state, save, conflict UX) converge in `centers/pwa`, and removing this workspace removes browser editing as a coherent capability.
 - Failure-if: Browser editing logic is scattered across non-PWA modules, or `centers/pwa` is only a thin shell with no organizing behavior.

@@ -1,16 +1,14 @@
 import { Show } from "solid-js";
 import type { FilesRow } from "../../evolu/files";
-import type { ConflictStrategy } from "./types";
 import { useControlledTextareaCaret } from "./useControlledTextareaCaret";
 
 export const FileEditor = (props: {
   file: FilesRow;
   draft: string;
   hasConflict: boolean;
-  conflictRemote: FilesRow | null;
   editorRef: (el: HTMLTextAreaElement) => void;
   onDraftChange: (value: string) => void;
-  onResolveConflict: (strategy: ConflictStrategy) => void;
+  onReplaceDraftWithRemote: () => void;
   onSaveConflictArtifact: () => void;
 }) => {
   const ta = useControlledTextareaCaret({
@@ -25,9 +23,7 @@ export const FileEditor = (props: {
       <Show when={props.hasConflict}>
         <div class="shrink-0 space-y-2 border border-[#a32222]/40 p-2 text-xs dark:border-[#ff8f8f]/50">
           <p>conflict detected: remote changed while this draft is dirty</p>
-          <p>
-            remote owner: {String(props.conflictRemote?.ownerId ?? "unknown")}
-          </p>
+          <p>remote owner: {String(props.file.ownerId ?? "unknown")}</p>
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
@@ -39,7 +35,7 @@ export const FileEditor = (props: {
             <button
               type="button"
               class="rounded-none border border-black/25 px-2 py-1 hover:bg-black/5 dark:border-white/25 dark:hover:bg-white/10"
-              onClick={() => props.onResolveConflict("remote")}
+              onClick={() => props.onReplaceDraftWithRemote()}
             >
               replace draft with remote
             </button>

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { FilesRow } from "../../evolu/files";
 import { filterFilesBySubstring } from "./filterFiles";
 

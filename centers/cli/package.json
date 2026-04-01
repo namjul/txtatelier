@@ -19,6 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@txtatelier/sync-invariants": "workspace:*",
     "@evolu/common": "^7.4.0",
     "@types/proper-lockfile": "^4.1.4",
     "chokidar": "^5.0.0",

@@ -9,9 +9,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test src/components/command-menu/"
+    "test": "vitest run"
   },
   "dependencies": {
+    "@txtatelier/sync-invariants": "workspace:*",
     "@ark-ui/solid": "^5.35.0",
     "@evolu/common": "^7.4.0",
     "@evolu/web": "^2.4.0",
@@ -30,6 +31,7 @@
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
     "vite": "^5.4.19",
+    "vitest": "^4.1.0",
     "vite-plugin-pwa": "^1.2.0",
     "vite-plugin-solid": "^2.11.8",
     "workbox-core": "^7.4.0",
