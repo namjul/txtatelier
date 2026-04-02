@@ -8,8 +8,7 @@ const basePath = process.env["VITE_TXTATELIER_BASE_PATH"] ?? "/";
 
 const shareTargetActionPath = (): string => {
   const normalized = basePath === "/" ? "" : basePath.replace(/\/?$/, "");
-  return new URL("/share-target", `https://placeholder.invalid${normalized}`)
-    .pathname;
+  return `${normalized}/share-target`;
 };
 
 export default defineConfig({
