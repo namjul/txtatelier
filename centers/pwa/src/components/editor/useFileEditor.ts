@@ -39,6 +39,10 @@ export const useFileEditor = (
   );
   const [draftHash, setDraftHash] = createSignal<string | null>(null);
 
+  // ─── UI Feedback ────────────────────────────────────────────────────────
+  const [savedFlashActive, setSavedFlashActive] = createSignal(false);
+  const FLASH_DURATION_MS = 2000;
+
   // ─── Computed ─────────────────────────────────────────────────────────
   const isDirty = createMemo(() => {
     if (selectedFile() == null) return false;
@@ -88,6 +92,13 @@ export const useFileEditor = (
 
     // Update synchronous ref immediately to avoid race with Solid batching
     currentLastPersistedHash = contentHash;
+
+    // Trigger saved flash (UI feedback)
+    setSavedFlashActive(true);
+    const timer = setTimeout(() => {
+      setSavedFlashActive(false);
+    }, FLASH_DURATION_MS);
+    onCleanup(() => clearTimeout(timer));
 
     status.setLastAction(`saved ${file.path}`);
     status.setIdle("ready");
@@ -295,7 +306,7 @@ export const useFileEditor = (
     isDirty,
     hasConflict,
     autoSaveUi,
-    savedFlash: () => false,
+    savedFlash: savedFlashActive,
     saveFailedFinal: hasError,
     replaceDraftWithRemote,
     saveDraftAsConflictArtifact,
