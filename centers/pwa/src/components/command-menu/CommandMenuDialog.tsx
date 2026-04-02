@@ -1,5 +1,5 @@
 import { Dialog } from "@ark-ui/solid";
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal } from "solid-js";
 import type { FilesRow } from "../../evolu/files";
 import { CommandMenuCombobox } from "./CommandMenuCombobox";
 
@@ -14,6 +14,17 @@ export const CommandMenuDialog = (props: {
 }) => {
   let inputEl: HTMLInputElement | undefined;
   const [a11yMsg, setA11yMsg] = createSignal("");
+  const [fileCount, setFileCount] = createSignal<{
+    total: number;
+    filtered: number;
+  }>({ total: 0, filtered: 0 });
+
+  const titleText = createMemo(() => {
+    const { total, filtered } = fileCount();
+    if (total === 0) return "File switcher";
+    if (filtered === total) return `File switcher · ${total} files`;
+    return `File switcher · ${filtered} of ${total} files`;
+  });
 
   createEffect(() => {
     if (props.open) {
@@ -51,7 +62,7 @@ export const CommandMenuDialog = (props: {
               id="txtatelier-file-switcher-title"
               class="border-b border-black/15 px-3 py-2 text-sm font-semibold dark:border-white/15"
             >
-              File switcher
+              {titleText()}
             </Dialog.Title>
             <Dialog.Description class="sr-only">
               Type to filter files by path. Type a question mark for actions
@@ -72,6 +83,7 @@ export const CommandMenuDialog = (props: {
               inputRef={(el) => {
                 inputEl = el;
               }}
+              onFileCountChange={setFileCount}
             />
           </Dialog.Content>
         </Dialog.Positioner>

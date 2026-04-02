@@ -29,7 +29,7 @@ export const FileSwitcherHint = () => {
         aria-live="polite"
         aria-label="File switcher tips"
       >
-        <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div class="min-w-0 space-y-1">
             <Show
               when={finePointer()}

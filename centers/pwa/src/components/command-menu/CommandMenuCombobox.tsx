@@ -26,6 +26,7 @@ export const CommandMenuCombobox = (props: {
   onSelect: (id: FilesRow["id"]) => void;
   onOpenSettings: () => void;
   inputRef: (el: HTMLInputElement) => void;
+  onFileCountChange?: (info: { total: number; filtered: number }) => void;
 }) => {
   const [search, setSearch] = createSignal("");
   let scrollRef: HTMLDivElement | undefined;
@@ -79,6 +80,13 @@ export const CommandMenuCombobox = (props: {
     if (scrollRef && count > 0) {
       queueMicrotask(() => virtualizer.measure());
     }
+  });
+
+  // Emit file count changes for title display
+  createEffect(() => {
+    const total = props.files.length;
+    const filtered = isActionMode() ? 0 : listItems().length;
+    props.onFileCountChange?.({ total, filtered });
   });
 
   const value = createMemo(() =>
