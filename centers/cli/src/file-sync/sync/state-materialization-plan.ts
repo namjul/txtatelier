@@ -41,9 +41,7 @@ export const planStateMaterialization = (
     lastAppliedHash != null && lastAppliedHash === evolHash;
 
   const diskStillMatchesLastApply =
-    diskHash != null &&
-    lastAppliedHash != null &&
-    diskHash === lastAppliedHash;
+    diskHash != null && lastAppliedHash != null && diskHash === lastAppliedHash;
 
   // Nothing new in Evolu vs tracking, and disk still shows that version — no write.
   if (evoluMatchesLastApplied && diskStillMatchesLastApply) {
@@ -75,7 +73,17 @@ export const planStateMaterialization = (
     lastPersistedHash: null,
   });
 
-  if (remoteClass === "true_divergence" || remoteClass === "remote_behind") {
+  if (remoteClass === "remote_behind") {
+    return [
+      log(
+        "debug",
+        `[materialize:evolu→fs] Skipped (disk ahead, Loop A will sync): ${state.path}`,
+      ),
+      skip("remote-behind", state.path),
+    ];
+  }
+
+  if (remoteClass === "true_divergence") {
     const conflictPath = generateConflictPath(state.path, state.ownerId);
     return [
       log("debug", `[materialize:evolu→fs] Conflict detected: ${state.path}`),

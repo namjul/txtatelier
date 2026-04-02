@@ -44,6 +44,26 @@ describe("planStateMaterialization - pure planning logic", () => {
     });
   });
 
+  describe("remote behind (disk ahead of Evolu)", () => {
+    test("WHEN disk changed but Evolu unchanged THEN skip (Loop A will sync)", () => {
+      const state: MaterializationState = {
+        path: "notes.md",
+        diskHash: "new-disk-hash",
+        evolHash: "base-hash",
+        evolContent: "evol content",
+        lastAppliedHash: "base-hash",
+        ownerId: "device1",
+      };
+
+      const plan = planStateMaterialization(state);
+
+      expect(
+        plan.some((a) => a.type === "SKIP" && a.reason === "remote-behind"),
+      ).toBe(true);
+      expect(plan.some((a) => a.type === "CREATE_CONFLICT")).toBe(false);
+    });
+  });
+
   describe("conflict detected", () => {
     test("WHEN both disk and evolu changed from base THEN plan creates conflict", () => {
       const state: MaterializationState = {
