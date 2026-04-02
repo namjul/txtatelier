@@ -461,7 +461,7 @@ describe("GIVEN file exists in both Evolu and disk", () => {
             .id,
         },
       );
-      // Allow Loop B + _syncState to settle before offline disk edit (500ms debounce + margin)
+      // Allow state materialization + _syncState to settle before offline disk edit (500ms debounce + margin)
       await new Promise((resolve) => setTimeout(resolve, 1500));
       await session1.flush();
       await session1.stop();

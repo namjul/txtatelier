@@ -13,7 +13,7 @@ Command-line interface for txtatelier. Provides user commands for sync operation
 Currently: Blank canvas - no functionality implemented.
 
 **Internal structure:**
-- `src/file-sync/` - Loop A (Filesystem → Evolu) implementation (see file-sync/CENTER.md)
+- `src/file-sync/` - Change capture (Filesystem → Evolu) and related sync (see file-sync/CENTER.md)
 - `src/index.ts` - CLI entry point and command orchestration
 
 ---
@@ -26,8 +26,8 @@ The CLI center will organize user interaction with the file sync system, providi
 
 **This center:**
 - Provides command-line interface for users (when implemented)
-- Contains file-sync center (Loop A: Filesystem → Evolu)
-- Will contain evolu-sync center (Loop B: Evolu → Filesystem, Phase 1)
+- Contains file-sync center (change capture: Filesystem → Evolu)
+- Will contain evolu-sync center (state materialization: Evolu → Filesystem, Phase 1)
 - Offers observability commands (Phase 8)
 
 **Contact test for "will this become a center?"**
@@ -250,8 +250,8 @@ schtasks /Create /SC ONLOGON /TN txtatelier \
 ## Relationships to Other Centers
 
 **Contains internally:**
-- file-sync center (Phase 0) - Loop A implementation
-- evolu-sync center (Phase 1) - Loop B implementation
+- file-sync center (Phase 0) - change capture implementation
+- evolu-sync center (Phase 1) - state materialization implementation
 - conflict-handler logic (Phase 3) - conflict detection and resolution
 
 **Will be strengthened by:**

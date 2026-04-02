@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 # Simplified test: Conflict files should sync like normal files
-# Scenario: Manually create a conflict file -> Loop A syncs it -> Verify in Evolu
-# Expected: Conflict files are treated as normal files by Loop A
+# Scenario: Manually create a conflict file -> change capture syncs it -> Verify in Evolu
+# Expected: Conflict files are treated as normal files by change capture
 
 echo "=== Conflict File Sync Test (Simplified) ==="
 echo ""
@@ -27,7 +27,7 @@ echo "[3/8] Creating normal file..."
 echo "Normal file content" > $WATCH_DIR/file.txt
 sleep 2
 
-# Manually create a conflict file (simulating what Loop B would create)
+# Manually create a conflict file (simulating what state materialization would create)
 echo "[4/8] Creating conflict file manually..."
 echo "Conflict content from Device B" > $WATCH_DIR/file.conflict-DeviceB-1234567890.txt
 sleep 3

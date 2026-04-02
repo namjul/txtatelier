@@ -23,7 +23,7 @@
 
 ### Hypothesis
 
-Shared rules prevent CLI Loop B and PWA editor from **diverging on what counts as a conflict**, while keeping orchestration in each consumer.
+Shared rules prevent CLI state materialization and the PWA editor from **diverging on what counts as a conflict**, while keeping orchestration in each consumer.
 
 **Contact test**
 

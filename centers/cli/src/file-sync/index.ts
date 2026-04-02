@@ -191,7 +191,7 @@ export const startFileSync = async (
   }
 
   // Phase 5 startup reconciliation: reflect pre-existing filesystem files into
-  // Evolu before both loops start, now that watcher ignores initial events.
+  // Evolu before change capture and state materialization start, now that watcher ignores initial events.
   const fsResult = await reconcileStartupFilesystemState(syncCtx);
 
   if (!fsResult.ok) {

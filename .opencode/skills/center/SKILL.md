@@ -206,12 +206,12 @@ When parsing timelines from CENTER.md files, calculate status:
 5. Document current strength with evidence
 6. List relationships to other centers
 
-### Task: "Plan to optimize Loop A"
+### Task: "Plan to optimize change capture"
 
 1. Open `centers/cli/src/file-sync/CENTER.md`
 2. Add to "Planned Interventions":
    ```markdown
-   ### 2026-03-03 - Optimize Loop A Performance
+   ### 2026-03-03 - Optimize change capture performance
 
    **Aim:** Prevent freezing with 500+ files
 
@@ -235,7 +235,7 @@ When parsing timelines from CENTER.md files, calculate status:
 1. Move intervention from "Planned" to "History"
 2. Document actual results:
    ```markdown
-   ### 2026-03-03 - Optimize Loop A Performance
+   ### 2026-03-03 - Optimize change capture performance
 
    **What changed:** Added concurrency limiting (max 10), debouncing
 
@@ -340,7 +340,7 @@ Lists all planned interventions across all centers with their timeline status.
 Planned Interventions:
 
 ⚠️  EXPIRED - Needs Evaluation:
-  [file-sync] Optimize Loop A Performance
+  [file-sync] Optimize change capture performance
     Planned: 2026-03-01
     Timeline: 1 day (expired 2 days ago)
     Status: In Progress
@@ -374,7 +374,7 @@ Timeline Check:
 
 ⚠️  2 interventions need evaluation:
 
-1. [file-sync] Optimize Loop A Performance
+1. [file-sync] Optimize change capture performance
    - Planned: 2026-03-01
    - Timeline: 1 day (expired 2 days ago)
    - Action: Test contact test conditions and update History section

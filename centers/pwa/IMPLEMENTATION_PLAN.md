@@ -24,8 +24,8 @@ Out of scope for the current implementation window:
 Data flow:
 
 1. PWA mutates `file` rows in Evolu.
-2. CLI Loop B materializes Evolu changes to filesystem.
-3. Filesystem edits are captured by CLI Loop A back into Evolu.
+2. CLI state materialization applies Evolu changes to the filesystem.
+3. Filesystem edits are captured by CLI change capture back into Evolu.
 4. PWA subscribes to Evolu and reflects new state.
 
 ### Invariants

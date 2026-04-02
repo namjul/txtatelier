@@ -20,7 +20,7 @@ Round 2 contact expectations are governed by [`CONFLICT_RULES.md`](./CONFLICT_RU
 
 **Either** of these counts as falsification:
 
-- **A.** The conflict banner appears **once** during a session that satisfies: only **this** browser tab edits the file in Evolu; CLI only materializes; **no** second device, **no** second tab, **no** manual edit of the same path on disk that could advance Evolu via Loop A with a different hash before the PWA save completes.
+- **A.** The conflict banner appears **once** during a session that satisfies: only **this** browser tab edits the file in Evolu; CLI only materializes; **no** second device, **no** second tab, **no** manual edit of the same path on disk that could advance Evolu via change capture with a different hash before the PWA save completes.
 
 - **B.** Conflict UI state is driven by raw `remote !== baseline && dirty` (or equivalent) **without** `classifyRemoteChange` → `true_divergence` → `ROW_TRUE_DIVERGENCE`, or `detectConflict` is invoked from the Zag machine or `FileEditor` (it MUST stay inside `classifyRemoteChange` only).
 

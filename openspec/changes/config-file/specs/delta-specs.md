@@ -58,7 +58,7 @@
 
 **Sync behavior:**
 - Configuration controls parameters but doesn't change sync algorithms
-- Loop A (filesystem → Evolu) and Loop B (Evolu → filesystem) work identically
+- Change capture (filesystem → Evolu) and state materialization (Evolu → filesystem) work identically
 - Conflict detection logic unchanged
 - Hash comparison unchanged
 

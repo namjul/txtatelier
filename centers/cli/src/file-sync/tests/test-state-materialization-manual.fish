@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# Manual test for Loop B (Evolu → Filesystem)
-# Tests that Loop B processes existing rows on startup and skips own ownerId
+# Manual test for state materialization (Evolu → Filesystem)
+# Tests that materialization processes existing rows on startup and skips own ownerId
 
-echo "=== Loop B Manual Test (Fish Shell) ==="
+echo "=== State materialization manual test (Fish shell) ==="
 echo ""
 
 set WATCH_DIR "$HOME/.txtatelier/watched"
@@ -17,12 +17,12 @@ mkdir -p $WATCH_DIR
 # Start CLI to create database and tables
 echo "[2/10] Starting CLI to initialize database..."
 cd $PROJECT_ROOT/centers/cli
-timeout 8s bun run start > /tmp/loop-b-init.log 2>&1 &
+timeout 8s bun run start > /tmp/state-materialization-init.log 2>&1 &
 set CLI_PID $last_pid
 sleep 4
 
-# Create a file via Loop A (creates tables)
-echo "[3/10] Creating file via Loop A (initializes tables)..."
+# Create a file via change capture (creates tables)
+echo "[3/10] Creating file via change capture (initializes tables)..."
 echo "Setup file for table creation" > $WATCH_DIR/setup.txt
 sleep 2
 
@@ -73,12 +73,12 @@ rm $WATCH_DIR/setup.txt
 echo "[8/10] Database state before CLI restart:"
 sqlite3 -header -column $DB_PATH "SELECT path, substr(ownerId, 1, 20) as ownerId_short FROM file ORDER BY path;"
 
-# Restart CLI (Loop B should process existing rows)
+# Restart CLI (state materialization should process existing rows)
 echo ""
-echo "[9/10] Restarting CLI (Loop B should process existing rows)..."
+echo "[9/10] Restarting CLI (state materialization should process existing rows)..."
 echo "Watch for: [materialize] Initial load: 3 existing files"
 echo ""
-timeout 10s bun run start 2>&1 | tee /tmp/loop-b-restart.log &
+timeout 10s bun run start 2>&1 | tee /tmp/state-materialization-restart.log &
 set CLI_PID $last_pid
 sleep 5
 
@@ -138,8 +138,8 @@ echo "=== State Tracking (_syncState table) ==="
 sqlite3 -header -column $DB_PATH "SELECT path, substr(lastAppliedHash, 1, 16) as hash_short FROM _syncState ORDER BY path;"
 
 echo ""
-echo "=== Loop B Log Entries ==="
-grep -E "\[materialize\]" /tmp/loop-b-restart.log; or echo "No materialize logs found"
+echo "=== State materialization log entries ==="
+grep -E "\[materialize\]" /tmp/state-materialization-restart.log; or echo "No materialize logs found"
 
 echo ""
 if test $success -eq 1

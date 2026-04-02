@@ -41,7 +41,7 @@ echo "  TXTATELIER_DB_PATH=$DEVICE_B_DIR/txtatelier.db TXTATELIER_WATCH_DIR=$DEV
 echo ""
 echo "=== What to test ==="
 echo ""
-echo "1. Single device file sync (Loop A):"
+echo "1. Single device file sync (change capture):"
 echo "   echo 'test' > $DEVICE_A_DIR/watched/test.txt"
 echo "   # Watch Device A logs for [capture] Inserting: test.txt"
 echo ""

@@ -42,7 +42,7 @@ This project uses the **Attractor Protocol** - a framework for building living s
 **Guidelines for AI agents working on this codebase.**
 
 - Code style (TypeScript, immutability, arrow functions, top-down organization)
-- Architecture principles (filesystem canonical, two sync loops, conflict handling)
+- Architecture principles (filesystem canonical, change capture and state materialization, conflict handling)
 - Testing guidelines
 - Git workflow (references Living Systems Commits)
 - Implementation phases

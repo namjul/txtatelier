@@ -9,7 +9,7 @@ The file-sync center implements bidirectional sync between filesystem and Evolu 
 
 **Constraints:**
 - Filesystem is canonical - never silently overwrite
-- Two independent sync loops (FS→Evolu, Evolu→FS)
+- Two independent sync directions: change capture (Filesystem → Evolu), state materialization (Evolu → Filesystem)
 - Explicit conflict handling via conflict files
 - Must maintain exact same external behavior (no breaking changes)
 

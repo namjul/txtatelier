@@ -469,7 +469,7 @@ ls ~/.txtatelier/txtatelier.db
 
 ---
 
-## Loop A Automated Tests
+## Change capture automated tests
 
 **Location:** `tests/` directory in this center
 
@@ -477,14 +477,14 @@ ls ~/.txtatelier/txtatelier.db
 
 ### Test Suite Overview
 
-The automated tests verify Loop A (Filesystem → Evolu) functionality across basic operations and edge cases.
+The automated tests verify change capture (Filesystem → Evolu) across basic operations and edge cases.
 
-### Running Loop A Tests
+### Running change capture tests
 
 **Basic functionality test:**
 ```bash
 # From project root
-centers/cli/src/file-sync/tests/test-loop-a.sh
+centers/cli/src/file-sync/tests/test-change-capture.sh
 ```
 
 **What it tests:**
@@ -504,7 +504,7 @@ centers/cli/src/file-sync/tests/test-loop-a.sh
 **Edge case test:**
 ```bash
 # From project root
-centers/cli/src/file-sync/tests/test-loop-a-edge-cases.sh
+centers/cli/src/file-sync/tests/test-change-capture-edge-cases.sh
 ```
 
 **What it tests:**
@@ -539,9 +539,9 @@ centers/cli/src/file-sync/tests/test-loop-a-edge-cases.sh
 
 ---
 
-### Manual Loop A Testing
+### Manual change capture testing
 
-If you want to manually test Loop A functionality:
+If you want to manually test change capture:
 
 ```bash
 # 1. Clean state
@@ -575,11 +575,11 @@ sqlite3 ~/.txtatelier/txtatelier.db "SELECT path, content, contentHash FROM file
 
 ## Next Steps After Testing
 
-Platform layer and Loop A are complete. Next phases:
+Platform layer and change capture are complete. Next phases:
 
 1. ✅ Platform layer implemented
-2. ✅ Loop A (Filesystem → Evolu) implemented
-3. Phase 1: Implement Loop B (Evolu → Filesystem)
+2. ✅ Change capture (Filesystem → Evolu) implemented
+3. Phase 1: State materialization (Evolu → Filesystem)
 4. Phase 2: Multi-device replication
 
 ---
@@ -608,7 +608,7 @@ Platform layer and Loop A are complete. Next phases:
 
 ---
 
-### Loop A Contact Test
+### Change capture contact test
 
 **Success-if:**
 - Files created/updated in watch directory sync to Evolu within 200ms

@@ -5,7 +5,7 @@
 
 ## Test Suite 1: Basic Functionality
 
-**Script:** `test-loop-a.sh`
+**Script:** `test-change-capture.sh`
 
 ### Tests Executed
 1. ✅ Insert new file (`test.txt`)
@@ -153,12 +153,12 @@ shared.conflict-DeviceC--1772432029708.txt (Device C offline edit)
 
 ### Run basic test
 ```bash
-./test-loop-a.sh
+./test-change-capture.sh
 ```
 
 ### Run edge case test
 ```bash
-./test-loop-a-edge-cases.sh
+./test-change-capture-edge-cases.sh
 ```
 
 ### Manual verification
@@ -201,7 +201,7 @@ All core functionality verified:
 
 ## Test Suite 3: State Materialization Basic Functionality
 
-**Script:** `test-loop-b-manual.fish`
+**Script:** `test-state-materialization-manual.fish`
 
 ### Tests Executed
 1. ✅ Process existing Evolu rows on startup

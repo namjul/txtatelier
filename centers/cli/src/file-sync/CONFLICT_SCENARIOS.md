@@ -10,7 +10,7 @@ This document maps all possible conflict scenarios in the file sync system.
 - **Action**: What the system should do
 - **✅**: Implemented
 - **❌**: Not implemented
-- **Runtime**: During normal sync operation (Loop A/B active)
+- **Runtime**: During normal sync operation (change capture and state materialization active)
 - **Startup**: During startup reconciliation (offline changes)
 
 ## Truth Table

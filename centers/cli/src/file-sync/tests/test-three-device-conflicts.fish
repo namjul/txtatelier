@@ -164,7 +164,7 @@ end
 # Check logs for conflicts
 echo ""
 echo "Conflict detections in logs:"
-grep -h "\[loop-b\].*[Cc]onflict" /tmp/three-device-*.log; or echo "No conflict logs"
+grep -h "\[materialize\].*[Cc]onflict" /tmp/three-device-*.log; or echo "No conflict logs"
 
 echo ""
 if test $success -eq 1

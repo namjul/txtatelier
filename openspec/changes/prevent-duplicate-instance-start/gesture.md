@@ -14,7 +14,7 @@ Evolu supports multi-tenancy via the `name` property (each instance gets its own
 - Conflict files spawn mysteriously (`.conflict-*` files appearing)
 - Files disappear or reappear without user action
 - Database states diverge between instances
-- Race conditions in sync loops (Loop A and Loop B fighting)
+- Race conditions between change capture and state materialization
 
 The failure is loud (visible file chaos) but the CAUSE is invisible. Users see symptoms without intuiting that multiple instances are the root cause. This wastes debugging time and creates mistrust in the system.
 

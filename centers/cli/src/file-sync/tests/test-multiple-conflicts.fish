@@ -22,7 +22,7 @@ timeout 10s bun run start > /tmp/multi-conflict-init.log 2>&1 &
 set CLI_PID $last_pid
 sleep 3
 
-# Create initial file via Loop A
+# Create initial file via change capture
 echo "[3/20] Device A creates initial file..."
 echo "Version 1 - Device A initial" > $WATCH_DIR/shared.txt
 sleep 2
@@ -193,13 +193,13 @@ end
 echo ""
 echo "[19/20] Check logs for conflict detection..."
 echo "=== First conflict ==="
-grep -E "\[loop-b\].*[Cc]onflict" /tmp/multi-conflict-1.log; or echo "No conflict logs"
+grep -E "\[materialize\].*[Cc]onflict" /tmp/multi-conflict-1.log; or echo "No conflict logs"
 echo ""
 echo "=== Second conflict ==="
-grep -E "\[loop-b\].*[Cc]onflict" /tmp/multi-conflict-2.log; or echo "No conflict logs"
+grep -E "\[materialize\].*[Cc]onflict" /tmp/multi-conflict-2.log; or echo "No conflict logs"
 echo ""
 echo "=== Third conflict ==="
-grep -E "\[loop-b\].*[Cc]onflict" /tmp/multi-conflict-3.log; or echo "No conflict logs"
+grep -E "\[materialize\].*[Cc]onflict" /tmp/multi-conflict-3.log; or echo "No conflict logs"
 
 # Final assessment
 echo ""

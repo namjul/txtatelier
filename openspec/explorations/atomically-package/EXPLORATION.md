@@ -26,7 +26,7 @@ The codebase currently has **two** separate atomic write implementations:
    │ tempPath: {file}.tmp-{time}-{random}     │
    │                                        │
    │ Used by:                               │
-   │ • Loop B (Evolu→FS) writes               │
+   │ • State materialization (Evolu→FS)      │
    │ • Conflict file creation               │
    └────────────────────────────────────────┘
 
@@ -48,7 +48,7 @@ The codebase currently has **two** separate atomic write implementations:
 
 | Component | Frequency | Critical? |
 |-----------|-----------|-----------|
-| Sync Loop B (Evolu→Disk) | Every remote change | Yes - user data |
+| State materialization (Evolu→disk) | Every remote change | Yes - user data |
 | Conflict file creation | On conflicts | Yes - prevents data loss |
 | Database export | Debounced (5s) | Yes - _syncState persistence |
 
@@ -215,7 +215,7 @@ await writeFile(path, data, {
 - Con: More invasive change
 
 **Option B: Selective Replacement**
-- Only replace high-frequency writes (Loop B)
+- Only replace high-frequency writes (state materialization)
 - Keep PlatformIO simple for DB exports
 - Pro: Minimal change, targeted improvement
 - Con: Two implementations remain

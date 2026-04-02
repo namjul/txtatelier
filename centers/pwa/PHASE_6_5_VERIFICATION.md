@@ -1,6 +1,6 @@
 # Phase 6.5 End-to-End Verification
 
-This protocol verifies that the PWA interaction loop, CLI sync loops, and
+This protocol verifies that the PWA interaction loop, CLI change capture and state materialization, and
 conflict policy work together without boundary violations.
 
 ## Automated Preflight

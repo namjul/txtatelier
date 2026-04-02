@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# Test conflict detection in Loop B
+# Test conflict detection in state materialization
 # Simulates scenario: local modification + remote change = conflict file
 
 echo "=== Conflict Detection Test (Fish Shell) ==="
@@ -21,8 +21,8 @@ timeout 10s bun run start > /tmp/conflict-init.log 2>&1 &
 set CLI_PID $last_pid
 sleep 3
 
-# Create initial file via Loop A (establishes baseline)
-echo "[3/12] Creating initial file via Loop A..."
+# Create initial file via change capture (establishes baseline)
+echo "[3/12] Creating initial file via change capture..."
 echo "Initial content from Device A" > $WATCH_DIR/shared-file.txt
 sleep 2
 
@@ -38,7 +38,7 @@ echo "[6/12] _syncState tracking:"
 sqlite3 -header -column $DB_PATH "SELECT path, lastAppliedHash FROM _syncState WHERE path = 'shared-file.txt';"
 
 # CRITICAL: Stop CLI BEFORE user modifies file
-# This prevents Loop A from detecting and syncing the local change
+# This prevents change capture from detecting and syncing the local change
 echo "[7/12] Stopping CLI (simulates device going offline)..."
 kill $CLI_PID 2>/dev/null; or true
 sleep 2
@@ -72,9 +72,9 @@ echo ""
 echo "[10/12] Database state after remote change:"
 sqlite3 -header -column $DB_PATH "SELECT path, substr(content, 1, 30) as content, contentHash, substr(ownerId, 1, 16) as owner FROM file WHERE path = 'shared-file.txt';"
 
-# Restart CLI (Loop B should detect conflict)
+# Restart CLI (state materialization should detect conflict)
 echo ""
-echo "[11/12] Restarting CLI (Loop B should detect conflict)..."
+echo "[11/12] Restarting CLI (state materialization should detect conflict)..."
 echo "Watch for: [materialize] Conflict detected"
 echo ""
 timeout 10s bun run start 2>&1 | tee /tmp/conflict-restart.log &
@@ -159,7 +159,7 @@ else
 end
 
 echo ""
-echo "=== Loop B Logs ==="
+echo "=== State materialization logs ==="
 grep -E "\[materialize\].*[Cc]onflict" /tmp/conflict-restart.log; or echo "No materialize conflict logs found"
 
 echo ""

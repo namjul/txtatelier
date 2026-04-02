@@ -6,8 +6,8 @@
 
 **Bash:**
 ```bash
-./test-loop-a.sh
-./test-loop-a-edge-cases.sh
+./test-change-capture.sh
+./test-change-capture-edge-cases.sh
 ./test-directional-invariants.sh
 ./test-conflict-artifact-callback.sh
 ./test-startup-reconciliation.sh
@@ -23,7 +23,7 @@ Directional invariants: Capture does not materialize, Materialize does not mutat
 
 **Fish shell:**
 ```fish
-fish test-loop-b-manual.fish
+fish test-state-materialization-manual.fish
 ```
 
 **What it tests:**
@@ -91,7 +91,7 @@ cat ~/.txtatelier/watched/remote.txt
 ## Startup Capture Note
 
 - Watcher startup uses `ignoreInitial: true` to prevent synthetic `add` events for pre-existing files.
-- This avoids a boot race between capture and materialization when both loops start together.
+- This avoids a boot race between capture and materialization when both directions start together.
 - Pre-existing filesystem-only files should be handled by explicit startup reconciliation, not by watcher side effects.
 - Temporary write artifacts (`.tmp-*`) are ignored by capture/materialization/reconciliation.
 - `test-startup-reconciliation.sh` verifies this behavior end-to-end.

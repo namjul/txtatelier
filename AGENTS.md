@@ -7,7 +7,7 @@ This file provides coding guidelines for AI agents working on this local-first f
 **txtatelier** is a local-first, multi-device file sync system where:
 - **Filesystem is canonical** - all truth resides on disk
 - **Evolu** provides distributed replication
-- **CLI** bridges filesystem ↔ Evolu with two independent sync loops
+- **CLI** bridges filesystem ↔ Evolu with **change capture** (Filesystem → Evolu) and **state materialization** (Evolu → Filesystem)
 - **PWA** provides web editing interface (reads/writes only Evolu)
 
 See [[PROJECT]] for architecture details and [[IMPLEMENTATION_PLAN]] for phases and [[STACK]] for choosen technologies.
@@ -337,14 +337,14 @@ const lastAppliedHash = new Map<string, string>();
 - Users and external tools (editors, git) operate directly on files
 - Evolu reflects filesystem state, not the other way around
 
-### Two Independent Sync Loops
+### Change capture and state materialization
 
-**Loop A (Filesystem → Evolu):**
+**Change capture (Filesystem → Evolu):**
 - Watch filesystem changes with debouncing (50-200ms)
 - Compute content hash and compare with Evolu
 - Update Evolu row if hash differs
 
-**Loop B (Evolu → Filesystem):**
+**State materialization (Evolu → Filesystem):**
 - Watch Evolu changes (subscriptions)
 - Check for conflicts before writing
 - Update `lastAppliedHash` after applying changes
@@ -366,7 +366,7 @@ original-file.conflict-<ownerId>-<timestamp>.md
 ## Testing Guidelines
 
 - **Unit tests:** For pure functions (hashing, validation, utilities)
-- **Integration tests:** For sync loops and conflict scenarios
+- **Integration tests:** For change capture, state materialization, and conflict scenarios
 - Test file naming: `<module-name>.test.ts`
 - Use descriptive test names: `test("creates conflict file when hashes differ")`
 
@@ -446,7 +446,7 @@ git config commit.template .gitmessage
 
 Follow IMPLEMENTATION_PLAN.md strictly:
 - **Phase 0:** Foundations (single device, no replication)
-- **Phase 1:** Add Loop B (single device)
+- **Phase 1:** Add state materialization (single device)
 - **Phase 2:** Multi-device replication
 - **Phase 3:** Conflict detection
 - **Phase 4:** Deletion handling

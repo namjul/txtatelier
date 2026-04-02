@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Comprehensive test for Loop A (Filesystem → Evolu)
-# Run from project root: centers/cli/src/file-sync/tests/test-loop-a.sh
+# Comprehensive test for change capture (Filesystem → Evolu)
+# Run from project root: centers/cli/src/file-sync/tests/test-change-capture.sh
 set -e
 
-echo "=== Loop A Comprehensive Test ==="
+echo "=== Change capture comprehensive test ==="
 echo
 
 WATCH_DIR="$HOME/.txtatelier/watched"

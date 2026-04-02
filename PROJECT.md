@@ -9,10 +9,10 @@ This project implements a **local-first, multi-device file synchronization syste
 1. **Filesystem is canonical**
    All truth resides on disk. Users and external tools (editors, scripts, git) operate directly on files. Evolu reflects this state and never overrides it silently.
 
-2. **Two independent synchronization loops**
-   - **Loop A:** Filesystem → Evolu
+2. **Two independent sync directions**
+   - **Change capture (Filesystem → Evolu):**
      CLI watches file changes and updates Evolu accordingly.
-   - **Loop B:** Evolu → Filesystem
+   - **State materialization (Evolu → Filesystem):**
      CLI applies replicated Evolu changes to disk, respecting local modifications.
 
 3. **Explicit conflict handling**
@@ -51,8 +51,8 @@ This project implements a **local-first, multi-device file synchronization syste
       ↑        ↓
       |        |
 +-----+-----+  |
-| CLI Sync  |  |
-|  Loops    |  |
+| fs → Evolu|  |
+| Evolu → fs|  |
 +-----+-----+  |
       ↑        ↓
       |        |

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Edge case tests for Loop A
-# Run from project root: centers/cli/src/file-sync/tests/test-loop-a-edge-cases.sh
+# Edge case tests for change capture
+# Run from project root: centers/cli/src/file-sync/tests/test-change-capture-edge-cases.sh
 set -e
 
-echo "=== Loop A Edge Case Tests ==="
+echo "=== Change capture edge case tests ==="
 echo
 
 WATCH_DIR="$HOME/.txtatelier/watched"
