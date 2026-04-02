@@ -30,12 +30,16 @@ export const classifyRemoteChange = (
     return "no_change";
   }
 
-  if (lastPersistedHash !== null && remoteHash === lastPersistedHash) {
-    return "self_echo";
-  }
+  // In-flight write detection: we've saved but subscription hasn't caught up
+  const isInFlight =
+    lastPersistedHash !== null && lastPersistedHash !== lastAppliedHash;
 
-  if (remoteHash === lastAppliedHash) {
-    return "remote_behind";
+  if (isInFlight) {
+    if (remoteHash === lastPersistedHash) return "self_echo";
+    if (remoteHash === lastAppliedHash) return "remote_behind";
+
+    // Subscription showing stale data - suppress false conflict
+    return "no_change";
   }
 
   if (detectConflict(diskHash, lastAppliedHash, remoteHash)) {

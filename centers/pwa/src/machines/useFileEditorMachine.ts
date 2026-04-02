@@ -1,15 +1,24 @@
 import { useMachine } from "@zag-js/solid";
-import type { Accessor } from "solid-js";
-import { fileEditorMachine } from "./file-editor-machine";
+import {
+  type FileEditorPersistResult,
+  fileEditorMachine,
+} from "./file-editor-machine";
 
-/** Props are re-read each run so Zag guards see current Solid memos. */
+export type { FileEditorPersistResult };
+
 export const useFileEditorMachine = (props: {
-  readonly isDirty: Accessor<boolean>;
-  readonly canSaveAsOwner: Accessor<boolean>;
+  readonly isDirty: () => boolean;
+  readonly canSaveAsOwner: () => boolean;
+  readonly onPersist: () => Promise<FileEditorPersistResult>;
+  readonly debounceMs?: number;
+  readonly maxRetries?: number;
 }) =>
   useMachine(fileEditorMachine, () => ({
     id: "txtatelier-file-editor",
     getRootNode: () => document,
-    isDirty: props.isDirty(),
-    canSaveAsOwner: props.canSaveAsOwner(),
+    debounceMs: props.debounceMs ?? 300,
+    maxRetries: props.maxRetries ?? 3,
+    isDirty: () => props.isDirty(),
+    canSaveAsOwner: () => props.canSaveAsOwner(),
+    onPersist: props.onPersist,
   }));
