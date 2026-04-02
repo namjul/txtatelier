@@ -12,9 +12,12 @@ import type { AutoSaveUiState, StatusOps } from "./types";
 
 const useEvolu = createUseEvolu(evolu);
 
-// Synchronous ref for lastPersistedHash - avoids race with Solid reactivity
+// ─── Module State ───────────────────────────────────────────────────────
+// Synchronous ref to avoid race with Solid batching during save operations.
+// Updated immediately after persist, read by remote sync effect for conflict detection.
 let currentLastPersistedHash: string | null = null;
 
+// ─── Hook ───────────────────────────────────────────────────────────────
 export const useFileEditor = (
   filesShardOwnerId: () => string | undefined,
   ownerId: () => string | undefined,
@@ -22,16 +25,21 @@ export const useFileEditor = (
   status: StatusOps,
 ) => {
   const evoluClient = useEvolu();
+
+  // ─── Content ────────────────────────────────────────────────────────────
+  const [draft, setDraft] = createSignal("");
+  const [baseContent, setBaseContent] = createSignal("");
+
+  // ─── Tracking ───────────────────────────────────────────────────────────
   const [editorFileId, setEditorFileId] = createSignal<FilesRow["id"] | null>(
     null,
   );
-  const [draft, setDraft] = createSignal("");
-  const [baseContent, setBaseContent] = createSignal("");
   const [lastAppliedHash, setLastAppliedHash] = createSignal<string | null>(
     null,
   );
   const [draftHash, setDraftHash] = createSignal<string | null>(null);
 
+  // ─── Computed ─────────────────────────────────────────────────────────
   const isDirty = createMemo(() => {
     if (selectedFile() == null) return false;
     return draft() !== baseContent();
@@ -44,10 +52,12 @@ export const useFileEditor = (
     return file.ownerId === shardOid;
   });
 
-  const persistDraft = async (): Promise<{
+  // ─── Operations ───────────────────────────────────────────────────────
+
+  async function persistDraft(): Promise<{
     ok: boolean;
     persistedHash: string;
-  }> => {
+  }> {
     const file = selectedFile();
     if (file == null || !isDirty() || !canSaveAsOwner()) {
       return { ok: false, persistedHash: "" };
@@ -76,14 +86,15 @@ export const useFileEditor = (
       return { ok: false, persistedHash: "" };
     }
 
-    // Update synchronous ref immediately (avoids race with Solid batching)
+    // Update synchronous ref immediately to avoid race with Solid batching
     currentLastPersistedHash = contentHash;
 
     status.setLastAction(`saved ${file.path}`);
     status.setIdle("ready");
     return { ok: true, persistedHash: contentHash };
-  };
+  }
 
+  // ─── Machine ──────────────────────────────────────────────────────────
   const session = useFileEditorMachine({
     isDirty,
     canSaveAsOwner,
@@ -102,8 +113,10 @@ export const useFileEditor = (
     return "clean";
   });
 
-  // Effect 1: Compute draft hash asynchronously
-  // Runs on draft changes, no conflict detection
+  // ─── Effects ────────────────────────────────────────────────────────────
+
+  // Hash computation (async)
+  // Computes hash of draft content whenever draft changes
   createEffect(() => {
     const file = selectedFile();
     const d = draft();
@@ -122,8 +135,8 @@ export const useFileEditor = (
     });
   });
 
-  // Effect 2: Handle local state changes
-  // Runs on draft/baseContent changes, sends DRAFT_CHANGED
+  // Local state
+  // Notifies machine of draft changes (for UI state transitions)
   // NO conflict detection - local changes are not conflicts
   createEffect(() => {
     const file = selectedFile();
@@ -135,9 +148,9 @@ export const useFileEditor = (
     session.send({ type: "DRAFT_CHANGED" });
   });
 
-  // Effect 3: Handle remote state changes and conflict detection
-  // ONLY runs when file.contentHash changes (remote update)
-  // This is where conflicts are detected - remote divergence from local
+  // Remote sync
+  // Handles Evolu subscription changes and conflict detection
+  // Runs when file.contentHash changes (remote update)
   createEffect(() => {
     const file = selectedFile();
 
@@ -152,7 +165,7 @@ export const useFileEditor = (
     }
 
     const currentContent = file.content ?? "";
-    const remoteHash = file.contentHash; // This is the dependency - only re-runs when this changes
+    const remoteHash = file.contentHash;
 
     if (editorFileId() !== file.id) {
       session.send({ type: "FILE_SELECTED" });
@@ -178,7 +191,6 @@ export const useFileEditor = (
       return;
     }
 
-    // Conflict detection only runs when remoteHash changes
     const outcome = classifyRemoteChange({
       diskHash: dh,
       lastAppliedHash: lastApplied,
@@ -196,8 +208,7 @@ export const useFileEditor = (
       return;
     }
 
-    // Full convergence: remote === disk
-    // Update lastAppliedHash per CONFLICT_RULES.md §5
+    // Full convergence: remote === disk (per CONFLICT_RULES.md §5)
     if (remoteHash === dh) {
       const remoteBody = file.content ?? "";
       setBaseContent(remoteBody);
@@ -209,12 +220,13 @@ export const useFileEditor = (
     }
 
     // Clean sync: not dirty, adopt remote
-    // Per spec: only update lastAppliedHash when remote === disk
     if (!isDirty()) {
       setBaseContent(currentContent);
       setDraft(currentContent);
     }
   });
+
+  // ─── Conflict Resolution ────────────────────────────────────────────────
 
   const replaceDraftWithRemote = () => {
     const file = selectedFile();
@@ -276,6 +288,7 @@ export const useFileEditor = (
     status.setIdle("ready");
   };
 
+  // ─── Public Interface ───────────────────────────────────────────────────
   return {
     draft,
     setDraft,
