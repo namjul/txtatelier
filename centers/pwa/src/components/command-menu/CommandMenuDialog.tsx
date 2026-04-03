@@ -20,12 +20,20 @@ export const CommandMenuDialog = (props: {
     isActionMode: boolean;
   }>({ total: 0, filtered: 0, isActionMode: false });
 
+  const selectedFile = createMemo(() => {
+    if (props.selectedFileId == null) return null;
+    return props.files.find((f) => f.id === props.selectedFileId) ?? null;
+  });
+
   const titleText = createMemo(() => {
     const { total, filtered, isActionMode } = fileCount();
+    const selected = selectedFile();
+    const selectedPart = selected ? ` · ${selected.path}` : "";
     if (isActionMode) return "Actions";
     if (total === 0) return "File switcher";
-    if (filtered === total) return `File switcher · ${total} files`;
-    return `File switcher · ${filtered} of ${total} files`;
+    if (filtered === total)
+      return `File switcher${selectedPart} · ${total} files`;
+    return `File switcher${selectedPart} · ${filtered} of ${total} files`;
   });
 
   createEffect(() => {
