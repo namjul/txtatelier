@@ -60,8 +60,7 @@ export const CommandMenuCombobox = (props: {
     itemToString: (item) => item.label,
     itemToValue: (item) => item.value,
     filter: (itemString, query, item) => {
-      const action = isCommandMenuActionMode(query);
-      if (action) {
+      if (isCommandMenuActionMode(query)) {
         return item.kind === "action";
       }
       if (item.kind === "action") {
