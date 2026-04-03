@@ -87,7 +87,9 @@ export const CommandMenuCombobox = (props: {
   createEffect(() => {
     const total = props.files.length;
     const actionCount = 1;
-    const filtered = isActionMode() ? actionCount : collection().size;
+    const filtered = isActionMode()
+      ? actionCount
+      : collection().items.filter(item => item.kind === "file").length;
     props.onFileCountChange?.({
       total,
       filtered,
@@ -142,55 +144,54 @@ export const CommandMenuCombobox = (props: {
           autocomplete="off"
         />
       </Combobox.Control>
-        <Combobox.Positioner class="relative z-0 w-full">
-          <Combobox.Content class="max-h-[min(50vh,320px)] w-full border-0 bg-[#f2f1ee] shadow-none dark:bg-[#151617]">
-            <div ref={contentRef} class="max-h-[min(50vh,320px)] overflow-auto">
-              <Show
-                when={collection().size > 0}
-                fallback={
-                  <div class="px-3 py-4 text-sm text-black/65 dark:text-white/65">
-                    No files match "{search()}"
-                  </div>
-                }
+      <Combobox.Positioner class="relative z-0 w-full">
+        <Combobox.Content class="max-h-[min(50vh,320px)] w-full border-0 bg-[#f2f1ee] shadow-none dark:bg-[#151617]">
+          <div ref={contentRef} class="max-h-[min(50vh,320px)] overflow-auto">
+            <Show
+              when={collection().size > 0}
+              fallback={
+                <div class="px-3 py-4 text-sm text-black/65 dark:text-white/65">
+                  No files match "{search()}"
+                </div>
+              }
+            >
+              <div
+                style={{
+                  height: `${virtualizer.getTotalSize()}px`,
+                  position: "relative",
+                }}
               >
-                <div
-                  style={{
-                    height: `${virtualizer.getTotalSize()}px`,
-                    position: "relative",
-                  }}
-                >
-                  {virtualizer.getVirtualItems().map((virtualItem) => {
-                    const item = collection().items[virtualItem.index];
-                    if (!item) return null;
-                    const isSelected = value().includes(item.value);
-                    return (
-                      <Combobox.Item
-                        item={item}
-                        aria-setsize={collection().size}
-                        aria-posinset={virtualItem.index + 1}
-                        class={`
+                {virtualizer.getVirtualItems().map((virtualItem) => {
+                  const item = collection().items[virtualItem.index];
+                  if (!item) return null;
+                  const isSelected = value().includes(item.value);
+                  return (
+                    <Combobox.Item
+                      item={item}
+                      aria-setsize={collection().size}
+                      aria-posinset={virtualItem.index + 1}
+                      class={`
                           absolute left-0 w-full max-w-full cursor-pointer overflow-hidden px-3 py-1.5 text-left
                           text-sm text-[#111111] data-[highlighted]:bg-black/10 dark:text-[#efefef]
                           dark:data-[highlighted]:bg-white/10
                           ${isSelected ? "bg-black/5 font-medium dark:bg-white/5" : ""}
-                          ${item.kind === "action" ? "border-l-2 border-[#111111]/25 dark:border-[#efefef]/30" : ""}
                         `}
-                        style={{
-                          height: `${virtualItem.size}px`,
-                          transform: `translateY(${virtualItem.start}px)`,
-                        }}
-                      >
-                        <Combobox.ItemText class="block truncate">
-                          {item.label}
-                        </Combobox.ItemText>
-                      </Combobox.Item>
-                    );
-                  })}
-                </div>
-              </Show>
-            </div>
-          </Combobox.Content>
-        </Combobox.Positioner>
+                      style={{
+                        height: `${virtualItem.size}px`,
+                        transform: `translateY(${virtualItem.start}px)`,
+                      }}
+                    >
+                      <Combobox.ItemText class="block truncate">
+                        {item.label}
+                      </Combobox.ItemText>
+                    </Combobox.Item>
+                  );
+                })}
+              </div>
+            </Show>
+          </div>
+        </Combobox.Content>
+      </Combobox.Positioner>
     </Combobox.Root>
   );
 };
