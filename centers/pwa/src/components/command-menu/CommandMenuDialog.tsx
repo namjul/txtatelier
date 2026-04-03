@@ -66,7 +66,7 @@ export const CommandMenuDialog = (props: {
         initialFocusEl={() => inputEl ?? null}
         finalFocusEl={() => props.editorTextArea()}
         restoreFocus
-        modal
+        modal={false}
         trapFocus
         preventScroll
       >
