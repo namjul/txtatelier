@@ -1,5 +1,5 @@
 import { Dialog } from "@ark-ui/solid";
-import { createEffect, createMemo, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal, Show } from "solid-js";
 import type { FilesRow } from "../../evolu/files";
 import { CommandMenuCombobox } from "./CommandMenuCombobox";
 
@@ -25,15 +25,23 @@ export const CommandMenuDialog = (props: {
     return props.files.find((f) => f.id === props.selectedFileId) ?? null;
   });
 
-  const titleText = createMemo(() => {
+  const titleParts = createMemo(() => {
     const { total, filtered, isActionMode } = fileCount();
     const selected = selectedFile();
-    const selectedPart = selected ? ` · ${selected.path}` : "";
-    if (isActionMode) return "Actions";
-    if (total === 0) return "File switcher";
-    if (filtered === total)
-      return `File switcher${selectedPart} · ${total} files`;
-    return `File switcher${selectedPart} · ${filtered} of ${total} files`;
+
+    if (isActionMode) {
+      return { left: "Actions", path: null as string | null, counter: null };
+    }
+
+    if (total === 0) {
+      return { left: "File switcher", path: null, counter: null };
+    }
+
+    const path = selected?.path ?? null;
+    const counter =
+      filtered === total ? `${total} files` : `${filtered} of ${total} files`;
+
+    return { left: "File switcher", path, counter };
   });
 
   createEffect(() => {
@@ -70,9 +78,31 @@ export const CommandMenuDialog = (props: {
           >
             <Dialog.Title
               id="txtatelier-file-switcher-title"
-              class="border-b border-black/15 px-3 py-2 text-sm font-semibold dark:border-white/15"
+              class="border-b border-black/15 px-3 py-2 text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap dark:border-white/15"
             >
-              {titleText()}
+              <span class="shrink-0">{titleParts().left}</span>
+              <Show when={titleParts().path}>
+                {(path) => (
+                  <>
+                    <span class="shrink-0 text-black/40 dark:text-white/40">
+                      ·
+                    </span>
+                    <span class="truncate text-black/70 dark:text-white/70">
+                      {path()}
+                    </span>
+                  </>
+                )}
+              </Show>
+              <Show when={titleParts().counter}>
+                {(counter) => (
+                  <>
+                    <span class="shrink-0 text-black/40 dark:text-white/40">
+                      ·
+                    </span>
+                    <span class="shrink-0">{counter()}</span>
+                  </>
+                )}
+              </Show>
             </Dialog.Title>
             <Dialog.Description class="sr-only">
               Type to filter files by path. Type a question mark for actions
