@@ -38,7 +38,7 @@ const buildInfoLabel = (): string => {
     "";
   const branch =
     (import.meta.env["VITE_GIT_BRANCH"] as string | undefined)?.trim() ??
-    "default";
+    "local";
   const datetime =
     (import.meta.env["VITE_BUILD_DATETIME"] as string | undefined)?.trim() ??
     "unknown";

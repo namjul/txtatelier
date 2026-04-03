@@ -43,7 +43,7 @@ jobs:
         run: |
           export VITE_COMMIT_SHA="${GITHUB_SHA:0:7}"
           export VITE_COMMIT_MESSAGE="$(git log -1 --pretty=%s)"
-          export VITE_GIT_BRANCH="${GITHUB_REF_NAME:-main}"
+          export VITE_GIT_BRANCH="${GITHUB_REF_NAME}"
           bun run build
 
       - name: Upload Pages artifact
