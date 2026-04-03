@@ -1,7 +1,7 @@
 import { Combobox, useListCollection } from "@ark-ui/solid/combobox";
 import { useFilter } from "@ark-ui/solid/locale";
 import { createVirtualizer } from "@tanstack/solid-virtual";
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, Show } from "solid-js";
 import type { FilesRow } from "../../evolu/files";
 import {
   COMMAND_MENU_OPEN_SETTINGS_VALUE,
@@ -10,15 +10,15 @@ import {
 
 type CommandMenuListItem =
   | {
-    readonly kind: "file";
-    readonly label: string;
-    readonly value: string;
-  }
+      readonly kind: "file";
+      readonly label: string;
+      readonly value: string;
+    }
   | {
-    readonly kind: "action";
-    readonly label: string;
-    readonly value: typeof COMMAND_MENU_OPEN_SETTINGS_VALUE;
-  };
+      readonly kind: "action";
+      readonly label: string;
+      readonly value: typeof COMMAND_MENU_OPEN_SETTINGS_VALUE;
+    };
 
 export const CommandMenuCombobox = (props: {
   files: ReadonlyArray<FilesRow>;
@@ -78,10 +78,9 @@ export const CommandMenuCombobox = (props: {
     overscan: 5,
   });
 
-
   createEffect(() => {
-    set(allItems() as CommandMenuListItem[])
-    queueMicrotask(() => virtualizer.measure())
+    set(allItems() as CommandMenuListItem[]);
+    queueMicrotask(() => virtualizer.measure());
   });
 
   createEffect(() => {
@@ -89,7 +88,7 @@ export const CommandMenuCombobox = (props: {
     const actionCount = 1;
     const filtered = isActionMode()
       ? actionCount
-      : collection().items.filter(item => item.kind === "file").length;
+      : collection().items.filter((item) => item.kind === "file").length;
     props.onFileCountChange?.({
       total,
       filtered,
@@ -129,9 +128,9 @@ export const CommandMenuCombobox = (props: {
       }}
       scrollToIndexFn={(details) => {
         virtualizer.scrollToIndex(details.index, {
-          align: 'center',
-          behavior: 'auto',
-        })
+          align: "center",
+          behavior: "auto",
+        });
       }}
       positioning={{ placement: "bottom-start", strategy: "fixed" }}
     >

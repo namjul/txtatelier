@@ -84,14 +84,21 @@ const FilesWorkspace = (props: {
           class="flex min-h-0 min-w-0 flex-1 flex-col"
           aria-label="Editor"
         >
+          <Show when={fileList.fileRows.error}>
+            <p class="p-3 text-sm text-[#a32222] dark:text-[#ff8f8f]">
+              error loading files
+            </p>
+          </Show>
           <Show
-            when={fileList.files().length > 0}
-            fallback={
-              <p class="p-3 text-sm text-black/65 dark:text-white/65">
-                no files available
-              </p>
+            when={
+              fileList.fileRows() !== undefined && fileList.files().length === 0
             }
           >
+            <p class="p-3 text-sm text-black/65 dark:text-white/65">
+              no files available
+            </p>
+          </Show>
+          <Show when={fileList.files().length > 0}>
             <Show
               when={fileList.selectedFile()}
               fallback={
