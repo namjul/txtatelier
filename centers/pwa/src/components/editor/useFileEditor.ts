@@ -95,10 +95,6 @@ export const useFileEditor = (
 
     // Trigger saved flash (UI feedback)
     setSavedFlashActive(true);
-    const timer = setTimeout(() => {
-      setSavedFlashActive(false);
-    }, FLASH_DURATION_MS);
-    onCleanup(() => clearTimeout(timer));
 
     status.setLastAction(`saved ${file.path}`);
     status.setIdle("ready");
@@ -115,6 +111,16 @@ export const useFileEditor = (
   const hasConflict = createMemo(() => session.state.matches("conflict"));
   const hasError = createMemo(() => session.state.matches("error"));
   const isSaving = createMemo(() => session.state.matches("saving"));
+
+  // Flash timer cleanup - runs in proper Solid context
+  createEffect(() => {
+    if (savedFlashActive()) {
+      const timer = setTimeout(() => {
+        setSavedFlashActive(false);
+      }, FLASH_DURATION_MS);
+      onCleanup(() => clearTimeout(timer));
+    }
+  });
 
   const autoSaveUi = createMemo((): AutoSaveUiState => {
     if (hasError()) return "error";
