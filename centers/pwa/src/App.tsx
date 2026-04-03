@@ -1,8 +1,8 @@
 import type { EvoluError } from "@evolu/common";
 import { deriveShardOwner } from "@evolu/common/local-first";
-import { FILES_SHARD } from "@txtatelier/sync-invariants";
 import { createShortcut } from "@solid-primitives/keyboard";
 import { createPageVisibility } from "@solid-primitives/page-visibility";
+import { FILES_SHARD } from "@txtatelier/sync-invariants";
 import {
   createEffect,
   createResource,
@@ -272,7 +272,7 @@ const AppShell = () => {
   });
 
   return (
-    <main class="fixed inset-0 flex flex-col bg-[#f2f1ee] font-mono text-[#111111] dark:bg-[#151617] dark:text-[#efefef]">
+    <main class="fixed inset-0 flex flex-col bg-[#f2f1ee] font-mono text-[#111111] dark:bg-[#151617] dark:text-[#efefef] [overscroll-behavior-y:none]">
       <FilesWorkspace
         filesShardOwnerId={filesShardOwnerId}
         ownerId={ownerId}
