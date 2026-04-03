@@ -55,12 +55,6 @@ export default defineConfig({
             type: "image/png",
             purpose: "any",
           },
-          {
-            src: "pwa-source.svg",
-            sizes: "512x512",
-            type: "image/svg+xml",
-            purpose: "any",
-          },
         ],
         share_target: {
           action: shareTargetActionPath(),
