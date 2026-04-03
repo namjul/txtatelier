@@ -272,7 +272,7 @@ const AppShell = () => {
   });
 
   return (
-    <main class="fixed inset-0 flex flex-col bg-[#f2f1ee] font-mono text-[#111111] dark:bg-[#151617] dark:text-[#efefef]">
+    <main class="flex flex-1 flex-col bg-[#f2f1ee] font-mono text-[#111111] dark:bg-[#151617] dark:text-[#efefef]">
       <FilesWorkspace
         filesShardOwnerId={filesShardOwnerId}
         ownerId={ownerId}
