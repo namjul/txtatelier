@@ -11,8 +11,14 @@ const shareTargetActionPath = (): string => {
   return `${normalized}/share-target`;
 };
 
+// Build datetime for display in settings
+const buildDateTime = new Date().toLocaleString();
+
 export default defineConfig({
   base: basePath,
+  define: {
+    "import.meta.env.VITE_BUILD_DATETIME": JSON.stringify(buildDateTime),
+  },
   worker: {
     format: "es",
   },

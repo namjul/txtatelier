@@ -30,12 +30,25 @@ const useEvolu = createUseEvolu(evolu);
 /** Stable row id for the single local `_settings` inbox path preference */
 const inboxSettingsRowId = createIdFromString("txtatelier-pwa-inbox-path");
 
-const deployedCommitLabel = (): string => {
-  const raw = import.meta.env.VITE_COMMIT_SHA;
-  if (typeof raw === "string" && raw.trim() !== "") {
-    return raw.trim();
-  }
-  return "dev";
+const buildInfoLabel = (): string => {
+  const sha =
+    (import.meta.env.VITE_COMMIT_SHA as string | undefined)?.trim() ?? "dev";
+  const message =
+    (import.meta.env["VITE_COMMIT_MESSAGE"] as string | undefined)?.trim() ??
+    "";
+  const branch =
+    (import.meta.env["VITE_GIT_BRANCH"] as string | undefined)?.trim() ??
+    "default";
+  const datetime =
+    (import.meta.env["VITE_BUILD_DATETIME"] as string | undefined)?.trim() ??
+    "unknown";
+
+  const parts = [sha];
+  if (message) parts.push(message);
+  parts.push(branch);
+  parts.push(datetime);
+
+  return parts.join(" · ");
 };
 
 const formatTypeError = createFormatTypeError<MinLengthError | MaxLengthError>(
@@ -208,9 +221,9 @@ export const SettingsPanel = (props: {
             </div>
             <div class="flex flex-wrap items-baseline gap-x-2">
               <dt class="text-black/55 dark:text-white/55">commit:</dt>
-              <dd>
-                <span class="font-mono text-xs text-black/65 dark:text-white/65">
-                  {deployedCommitLabel()}
+              <dd class="min-w-0 flex-1">
+                <span class="block truncate font-mono text-xs text-black/65 dark:text-white/65">
+                  {buildInfoLabel()}
                 </span>
               </dd>
             </div>
@@ -301,9 +314,9 @@ export const SettingsPanel = (props: {
             (relative to your synced folder).
           </p>
           <p class="text-black/65 dark:text-white/65">
-            On Android, install the app to your home screen (Chrome menu → Install
-            app or Add to Home screen) so TXTAtelier appears in the system Share
-            sheet.
+            On Android, install the app to your home screen (Chrome menu →
+            Install app or Add to Home screen) so TXTAtelier appears in the
+            system Share sheet.
           </p>
           <div class="w-full space-y-2">
             <label
