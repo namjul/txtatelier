@@ -1,3 +1,4 @@
+import { Popover } from "@ark-ui/solid";
 import {
   createFormatTypeError,
   createIdFromString,
@@ -30,9 +31,20 @@ const useEvolu = createUseEvolu(evolu);
 /** Stable row id for the single local `_settings` inbox path preference */
 const inboxSettingsRowId = createIdFromString("txtatelier-pwa-inbox-path");
 
+const buildInfoSha = (): string => {
+  return (
+    (import.meta.env.VITE_COMMIT_SHA as string | undefined)?.trim() ?? "dev"
+  );
+};
+
+const buildInfoShortSha = (): string => {
+  const sha = buildInfoSha();
+  if (sha === "dev") return "dev";
+  return sha.slice(0, 7);
+};
+
 const buildInfoLabel = (): string => {
-  const sha =
-    (import.meta.env.VITE_COMMIT_SHA as string | undefined)?.trim() ?? "dev";
+  const sha = buildInfoSha();
   const message =
     (import.meta.env["VITE_COMMIT_MESSAGE"] as string | undefined)?.trim() ??
     "";
@@ -222,9 +234,23 @@ export const SettingsPanel = (props: {
             <div class="flex flex-wrap items-baseline gap-x-2">
               <dt class="text-black/55 dark:text-white/55">commit:</dt>
               <dd class="min-w-0 flex-1">
-                <span class="block truncate font-mono text-xs text-black/65 dark:text-white/65">
-                  {buildInfoLabel()}
-                </span>
+                <Popover.Root>
+                  <Popover.Trigger class="cursor-pointer border-b border-dashed border-black/30 dark:border-white/30">
+                    <span class="font-mono text-xs text-black/65 dark:text-white/65">
+                      {buildInfoShortSha()}
+                    </span>
+                  </Popover.Trigger>
+                  <Popover.Positioner>
+                    <Popover.Content class="rounded-none border border-black/25 bg-[#f2f1ee] p-2 font-mono text-xs text-black/80 shadow-lg dark:border-white/25 dark:bg-[#1a1b1c] dark:text-white/80">
+                      <Popover.Arrow>
+                        <Popover.ArrowTip class="fill-[#f2f1ee] dark:fill-[#1a1b1c]" />
+                      </Popover.Arrow>
+                      <div class="max-w-xs whitespace-pre-wrap break-all">
+                        {buildInfoLabel()}
+                      </div>
+                    </Popover.Content>
+                  </Popover.Positioner>
+                </Popover.Root>
               </dd>
             </div>
           </dl>
