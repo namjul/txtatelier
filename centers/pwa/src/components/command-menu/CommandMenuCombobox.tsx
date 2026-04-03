@@ -1,7 +1,6 @@
 import { Combobox, useListCollection } from "@ark-ui/solid/combobox";
 import { useFilter } from "@ark-ui/solid/locale";
 import { createVirtualizer } from "@tanstack/solid-virtual";
-import { Portal } from 'solid-js/web'
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { FilesRow } from "../../evolu/files";
 import {
@@ -143,7 +142,6 @@ export const CommandMenuCombobox = (props: {
           autocomplete="off"
         />
       </Combobox.Control>
-      <Portal>
         <Combobox.Positioner class="relative z-0 w-full">
           <Combobox.Content class="max-h-[min(50vh,320px)] w-full border-0 bg-[#f2f1ee] shadow-none dark:bg-[#151617]">
             <div ref={contentRef} class="max-h-[min(50vh,320px)] overflow-auto">
@@ -193,7 +191,6 @@ export const CommandMenuCombobox = (props: {
             </div>
           </Combobox.Content>
         </Combobox.Positioner>
-      </Portal>
     </Combobox.Root>
   );
 };
