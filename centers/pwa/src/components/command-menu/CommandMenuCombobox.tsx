@@ -1,6 +1,7 @@
 import { Combobox, useListCollection } from "@ark-ui/solid/combobox";
 import { useFilter } from "@ark-ui/solid/locale";
 import { createVirtualizer } from "@tanstack/solid-virtual";
+import { Portal } from 'solid-js/web'
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { FilesRow } from "../../evolu/files";
 import {
@@ -10,15 +11,15 @@ import {
 
 type CommandMenuListItem =
   | {
-      readonly kind: "file";
-      readonly label: string;
-      readonly value: string;
-    }
+    readonly kind: "file";
+    readonly label: string;
+    readonly value: string;
+  }
   | {
-      readonly kind: "action";
-      readonly label: string;
-      readonly value: typeof COMMAND_MENU_OPEN_SETTINGS_VALUE;
-    };
+    readonly kind: "action";
+    readonly label: string;
+    readonly value: typeof COMMAND_MENU_OPEN_SETTINGS_VALUE;
+  };
 
 export const CommandMenuCombobox = (props: {
   files: ReadonlyArray<FilesRow>;
@@ -26,67 +27,74 @@ export const CommandMenuCombobox = (props: {
   onSelect: (id: FilesRow["id"]) => void;
   onOpenSettings: () => void;
   inputRef: (el: HTMLInputElement) => void;
-  onFileCountChange?: (info: { total: number; filtered: number }) => void;
+  onFileCountChange?: (info: {
+    total: number;
+    filtered: number;
+    isActionMode: boolean;
+  }) => void;
 }) => {
   const [search, setSearch] = createSignal("");
-  let scrollRef: HTMLDivElement | undefined;
-
-  const setScrollRef = (el: HTMLDivElement | undefined) => {
-    scrollRef = el;
-  };
+  let contentRef: HTMLDivElement | undefined;
 
   const isActionMode = createMemo(() => isCommandMenuActionMode(search()));
 
   const filterFn = useFilter({ sensitivity: "base" });
 
-  const fileItems = createMemo(() =>
-    props.files.map((file) => ({
+  const allItems = createMemo<ReadonlyArray<CommandMenuListItem>>(() => [
+    ...props.files.map((file) => ({
       kind: "file" as const,
       label: file.path,
       value: String(file.id),
     })),
-  );
+    {
+      kind: "action" as const,
+      label: "Open Settings",
+      value: COMMAND_MENU_OPEN_SETTINGS_VALUE,
+    },
+  ]);
 
-  const { collection, filter, reset, set } =
-    useListCollection<CommandMenuListItem>({
-      get initialItems() {
-        return fileItems();
-      },
-      filter: filterFn().contains,
-      itemToString: (item) => item.label,
-      itemToValue: (item) => item.value,
-    });
-
-  // Sync when props.files changes (e.g., as files sync in from CLI)
-  createEffect(() => {
-    set(fileItems());
+  const { collection, filter, set } = useListCollection<CommandMenuListItem>({
+    get initialItems() {
+      return allItems();
+    },
+    itemToString: (item) => item.label,
+    itemToValue: (item) => item.value,
+    filter: (itemString, query, item) => {
+      const action = isCommandMenuActionMode(query);
+      if (action) {
+        return item.kind === "action";
+      }
+      if (item.kind === "action") {
+        return false;
+      }
+      return filterFn().contains(itemString, query);
+    },
   });
 
   const virtualizer = createVirtualizer({
     get count() {
-      return isActionMode() ? 0 : collection().size;
+      return collection().size;
     },
-    getScrollElement: () => scrollRef ?? null,
+    getScrollElement: () => contentRef ?? null,
     estimateSize: () => 32,
     overscan: 5,
   });
 
-  const virtualItems = createMemo(() => virtualizer.getVirtualItems());
-  const totalSize = createMemo(() => virtualizer.getTotalSize());
 
   createEffect(() => {
-    if (isActionMode()) return;
-    const count = collection().size;
-    if (scrollRef && count > 0) {
-      queueMicrotask(() => virtualizer.measure());
-    }
+    set(allItems() as CommandMenuListItem[])
+    queueMicrotask(() => virtualizer.measure())
   });
 
-  // Emit file count changes for title display
   createEffect(() => {
     const total = props.files.length;
-    const filtered = isActionMode() ? 0 : collection().size;
-    props.onFileCountChange?.({ total, filtered });
+    const actionCount = 1;
+    const filtered = isActionMode() ? actionCount : collection().size;
+    props.onFileCountChange?.({
+      total,
+      filtered,
+      isActionMode: isActionMode(),
+    });
   });
 
   const value = createMemo(() =>
@@ -94,13 +102,8 @@ export const CommandMenuCombobox = (props: {
   );
 
   const handleInputChange = (details: { inputValue: string }) => {
-    const input = details.inputValue;
-    setSearch(input);
-    if (isCommandMenuActionMode(input)) {
-      reset();
-    } else {
-      filter(input);
-    }
+    filter(details.inputValue);
+    setSearch(details.inputValue);
   };
 
   return (
@@ -125,8 +128,10 @@ export const CommandMenuCombobox = (props: {
         props.onSelect(selected.id);
       }}
       scrollToIndexFn={(details) => {
-        if (isActionMode()) return;
-        virtualizer.scrollToIndex(details.index, { align: "start" });
+        virtualizer.scrollToIndex(details.index, {
+          align: 'center',
+          behavior: 'auto',
+        })
       }}
       positioning={{ placement: "bottom-start", strategy: "fixed" }}
     >
@@ -139,79 +144,57 @@ export const CommandMenuCombobox = (props: {
           autocomplete="off"
         />
       </Combobox.Control>
-      <Combobox.Positioner class="relative z-0 w-full">
-        <Combobox.Content class="max-h-[min(50vh,320px)] w-full border-0 bg-[#f2f1ee] shadow-none dark:bg-[#151617]">
-          <div ref={setScrollRef} class="max-h-[min(50vh,320px)] overflow-auto">
-            <Show
-              when={collection().size > 0}
-              fallback={
-                <div class="px-3 py-4 text-sm text-black/65 dark:text-white/65">
-                  No files match "{search()}"
-                </div>
-              }
-            >
+      <Portal>
+        <Combobox.Positioner class="relative z-0 w-full">
+          <Combobox.Content class="max-h-[min(50vh,320px)] w-full border-0 bg-[#f2f1ee] shadow-none dark:bg-[#151617]">
+            <div ref={contentRef} class="max-h-[min(50vh,320px)] overflow-auto">
               <Show
-                when={isActionMode()}
+                when={collection().size > 0}
                 fallback={
-                  <div
-                    style={{
-                      height: `${totalSize()}px`,
-                      position: "relative",
-                    }}
-                  >
-                    <For each={virtualItems()}>
-                      {(virtualItem) => {
-                        const item = collection().items[virtualItem.index];
-                        if (!item || item.kind !== "file") return null;
-                        const isSelected = value().includes(item.value);
-                        return (
-                          <Combobox.Item
-                            item={item}
-                            class={`
+                  <div class="px-3 py-4 text-sm text-black/65 dark:text-white/65">
+                    No files match "{search()}"
+                  </div>
+                }
+              >
+                <div
+                  style={{
+                    height: `${virtualizer.getTotalSize()}px`,
+                    position: "relative",
+                  }}
+                >
+                  {virtualizer.getVirtualItems().map((virtualItem) => {
+                    const item = collection().items[virtualItem.index];
+                    if (!item) return null;
+                    const isSelected = value().includes(item.value);
+                    return (
+                      <Combobox.Item
+                        item={item}
+                        aria-setsize={collection().size}
+                        aria-posinset={virtualItem.index + 1}
+                        class={`
                           absolute left-0 w-full max-w-full cursor-pointer overflow-hidden px-3 py-1.5 text-left
                           text-sm text-[#111111] data-[highlighted]:bg-black/10 dark:text-[#efefef]
                           dark:data-[highlighted]:bg-white/10
                           ${isSelected ? "bg-black/5 font-medium dark:bg-white/5" : ""}
+                          ${item.kind === "action" ? "border-l-2 border-[#111111]/25 dark:border-[#efefef]/30" : ""}
                         `}
-                            style={{
-                              height: `${virtualItem.size}px`,
-                              transform: `translateY(${virtualItem.start}px)`,
-                            }}
-                          >
-                            <Combobox.ItemText class="block truncate">
-                              {item.label}
-                            </Combobox.ItemText>
-                          </Combobox.Item>
-                        );
-                      }}
-                    </For>
-                  </div>
-                }
-              >
-                <Combobox.Item
-                  item={{
-                    kind: "action",
-                    label: "Open Settings",
-                    value: COMMAND_MENU_OPEN_SETTINGS_VALUE,
-                  }}
-                  class="
-                    flex w-full min-w-0 max-w-full cursor-pointer items-center overflow-hidden border-l-2
-                    border-[#111111]/25 px-3 py-2 text-left text-sm text-[#111111] data-[highlighted]:bg-black/10
-                    dark:border-[#efefef]/30 dark:text-[#efefef] dark:data-[highlighted]:bg-white/10
-                  "
-                >
-                  <span class="shrink-0 text-black/50 dark:text-white/50">
-                    Action ·{" "}
-                  </span>
-                  <Combobox.ItemText class="min-w-0 flex-1 truncate">
-                    Open Settings
-                  </Combobox.ItemText>
-                </Combobox.Item>
+                        style={{
+                          height: `${virtualItem.size}px`,
+                          transform: `translateY(${virtualItem.start}px)`,
+                        }}
+                      >
+                        <Combobox.ItemText class="block truncate">
+                          {item.label}
+                        </Combobox.ItemText>
+                      </Combobox.Item>
+                    );
+                  })}
+                </div>
               </Show>
-            </Show>
-          </div>
-        </Combobox.Content>
-      </Combobox.Positioner>
+            </div>
+          </Combobox.Content>
+        </Combobox.Positioner>
+      </Portal>
     </Combobox.Root>
   );
 };

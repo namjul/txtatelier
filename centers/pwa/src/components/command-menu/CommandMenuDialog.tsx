@@ -17,10 +17,12 @@ export const CommandMenuDialog = (props: {
   const [fileCount, setFileCount] = createSignal<{
     total: number;
     filtered: number;
-  }>({ total: 0, filtered: 0 });
+    isActionMode: boolean;
+  }>({ total: 0, filtered: 0, isActionMode: false });
 
   const titleText = createMemo(() => {
-    const { total, filtered } = fileCount();
+    const { total, filtered, isActionMode } = fileCount();
+    if (isActionMode) return "Actions";
     if (total === 0) return "File switcher";
     if (filtered === total) return `File switcher · ${total} files`;
     return `File switcher · ${filtered} of ${total} files`;
