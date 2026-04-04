@@ -136,7 +136,6 @@ if (fsResult.value.failedCount > 0) {
 ```typescript
 export interface FileSyncSession extends OwnerSession {
   readonly stop: () => Promise<void>;
-  readonly failedSyncs: ReadonlySet<string>;
   readonly startupReconciliation: {
     readonly filesystem: ReconcileStats;
     readonly evolu: ReconcileStats;

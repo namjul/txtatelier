@@ -52,8 +52,6 @@ describe("GIVEN clean workspace", () => {
       expect(typeof session.quit).toBe("function");
       expect(session.evolu).toBeDefined();
       expect(typeof session.flush).toBe("function");
-      expect(session.failedSyncs).toBeDefined();
-      expect(session.failedSyncs.size).toBe(0);
       await session.stop();
     });
   });

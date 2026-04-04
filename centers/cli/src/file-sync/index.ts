@@ -96,7 +96,6 @@ export interface FileSyncSession extends OwnerSession {
     handler: () => void | Promise<void>,
   ) => () => void;
   readonly stop: () => Promise<void>;
-  readonly failedSyncs: ReadonlySet<string>;
   readonly startupReconciliation: {
     readonly filesystem: ReconcileStats;
     readonly evolu: ReconcileStats;
@@ -278,7 +277,6 @@ export const startFileSync = async (
     return startupOnce;
   }
 
-  const failedSyncs = new Set<string>();
   const loopHandles: SyncLoopHandles = {
     stopWatching: null,
     stopSyncing: null,
@@ -291,7 +289,6 @@ export const startFileSync = async (
     const stopWatching = await startWatching(watchDir, async (filePath) => {
       const result = await captureChange(syncCtx, filePath);
       if (!result.ok) {
-        failedSyncs.add(filePath);
         logger.error(
           `[capture:fs→evolu] Failed to capture ${filePath}:`,
           result.error,
@@ -303,7 +300,6 @@ export const startFileSync = async (
       onConflictArtifactCreated: async (conflictPath: string) => {
         const result = await captureChange(syncCtx, conflictPath);
         if (!result.ok) {
-          failedSyncs.add(conflictPath);
           logger.error(
             `[capture:fs→evolu] Failed to capture conflict file ${conflictPath}:`,
             result.error,
@@ -343,7 +339,6 @@ export const startFileSync = async (
         cause: cleared.error,
       });
     }
-    failedSyncs.clear();
     const again = await runStartupReconciliation();
     if (!again.ok) {
       throw new Error("Fatal error during restart reconciliation", {
@@ -395,7 +390,6 @@ export const startFileSync = async (
   return ok({
     evolu,
     flush: closeDb,
-    failedSyncs,
     startupReconciliation: {
       filesystem: startupOnce.value.filesystem,
       evolu: startupOnce.value.evolu,
@@ -420,7 +414,6 @@ export const startFileSync = async (
       cliShortcutInfo(`  Watch dir: ${watchDir}`);
       cliShortcutInfo(`  Relay URL: ${relayUrl}`);
       cliShortcutInfo(`  Owner ID: ${o.id}`);
-      cliShortcutInfo(`  Failed capture paths (this run): ${failedSyncs.size}`);
     },
     restoreMnemonic: async (readLine: ReadLineFn): Promise<void> => {
       const line = (await readLine("Paste mnemonic words: ")).trim();
