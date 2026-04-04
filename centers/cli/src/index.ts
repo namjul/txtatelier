@@ -43,6 +43,30 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
   }
 
   const isInteractive = computeStdinInteractive();
+
+  /** Filled after `createInteractiveLogger`; session.clearConsole calls this. */
+  const io = { clearViewport: (): void => {} };
+
+  const result = await startFileSync({
+    watchDir: resolvedWatchDir,
+    clearConsole: () => {
+      io.clearViewport();
+    },
+    beforeQuit: async () => {
+      await instanceLock.release();
+    },
+  });
+
+  if (!result.ok) {
+    await instanceLock.release();
+    console.error("[txtatelier] Fatal error during startup:");
+    console.error(result.error);
+    return 1;
+  }
+
+  const session = result.value;
+  const durationMs = Date.now() - startedAt;
+
   const rl = isInteractive
     ? readline.createInterface({
         input: process.stdin,
@@ -52,27 +76,9 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
     : null;
 
   const ilog = createInteractiveLogger(rl);
-
-  const result = await startFileSync({
-    watchDir: resolvedWatchDir,
-    clearConsole: () => {
-      ilog.clearScreen();
-    },
-    beforeQuit: async () => {
-      await instanceLock.release();
-    },
-  });
-
-  if (!result.ok) {
-    rl?.close();
-    await instanceLock.release();
-    console.error("[txtatelier] Fatal error during startup:");
-    console.error(result.error);
-    return 1;
-  }
-
-  const session = result.value;
-  const durationMs = Date.now() - startedAt;
+  io.clearViewport = () => {
+    ilog.clearScreen();
+  };
 
   ilog.printStartupBanner({
     clear: true,

@@ -83,6 +83,8 @@ describe("bindShortcuts", () => {
       question: (_q: string, cb: (a: string) => void) => {
         cb("");
       },
+      pause: vi.fn(),
+      resume: vi.fn(),
       prompt,
       close: vi.fn(),
     } as unknown as ReadlineInterface;
@@ -132,6 +134,8 @@ describe("bindShortcuts", () => {
       question: (_q: string, cb: (a: string) => void) => {
         cb("");
       },
+      pause: vi.fn(),
+      resume: vi.fn(),
       prompt: vi.fn(),
       close: vi.fn(),
     } as unknown as ReadlineInterface;

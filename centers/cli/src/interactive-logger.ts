@@ -45,13 +45,17 @@ export type InteractiveLogger = Logger & {
 export const createInteractiveLogger = (
   rl: readline.Interface | null,
 ): InteractiveLogger => {
+  /**
+   * Pause readline before writing to stdout so Node's readline state stays
+   * consistent (clearLine/cursorTo fight the internal line editor).
+   */
   const syncWithPrompt = (write: () => void): void => {
     if (rl) {
-      readline.clearLine(process.stdout, 0);
-      readline.cursorTo(process.stdout, 0);
+      rl.pause();
     }
     write();
     if (rl) {
+      rl.resume();
       rl.prompt(true);
     }
   };
@@ -69,28 +73,28 @@ export const createInteractiveLogger = (
         baseLogger.debug(...args);
       }
     },
+    // Banner, shortcuts, and help must show even when TXTATELIER_LOG_LEVEL=ERROR
+    // (default in env.ts); those lines are CLI UX, not noisy sync logs.
     info: (...args: unknown[]): void => {
-      if (!shouldLog("INFO")) {
-        return;
-      }
       if (rl) {
         syncWithPrompt(() => {
-          baseLogger.info(...args);
+          // eslint-disable-next-line no-console
+          console.info(...args);
         });
       } else {
-        baseLogger.info(...args);
+        // eslint-disable-next-line no-console
+        console.info(...args);
       }
     },
     warn: (...args: unknown[]): void => {
-      if (!shouldLog("ERROR")) {
-        return;
-      }
       if (rl) {
         syncWithPrompt(() => {
-          baseLogger.warn(...args);
+          // eslint-disable-next-line no-console
+          console.warn(...args);
         });
       } else {
-        baseLogger.warn(...args);
+        // eslint-disable-next-line no-console
+        console.warn(...args);
       }
     },
     error: (...args: unknown[]): void => {
@@ -103,19 +107,34 @@ export const createInteractiveLogger = (
       }
     },
     clearScreen: (): void => {
+      if (rl) {
+        rl.pause();
+      }
       clearViewportPreservingScrollback();
+      if (rl) {
+        rl.resume();
+        rl.prompt(true);
+      }
     },
     printStartupBanner: (opts): void => {
       if (opts.clear) {
+        if (rl) {
+          rl.pause();
+        }
         clearViewportPreservingScrollback();
+        if (rl) {
+          rl.resume();
+        }
       }
       const line = `${pc.green("TXTAELIER")} ${pc.dim(`v${opts.version}`)}  ${pc.green(`ready in ${formatReadyDuration(opts.durationMs)}`)}`;
       if (rl) {
         syncWithPrompt(() => {
-          baseLogger.info(line);
+          // eslint-disable-next-line no-console
+          console.info(line);
         });
       } else {
-        baseLogger.info(line);
+        // eslint-disable-next-line no-console
+        console.info(line);
       }
     },
   };
