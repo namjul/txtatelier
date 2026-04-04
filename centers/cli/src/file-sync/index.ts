@@ -42,6 +42,12 @@ const formatTypeError = createFormatTypeError();
 const hashWatchDir = (dir: string) =>
   createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 8);
 
+/** Interactive shortcut output; visible even when TXTATELIER_LOG_LEVEL is ERROR (default). */
+const cliShortcutInfo = (...args: unknown[]): void => {
+  // eslint-disable-next-line no-console
+  console.info(...args);
+};
+
 export const defaultDbPath = (watchDir: string) =>
   join(paths.data, `txtatelier-${hashWatchDir(watchDir)}.db`);
 export const defaultRelayUrl = "wss://free.evoluhq.com";
@@ -402,19 +408,19 @@ export const startFileSync = async (
     restart,
     showMnemonic: async (): Promise<void> => {
       const o = await evolu.appOwner;
-      logger.info("");
-      logger.info("  Mnemonic (copy manually):");
-      logger.info(`  ${o.mnemonic}`);
-      logger.info("");
+      cliShortcutInfo("");
+      cliShortcutInfo("  Mnemonic (copy manually):");
+      cliShortcutInfo(`  ${o.mnemonic}`);
+      cliShortcutInfo("");
     },
     showStatus: async (): Promise<void> => {
       const o = await evolu.appOwner;
-      logger.info("Status:");
-      logger.info(`  DB path: ${dbPath}`);
-      logger.info(`  Watch dir: ${watchDir}`);
-      logger.info(`  Relay URL: ${relayUrl}`);
-      logger.info(`  Owner ID: ${o.id}`);
-      logger.info(`  Failed capture paths (this run): ${failedSyncs.size}`);
+      cliShortcutInfo("Status:");
+      cliShortcutInfo(`  DB path: ${dbPath}`);
+      cliShortcutInfo(`  Watch dir: ${watchDir}`);
+      cliShortcutInfo(`  Relay URL: ${relayUrl}`);
+      cliShortcutInfo(`  Owner ID: ${o.id}`);
+      cliShortcutInfo(`  Failed capture paths (this run): ${failedSyncs.size}`);
     },
     restoreMnemonic: async (readLine: ReadLineFn): Promise<void> => {
       const line = (await readLine("Paste mnemonic words: ")).trim();
