@@ -90,15 +90,12 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
     createAllFilesQuery(session.evolu),
   );
   const owner = await session.evolu.appOwner;
-  const id = owner.id;
-  const ownerShort =
-    id.length > 12 ? `${id.slice(0, 6)}...${id.slice(-6)}` : id;
 
   if (isInteractive) {
     ilog.info("");
     ilog.info(`➜  Watching: ${resolvedWatchDir}`);
     ilog.info(`➜  ${fileRows.length} files`);
-    ilog.info(`➜  Owner: ${ownerShort}`);
+    ilog.info(`➜  Owner: ${owner.id}`);
   } else {
     ilog.info(`Watching: ${resolvedWatchDir}`);
   }
