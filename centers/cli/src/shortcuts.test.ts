@@ -161,4 +161,67 @@ describe("bindShortcuts", () => {
 
     expect(clearConsole).toHaveBeenCalledTimes(1);
   });
+
+  test("dispatches p: defers rl.question past line handler (readline re-entrancy)", async () => {
+    const logger: Logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    let lineHandler: ((line: string) => void) | undefined;
+    const question = vi.fn((_q: string, cb: (a: string) => void) => {
+      cb("seed words");
+    });
+    const prompt = vi.fn();
+    const rl = {
+      on: (event: string, fn: (line: string) => void) => {
+        if (event === "line") {
+          lineHandler = fn;
+        }
+      },
+      question,
+      pause: vi.fn(),
+      resume: vi.fn(),
+      prompt,
+      close: vi.fn(),
+    } as unknown as ReadlineInterface;
+
+    const restoreMnemonic = vi.fn(
+      async (readLine: (q: string) => Promise<string>) => {
+        await readLine("ignored session prompt");
+      },
+    );
+
+    const session = {
+      showStatus: vi.fn(),
+      showMnemonic: vi.fn(),
+      restoreMnemonic,
+      resetOwner: vi.fn(),
+      clearConsole: vi.fn(),
+      quit: vi.fn().mockResolvedValue(undefined),
+    } as unknown as FileSyncSession;
+
+    bindShortcuts({
+      session,
+      logger,
+      isTTY: true,
+      options: { print: false },
+      readline: rl,
+    });
+
+    expect(lineHandler).toBeDefined();
+    lineHandler!("p");
+    expect(question).not.toHaveBeenCalled();
+
+    await flushMicrotasks();
+    expect(restoreMnemonic).toHaveBeenCalledTimes(1);
+    expect(question).toHaveBeenCalledWith(
+      "Mnemonic, then Enter (empty line = system clipboard; use Ctrl+Shift+V to paste): ",
+      expect.any(Function),
+    );
+
+    await flushMicrotasks();
+    expect(prompt).toHaveBeenCalled();
+  });
 });

@@ -1,3 +1,4 @@
+import clipboard from "clipboardy";
 import type { Interface as ReadlineInterface } from "node:readline";
 import type { FileSyncSession } from "./file-sync/index.js";
 import type { Logger } from "./logger.js";
@@ -32,6 +33,9 @@ const exitOnShortcutError = (error: unknown, key: string): never => {
   process.exit(1);
 };
 
+const normalizeMnemonicInput = (s: string): string =>
+  s.replace(/\r\n/g, "\n").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+
 /**
  * Bind readline shortcuts (key + Enter). Dependencies use a single `deps` object (Evolu DI style).
  *
@@ -57,18 +61,45 @@ export const bindShortcuts = (
   const shortcuts: readonly CLIShortcut[] = [
     { key: "u", description: "show status" },
     { key: "s", description: "show mnemonic (copy manually)" },
-    { key: "p", description: "paste / restore mnemonic from prompt" },
+    {
+      key: "p",
+      description:
+        "restore mnemonic (type words, Ctrl+Shift+V / middle-click to paste, or Enter alone for clipboard)",
+    },
     { key: "d", description: "reset owner immediately (restore with p if you saved mnemonic)" },
     { key: "c", description: "clear viewport (scrollback kept)" },
     { key: "q", description: "quit" },
   ];
 
+  // Defer question() out of the synchronous 'line' handler stack. Calling
+  // rl.question from inside 'line' breaks prompt / input in Node readline.
   const question = (q: string): Promise<string> =>
     new Promise((resolve) => {
-      rl.question(q, (answer) => {
-        resolve(answer);
+      setImmediate(() => {
+        rl.question(q, (answer) => {
+          resolve(answer);
+          setImmediate(() => {
+            rl.prompt(true);
+          });
+        });
       });
     });
+
+  const readMnemonicLine = async (_promptFromSession: string): Promise<string> => {
+    const typed = await question(
+      "Mnemonic, then Enter (empty line = system clipboard; use Ctrl+Shift+V to paste): ",
+    );
+    const trimmed = typed.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+    try {
+      const t = normalizeMnemonicInput(clipboard.readSync());
+      return t.length > 0 ? t : "";
+    } catch {
+      return "";
+    }
+  };
 
   const showHelp = (): void => {
     deps.logger.info("");
@@ -113,7 +144,7 @@ export const bindShortcuts = (
         await runShortcut("s", () => deps.session.showMnemonic());
         return;
       case "p":
-        await runShortcut("p", () => deps.session.restoreMnemonic(question));
+        await runShortcut("p", () => deps.session.restoreMnemonic(readMnemonicLine));
         return;
       case "d":
         await runShortcut("d", () => deps.session.resetOwner());
