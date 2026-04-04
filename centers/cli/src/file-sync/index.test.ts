@@ -43,6 +43,13 @@ describe("GIVEN clean workspace", () => {
       if (!result.ok) return;
       const session = result.value;
       expect(typeof session.stop).toBe("function");
+      expect(typeof session.restart).toBe("function");
+      expect(typeof session.showMnemonic).toBe("function");
+      expect(typeof session.showStatus).toBe("function");
+      expect(typeof session.restoreMnemonic).toBe("function");
+      expect(typeof session.resetOwner).toBe("function");
+      expect(typeof session.clearConsole).toBe("function");
+      expect(typeof session.quit).toBe("function");
       expect(session.evolu).toBeDefined();
       expect(typeof session.flush).toBe("function");
       expect(session.failedSyncs).toBeDefined();
@@ -70,6 +77,19 @@ describe("GIVEN clean workspace", () => {
       const session2 = result2.value;
       expect(typeof session2.stop).toBe("function");
       await session2.stop();
+    });
+  });
+
+  describe("WHEN session calls restart()", () => {
+    test("THEN sync keeps running until stop", async () => {
+      const result = await startFileSync({ watchDir: tempDir });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const session = result.value;
+      await session.restart();
+      await writeFile(join(tempDir, "after-restart.txt"), "ok");
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await session.stop();
     });
   });
 });

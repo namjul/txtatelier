@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import * as readline from "node:readline";
 import { Command, Option, runExit } from "clipanion";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -9,14 +10,25 @@ import {
   showOwnerMnemonic,
   startFileSync,
 } from "./file-sync/index.js";
+import { createAllFilesQuery } from "./file-sync/evolu-queries.js";
 import {
   createInstanceLock,
   formatDuplicateInstanceMessage,
 } from "./file-sync/platform/index.js";
+import { createInteractiveLogger } from "./interactive-logger.js";
+import {
+  bindShortcuts,
+  computeStdinInteractive,
+  type LoggerDep,
+  type ReadlineDep,
+  type SessionDep,
+  type ShortcutOptionsDep,
+  type TTYDep,
+} from "./shortcuts.js";
 
 /** Returns an exit code when startup must stop; otherwise never resolves. */
 const runStart = async (watchDir?: string): Promise<number | undefined> => {
-  console.log("[txtatelier] Starting...");
+  const startedAt = Date.now();
 
   const resolvedWatchDir = resolveConfiguredWatchDir(
     watchDir !== undefined ? { watchDir } : {},
@@ -30,9 +42,29 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
     return 2;
   }
 
-  const result = await startFileSync({ watchDir: resolvedWatchDir });
+  const isInteractive = computeStdinInteractive();
+  const rl = isInteractive
+    ? readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: "> ",
+      })
+    : null;
+
+  const ilog = createInteractiveLogger(rl);
+
+  const result = await startFileSync({
+    watchDir: resolvedWatchDir,
+    clearConsole: () => {
+      ilog.clearScreen();
+    },
+    beforeQuit: async () => {
+      await instanceLock.release();
+    },
+  });
 
   if (!result.ok) {
+    rl?.close();
     await instanceLock.release();
     console.error("[txtatelier] Fatal error during startup:");
     console.error(result.error);
@@ -40,18 +72,63 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
   }
 
   const session = result.value;
+  const durationMs = Date.now() - startedAt;
+
+  ilog.printStartupBanner({
+    clear: true,
+    version: packageJson.version,
+    durationMs,
+  });
+
+  const fileRows = await session.evolu.loadQuery(
+    createAllFilesQuery(session.evolu),
+  );
+  const owner = await session.evolu.appOwner;
+  const id = owner.id;
+  const ownerShort =
+    id.length > 12 ? `${id.slice(0, 6)}...${id.slice(-6)}` : id;
+
+  if (isInteractive) {
+    ilog.info("");
+    ilog.info(`  ➜  Watching: ${resolvedWatchDir}`);
+    ilog.info(`  ➜  ${fileRows.length} files`);
+    ilog.info(`  ➜  Owner: ${ownerShort}`);
+    ilog.info("");
+  } else {
+    ilog.info(`Watching: ${resolvedWatchDir}`);
+  }
+
+  const shortcutDeps: SessionDep &
+    LoggerDep &
+    TTYDep &
+    ShortcutOptionsDep &
+    ReadlineDep = {
+    session,
+    logger: ilog,
+    isTTY: isInteractive,
+    options: { print: true },
+    readline: rl,
+  };
+
+  const unbindShortcuts = bindShortcuts(shortcutDeps);
+  session.onStop(() => {
+    unbindShortcuts();
+  });
 
   const shutdown = async (signal: string) => {
-    console.log(`[txtatelier] Received ${signal}, shutting down gracefully...`);
+    ilog.info(`[txtatelier] Received ${signal}, shutting down gracefully...`);
     await session.stop();
     await instanceLock.release();
     process.exit(0);
   };
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+  process.on("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
 
-  console.log("[txtatelier] Running (press Ctrl+C to stop)");
   await new Promise(() => {});
   return undefined;
 };
@@ -77,7 +154,8 @@ class StartCommand extends BaseCommand {
 class OwnerCommand extends BaseCommand {
   static override paths = [["owner"]];
   static override usage = Command.Usage({
-    description: "Manage owner identity",
+    description:
+      "Manage owner identity (non-interactive). Prefer default start + s / p / d shortcuts in a TTY.",
   });
 
   show = Option.Boolean("--show", {
@@ -96,7 +174,6 @@ class OwnerCommand extends BaseCommand {
   async execute(): Promise<number> {
     const session = await createOwnerSession({
       ...(this.watchDir ? { watchDir: this.watchDir } : {}),
-      // Avoid relay WebSocket + module cache for one-shot commands so the process can exit.
       subscribeFilesShard: false,
     });
 

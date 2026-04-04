@@ -20,7 +20,14 @@ const shouldLog = (messageLevel: LogLevel): boolean => {
   return LogLevelPriority[messageLevel] >= LogLevelPriority[env.logLevel];
 };
 
-export const logger = {
+export type Logger = {
+  readonly debug: (...args: unknown[]) => void;
+  readonly info: (...args: unknown[]) => void;
+  readonly warn: (...args: unknown[]) => void;
+  readonly error: (...args: unknown[]) => void;
+};
+
+export const logger: Logger = {
   debug: (...args: unknown[]): void => {
     if (shouldLog("DEBUG")) {
       debugLogger.debug(...args);

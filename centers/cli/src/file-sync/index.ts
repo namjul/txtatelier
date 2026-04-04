@@ -23,6 +23,7 @@ import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./evolu-schema";
+import { clearAllSyncStateTracking } from "./state";
 import {
   captureChange,
   type FileSyncContext,
@@ -75,7 +76,19 @@ export interface OwnerSession {
   readonly config: FileSyncConfig;
 }
 
+export type ReadLineFn = (question: string) => Promise<string>;
+
 export interface FileSyncSession extends OwnerSession {
+  readonly restart: () => Promise<void>;
+  readonly showMnemonic: () => Promise<void>;
+  readonly showStatus: () => Promise<void>;
+  readonly restoreMnemonic: (readLine: ReadLineFn) => Promise<void>;
+  readonly resetOwner: () => Promise<void>;
+  readonly clearConsole: () => void;
+  readonly quit: () => Promise<void>;
+  readonly onStop: (
+    handler: () => void | Promise<void>,
+  ) => () => void;
   readonly stop: () => Promise<void>;
   readonly failedSyncs: ReadonlySet<string>;
   readonly startupReconciliation: {
@@ -83,6 +96,22 @@ export interface FileSyncSession extends OwnerSession {
     readonly evolu: ReconcileStats;
   };
 }
+
+type SyncLoopHandles = {
+  stopWatching: (() => void) | null;
+  stopSyncing: (() => void) | null;
+};
+
+const detachSyncLoop = (handles: SyncLoopHandles): void => {
+  if (handles.stopSyncing) {
+    handles.stopSyncing();
+    handles.stopSyncing = null;
+  }
+  if (handles.stopWatching) {
+    handles.stopWatching();
+    handles.stopWatching = null;
+  }
+};
 
 /**
  * Create a lightweight session for owner queries without starting sync.
@@ -118,12 +147,29 @@ export const createOwnerSession = async (
   };
 };
 
+const resetOwnerData = async (session: OwnerSession): Promise<void> => {
+  await session.evolu.resetAppOwner({ reload: false });
+
+  const flushResult = await session.flush();
+  if (!flushResult.ok) {
+    throw new Error("Failed to flush reset owner", {
+      cause: flushResult.error,
+    });
+  }
+
+  logger.info("Owner reset.");
+};
+
+export type FileSyncStartOptions = Partial<FileSyncConfig> & {
+  readonly beforeQuit?: () => Promise<void>;
+  readonly clearConsole?: () => void;
+};
+
 export const startFileSync = async (
-  config?: Partial<FileSyncConfig>,
+  config?: FileSyncStartOptions,
 ): Promise<Result<FileSyncSession, StartupFatalError>> => {
   logger.info("[lifecycle] Initializing...");
 
-  // Create base owner session
   const ownerSession = await createOwnerSession(config);
   const {
     evolu,
@@ -140,7 +186,6 @@ export const startFileSync = async (
     filesOwnerId: filesShardOwner.id,
   };
 
-  // Detect first run (check if DB file exists)
   const isFirstRun = !(await access(dbPath).then(
     () => true,
     () => false,
@@ -157,133 +202,241 @@ export const startFileSync = async (
     logger.info(
       "[lifecycle] ⚠️  You'll need it to access your data on other devices.",
     );
-    logger.info("[lifecycle] ⚠️  Run 'txtatelier owner show' to see it again.");
+    logger.info(
+      "[lifecycle] ⚠️  Press s + Enter in interactive mode to show it again.",
+    );
     logger.info("[lifecycle]");
   }
 
   logger.info(`[lifecycle] Owner ID: ${owner.id}`);
 
-  // Subscribe to Evolu errors
-  const unsubscribeError = evolu.subscribeError(() => {
+  let unsubscribeError: (() => void) | null = evolu.subscribeError(() => {
     const error = evolu.getError();
     if (error) {
       logger.error("[error] Evolu error:", error);
     }
   });
 
-  // Startup sync: apply any Evolu changes that happened while offline (deletions/additions)
-  // This must run BEFORE filesystem reconciliation to prevent re-adding deleted files
-  const evolResult = await reconcileStartupEvoluState(syncCtx);
+  const runStartupReconciliation =
+    async (): Promise<
+      Result<
+        { readonly filesystem: ReconcileStats; readonly evolu: ReconcileStats },
+        StartupFatalError
+      >
+    > => {
+      const evolResult = await reconcileStartupEvoluState(syncCtx);
 
-  if (!evolResult.ok) {
-    // Fatal error in Evolu reconciliation - cannot proceed
-    logger.error(
-      "[error] Fatal error during Evolu reconciliation:",
-      evolResult.error,
-    );
-    return err({ type: "StartupFailed", cause: evolResult.error });
-  }
-
-  if (evolResult.value.failedCount > 0) {
-    logger.warn(
-      `[lifecycle] Evolu reconciliation completed with ${evolResult.value.failedCount} partial failures`,
-    );
-  }
-
-  // Phase 5 startup reconciliation: reflect pre-existing filesystem files into
-  // Evolu before change capture and state materialization start, now that watcher ignores initial events.
-  const fsResult = await reconcileStartupFilesystemState(syncCtx);
-
-  if (!fsResult.ok) {
-    // Fatal error in filesystem reconciliation - cannot proceed
-    logger.error(
-      "[error] Fatal error during filesystem reconciliation:",
-      fsResult.error,
-    );
-    return err({ type: "StartupFailed", cause: fsResult.error });
-  }
-
-  if (fsResult.value.failedCount > 0) {
-    logger.warn(
-      `[lifecycle] Filesystem reconciliation completed with ${fsResult.value.failedCount} partial failures`,
-    );
-  }
-
-  // Track failed sync operations for observability
-  // Future: Expose via status command or error reporting
-  const failedSyncs = new Set<string>();
-
-  // Start Change Capture: watch filesystem and reflect into Evolu
-  logger.info(`[lifecycle] Watching directory: ${watchDir}`);
-  const stopWatching = await startWatching(watchDir, async (filePath) => {
-    const result = await captureChange(syncCtx, filePath);
-    if (!result.ok) {
-      failedSyncs.add(filePath);
-      logger.error(
-        `[capture:fs→evolu] Failed to capture ${filePath}:`,
-        result.error,
-      );
-    }
-  });
-
-  // Start State Materialization: apply replicated rows to filesystem
-  const stopSyncing = startStateMaterialization(syncCtx, {
-    onConflictArtifactCreated: async (conflictPath: string) => {
-      const result = await captureChange(syncCtx, conflictPath);
-      if (!result.ok) {
-        failedSyncs.add(conflictPath);
+      if (!evolResult.ok) {
         logger.error(
-          `[capture:fs→evolu] Failed to capture conflict file ${conflictPath}:`,
+          "[error] Fatal error during Evolu reconciliation:",
+          evolResult.error,
+        );
+        return err({ type: "StartupFailed", cause: evolResult.error });
+      }
+
+      if (evolResult.value.failedCount > 0) {
+        logger.warn(
+          `[lifecycle] Evolu reconciliation completed with ${evolResult.value.failedCount} partial failures`,
+        );
+      }
+
+      const fsResult = await reconcileStartupFilesystemState(syncCtx);
+
+      if (!fsResult.ok) {
+        logger.error(
+          "[error] Fatal error during filesystem reconciliation:",
+          fsResult.error,
+        );
+        return err({ type: "StartupFailed", cause: fsResult.error });
+      }
+
+      if (fsResult.value.failedCount > 0) {
+        logger.warn(
+          `[lifecycle] Filesystem reconciliation completed with ${fsResult.value.failedCount} partial failures`,
+        );
+      }
+
+      return ok({
+        filesystem: fsResult.value,
+        evolu: evolResult.value,
+      });
+    };
+
+  const startupOnce = await runStartupReconciliation();
+
+  if (!startupOnce.ok) {
+    if (unsubscribeError) {
+      unsubscribeError();
+      unsubscribeError = null;
+    }
+    return startupOnce;
+  }
+
+  const failedSyncs = new Set<string>();
+  const loopHandles: SyncLoopHandles = {
+    stopWatching: null,
+    stopSyncing: null,
+  };
+
+  const attachSyncLoop = async (): Promise<
+    Result<void, StartupFatalError>
+  > => {
+    logger.info(`[lifecycle] Watching directory: ${watchDir}`);
+    const stopWatching = await startWatching(watchDir, async (filePath) => {
+      const result = await captureChange(syncCtx, filePath);
+      if (!result.ok) {
+        failedSyncs.add(filePath);
+        logger.error(
+          `[capture:fs→evolu] Failed to capture ${filePath}:`,
           result.error,
         );
       }
-    },
-  });
+    });
+
+    const stopSyncing = startStateMaterialization(syncCtx, {
+      onConflictArtifactCreated: async (conflictPath: string) => {
+        const result = await captureChange(syncCtx, conflictPath);
+        if (!result.ok) {
+          failedSyncs.add(conflictPath);
+          logger.error(
+            `[capture:fs→evolu] Failed to capture conflict file ${conflictPath}:`,
+            result.error,
+          );
+        }
+      },
+    });
+
+    loopHandles.stopWatching = stopWatching;
+    loopHandles.stopSyncing = stopSyncing;
+    return ok(undefined);
+  };
+
+  const attachOnce = await attachSyncLoop();
+  if (!attachOnce.ok) {
+    if (unsubscribeError) {
+      unsubscribeError();
+      unsubscribeError = null;
+    }
+    return attachOnce;
+  }
 
   logger.info("[lifecycle] Ready");
 
-  // Return session with bundled cleanup
+  const stopHandlers: Array<() => void | Promise<void>> = [];
+  let stopped = false;
+
+  const stopSyncOnly = (): void => {
+    detachSyncLoop(loopHandles);
+  };
+
+  const restart = async (): Promise<void> => {
+    stopSyncOnly();
+    const cleared = await clearAllSyncStateTracking(evolu);
+    if (!cleared.ok) {
+      throw new Error("Failed to clear sync state for restart", {
+        cause: cleared.error,
+      });
+    }
+    failedSyncs.clear();
+    const again = await runStartupReconciliation();
+    if (!again.ok) {
+      throw new Error("Fatal error during restart reconciliation", {
+        cause: again.error,
+      });
+    }
+    const reattach = await attachSyncLoop();
+    if (!reattach.ok) {
+      throw new Error("Failed to reattach sync after restart", {
+        cause: reattach.error,
+      });
+    }
+    logger.info("[lifecycle] Restart complete");
+  };
+
+  const clearConsole = config?.clearConsole ?? ((): void => {});
+
+  const stop = async (): Promise<void> => {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    logger.info("[lifecycle] Shutting down...");
+    for (const h of stopHandlers) {
+      await Promise.resolve(h());
+    }
+    stopSyncOnly();
+    if (unsubscribeError) {
+      unsubscribeError();
+      unsubscribeError = null;
+    }
+    if (closeDb) {
+      const flushResult = await closeDb();
+      if (!flushResult.ok) {
+        logger.error("[error] Failed to flush database:", flushResult.error);
+      }
+    }
+    logger.info("[lifecycle] Stopped");
+  };
+
+  const quit = async (): Promise<void> => {
+    await stop();
+    if (config?.beforeQuit) {
+      await config.beforeQuit();
+    }
+    process.exit(0);
+  };
+
   return ok({
     evolu,
     flush: closeDb,
     failedSyncs,
     startupReconciliation: {
-      filesystem: fsResult.value,
-      evolu: evolResult.value,
+      filesystem: startupOnce.value.filesystem,
+      evolu: startupOnce.value.evolu,
     },
     config: {
       dbPath,
       watchDir,
       relayUrl,
     },
-    stop: async (): Promise<void> => {
-      logger.info("[lifecycle] Shutting down...");
-
-      // Unsubscribe from error handler
-      if (unsubscribeError) {
-        unsubscribeError();
-      }
-
-      // Stop State Materialization first (stop listening to Evolu)
-      if (stopSyncing) {
-        stopSyncing();
-      }
-
-      // Stop Change Capture (stop watching filesystem)
-      if (stopWatching) {
-        stopWatching();
-      }
-
-      // Flush database
-      if (closeDb) {
-        const flushResult = await closeDb();
-        if (!flushResult.ok) {
-          logger.error("[error] Failed to flush database:", flushResult.error);
-        }
-      }
-
-      logger.info("[lifecycle] Stopped");
+    restart,
+    showMnemonic: async (): Promise<void> => {
+      const o = await evolu.appOwner;
+      logger.info("");
+      logger.info("  Mnemonic (copy manually):");
+      logger.info(`  ${o.mnemonic}`);
+      logger.info("");
     },
+    showStatus: async (): Promise<void> => {
+      const o = await evolu.appOwner;
+      logger.info("Status:");
+      logger.info(`  DB path: ${dbPath}`);
+      logger.info(`  Watch dir: ${watchDir}`);
+      logger.info(`  Relay URL: ${relayUrl}`);
+      logger.info(`  Owner ID: ${o.id}`);
+      logger.info(`  Failed capture paths (this run): ${failedSyncs.size}`);
+    },
+    restoreMnemonic: async (readLine: ReadLineFn): Promise<void> => {
+      const line = (await readLine("Paste mnemonic words: ")).trim();
+      await restoreOwnerFromMnemonic(ownerSession, line);
+      await restart();
+    },
+    resetOwner: async (): Promise<void> => {
+      await resetOwnerData(ownerSession);
+      await restart();
+    },
+    clearConsole,
+    quit,
+    onStop: (handler: () => void | Promise<void>): (() => void) => {
+      stopHandlers.push(handler);
+      return () => {
+        const i = stopHandlers.indexOf(handler);
+        if (i >= 0) {
+          stopHandlers.splice(i, 1);
+        }
+      };
+    },
+    stop,
   });
 };
 
@@ -326,20 +479,9 @@ export const restoreOwnerFromMnemonic = async (
     });
   }
 
-  logger.info("Owner restored.");
-  logger.info("Restart required to activate restored owner.");
+  logger.info("Owner restored from mnemonic.");
 };
 
 export const resetOwner = async (session: OwnerSession): Promise<void> => {
-  await session.evolu.resetAppOwner({ reload: false });
-
-  const flushResult = await session.flush();
-  if (!flushResult.ok) {
-    throw new Error("Failed to flush reset owner", {
-      cause: flushResult.error,
-    });
-  }
-
-  logger.info("Owner reset.");
-  logger.info("Restart required to activate new owner.");
+  await resetOwnerData(session);
 };
