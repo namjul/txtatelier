@@ -7,7 +7,7 @@ revision
 cli-interaction-loop
 
 ## Claim
-Users will use keyboard shortcuts (r, u, s, p, d, c, q) + Enter instead of Ctrl+C for common operations. Shortcuts: restart, status, show mnemonic, paste/restore, delete/reset owner, clear console, quit. Completing actions in under 2 keystrokes versus the current 2+ seconds workflow.
+Users will use keyboard shortcuts (u, s, p, d, c, q) + Enter instead of Ctrl+C for common operations. Shortcuts: status, show mnemonic, paste/restore, delete/reset owner, clear console, quit. Completing actions in under 2 keystrokes versus the current 2+ seconds workflow.
 
 ## What made us do this?
 Current CLI prints minimal logs and hangs until Ctrl+C. Owner commands (--show, --reset, --where) exist as separate flags requiring process restart. Working across multiple sync directories requires rapid context switching that feels sluggish. Users expect the responsiveness of modern CLIs (Vite, Wrangler) where common actions are instant keyboard shortcuts.

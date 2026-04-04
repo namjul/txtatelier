@@ -55,7 +55,6 @@ export const bindShortcuts = (
   let actionRunning = false;
 
   const shortcuts: readonly CLIShortcut[] = [
-    { key: "r", description: "restart sync (reconcile; brief capture gap is ok for dev)" },
     { key: "u", description: "show status" },
     { key: "s", description: "show mnemonic (copy manually)" },
     { key: "p", description: "paste / restore mnemonic from prompt" },
@@ -107,9 +106,6 @@ export const bindShortcuts = (
     }
 
     switch (trimmed) {
-      case "r":
-        await runShortcut("r", () => deps.session.restart());
-        return;
       case "u":
         await runShortcut("u", () => deps.session.showStatus());
         return;

@@ -43,7 +43,6 @@ describe("GIVEN clean workspace", () => {
       if (!result.ok) return;
       const session = result.value;
       expect(typeof session.stop).toBe("function");
-      expect(typeof session.restart).toBe("function");
       expect(typeof session.showMnemonic).toBe("function");
       expect(typeof session.showStatus).toBe("function");
       expect(typeof session.restoreMnemonic).toBe("function");
@@ -57,7 +56,7 @@ describe("GIVEN clean workspace", () => {
   });
 
   describe("WHEN session is started and stopped", () => {
-    test("THEN session can be restarted", async () => {
+    test("THEN startFileSync succeeds again after stop", async () => {
       const result1 = await startFileSync({ watchDir: tempDir });
       expect(result1.ok).toBe(true);
       if (!result1.ok) return;
@@ -78,18 +77,6 @@ describe("GIVEN clean workspace", () => {
     });
   });
 
-  describe("WHEN session calls restart()", () => {
-    test("THEN sync keeps running until stop", async () => {
-      const result = await startFileSync({ watchDir: tempDir });
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      const session = result.value;
-      await session.restart();
-      await writeFile(join(tempDir, "after-restart.txt"), "ok");
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await session.stop();
-    });
-  });
 });
 
 describe("GIVEN files exist on disk before sync starts", () => {

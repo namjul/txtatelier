@@ -2,7 +2,7 @@
 
 ## What cohered
 
-- **Session:** `FileSyncSession` now exposes `restart`, owner helpers, `clearConsole`, `quit`, and `onStop`, with `restart` clearing `_syncState` via `clearAllSyncStateTracking`, re-running startup reconciliation, and reattaching watch + materialization without closing Evolu.
+- **Session:** `FileSyncSession` exposes owner helpers, `clearConsole`, `quit`, and `onStop` (no in-process `restart`). After `p`/`d`, users are told to quit and start the CLI again.
 - **CLI entry:** Composition root creates one readline + `createInteractiveLogger`, prints a Vite-style banner after `startFileSync`, binds `bindShortcuts` with a single `deps` object, and registers readline cleanup on `onStop`.
 - **Shortcuts:** Letter + Enter dispatch with `actionRunning`, non-TTY banner string, and `process.exit(1)` on handler failure.
 - **Logger:** `InteractiveLogger` coordinates logs with the prompt, viewport clear with scrollback preservation + `bytesWritten` guard, and `picocolors` on the banner line.

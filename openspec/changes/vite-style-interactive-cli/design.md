@@ -30,7 +30,6 @@ Architecture:
 │  - Evolu DI pattern                         │
 │  - Returns cleanup function                 │
 │  - 'h' → show shortcuts                     │
-│  - 'r' → restart                            │
 │  - 'u' → status                             │
 │  - 's' → show mnemonic (display for copy)   │
 │  - 'p' → paste/restore mnemonic (prompt)    │
@@ -42,8 +41,8 @@ Architecture:
 
 Key implementation details from Vite analysis:
 
-**1. Readline Persistence Across Restart**
-Readline interface is created once and persists across server restarts. Don't close/recreate - just swap the line event listener. This prevents input loss during restart and keeps the user's typing buffer intact.
+**1. Single readline lifetime**
+Readline is created once after sync startup and stays open until session `stop`. Cleanup runs on `onStop` so the prompt does not leak after shutdown.
 
 **2. Precise Clear Screen (Preserve Scrollback)**
 Use readline cursor control, not `console.clear()`:
@@ -171,8 +170,8 @@ const isInteractive = process.stdin.isTTY && !process.env.CI;
                             ← cursor (no visible prompt marker)
 14:32:05 [sync:watch] File changed: notes.md
 14:32:05 [sync:evolu] Updated row for notes.md
-r                           ← user types 'r' + Enter
-14:32:06 [cli] Restarting...
+c                           ← user types 'c' + Enter (clear viewport)
+14:32:06 [cli] (viewport cleared; scrollback preserved)
 ```
 
 **Background Mode (no TTY):**
@@ -275,27 +274,16 @@ docker run -it --rm \
 **Owner Reset: No Confirmation**
 The `d` (reset owner) shortcut executes immediately without confirmation. Rationale: Reset is rare, users should have mnemonic backed up, and immediate execution keeps the log-first design simple. User can restore via `p` if needed.
 
-**Restart Event Safety: Reconciliation Handles It**
-File changes during the restart window (100-600ms) are not lost. Startup reconciliation runs after restart, comparing filesystem to Evolu state and syncing any missed changes. The "loss" is temporary until reconciliation completes.
+**Owner identity: process restart**
+Changing owner via `p` or `d` persists to disk and Evolu; the user is instructed to quit (`q`) and start the CLI again so the new identity applies. There is no in-process watcher reset.
 
 **Multiple Instances: Already Works**
 Instance locking is per-watch-directory (hash-based lockfile names). Running `txtatelier --watch-dir /notes` and `txtatelier --watch-dir /work` simultaneously works correctly - each gets its own lock file.
 
 **Error Handling: Exit on Any Error**
-To keep implementation simple and avoid complex recovery logic, all errors during shortcut execution result in immediate process exit with code 1. This includes:
-- restart() failures (even partial state)
-- restoreMnemonic() with failed flush
-- Any uncaught exception in shortcut action
+To keep implementation simple and avoid complex recovery logic, all errors during shortcut execution result in immediate process exit with code 1. This includes restore failures, failed flush, and any uncaught exception in a shortcut action.
 
-Rationale: Predictable behavior, no zombie sessions, fast restart available via shell history. User simply restarts CLI with up-arrow + Enter.
-
-**Error Handling: Exit on Any Error**
-To keep implementation simple and avoid complex recovery logic, all errors during shortcut execution result in immediate process exit with code 1. This includes:
-- restart() failures (even partial state)
-- restoreMnemonic() with failed flush
-- Any uncaught exception in shortcut action
-
-Rationale: Predictable behavior, no zombie sessions, fast restart available via shell history. User simply restarts CLI with up-arrow + Enter.
+Rationale: Predictable behavior, no zombie sessions; the user can start the CLI again from shell history.
 
 ## Co-variance
 
@@ -314,7 +302,7 @@ Rationale: Predictable behavior, no zombie sessions, fast restart available via 
 The readline approach requires `Enter` after each command. This is slightly slower than raw key capture but ensures reliability. The tradeoff is explicit: one extra keystroke for universal compatibility.
 
 ### Continuity after correction
-If a user accidentally presses `r` (restart) instead of `c` (clear), they lose sync state momentarily. The restart completes quickly, but any pending file events during the restart window are lost. This is acceptable for development but should be noted in documentation.
+If a user means to clear the viewport but mistypes, unknown letters are ignored; `c` is the only shortcut that clears the visible console area.
 
 ### Exploratory capacity
 Consolidating owner commands into shortcuts reduces discoverability for users who expect `--help` to list all functionality. The banner mitigates this, but users running non-interactive mode may not realize owner commands moved. Mitigation: Keep `--owner --show` working in non-interactive mode as legacy aliases.

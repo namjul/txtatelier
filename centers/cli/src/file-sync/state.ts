@@ -4,14 +4,13 @@
 import {
   createIdFromString,
   type Evolu,
-  ok,
   type Result,
   sqliteTrue,
   tryAsync,
   trySync,
 } from "@evolu/common";
 import type { StateMaterializationError } from "./errors";
-import { createAllSyncStateQuery, createSyncStateQuery } from "./evolu-queries";
+import { createSyncStateQuery } from "./evolu-queries";
 import type { FilePath, Schema } from "./evolu-schema";
 
 type EvoluDatabase = Evolu<typeof Schema>;
@@ -96,25 +95,4 @@ export const clearTrackedHash = (
       cause,
     }),
   );
-};
-
-/**
- * Clears every `_syncState` row so materialization re-evaluates disk vs Evolu after restart.
- */
-export const clearAllSyncStateTracking = async (
-  evolu: EvoluDatabase,
-): Promise<Result<void, StateMaterializationError>> => {
-  const query = createAllSyncStateQuery(evolu);
-  const rows = await evolu.loadQuery(query);
-  for (const row of rows) {
-    const path = row.path;
-    if (path == null || path === "") {
-      continue;
-    }
-    const cleared = clearTrackedHash(evolu, path);
-    if (!cleared.ok) {
-      return cleared;
-    }
-  }
-  return ok(undefined);
 };

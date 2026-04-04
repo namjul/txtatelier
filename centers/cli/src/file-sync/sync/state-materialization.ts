@@ -68,43 +68,202 @@ export const startStateMaterialization = (
   const allFilesQuery = createAllFilesQuery(evolu);
 
   let initialLoadComplete = false;
+  /** When false, in-flight async from a stopped instance must not mutate Evolu/disk. */
+  let materializationLive = true;
 
   // Ensure cursor exists before starting
   ensureHistoryCursor(evolu);
 
   evolu.loadQuery(allFilesQuery).then(async (rows) => {
+    if (!materializationLive) {
+      return;
+    }
     logger.debug(
       `[state:subscription] Initial load: ${rows.length} existing files`,
     );
     await syncEvoluToFiles(ctx, rows, options);
+    if (!materializationLive) {
+      return;
+    }
 
     // Set cursor to current timestamp to avoid replaying old history
     // Query latest timestamp from evolu_history
     const latestHistoryQuery = createLatestHistoryQuery(evolu);
 
     const latestHistory = await evolu.loadQuery(latestHistoryQuery);
-    if (latestHistory.length > 0) {
-      const firstRow = latestHistory[0];
-      // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-      if (firstRow?.["timestamp"]) {
-        const latestTimestamp =
-          firstRow[
-            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-            "timestamp"
-          ];
-        saveHistoryCursor(evolu, latestTimestamp);
-        logger.debug(
-          "[state:subscription] Cursor initialized to latest history timestamp",
-        );
-      }
+    if (!materializationLive) {
+      return;
+    }
+    const latestTs = latestHistory[0]?.["timestamp"] as
+      | TimestampBytes
+      | undefined;
+    if (latestTs) {
+      saveHistoryCursor(evolu, latestTs);
+      logger.debug(
+        "[state:subscription] Cursor initialized to latest history timestamp",
+      );
     }
 
-    initialLoadComplete = true;
+    if (materializationLive) {
+      initialLoadComplete = true;
+    }
   });
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   const SUBSCRIPTION_DEBOUNCE_MS = 500;
   let subscriptionFireCount = 0;
+
+  const bailIfDisposed = (): boolean => {
+    if (!materializationLive) {
+      debounceTimer = null;
+      return true;
+    }
+    return false;
+  };
+
+  const runDebouncedMaterialization = async (): Promise<void> => {
+    try {
+      if (bailIfDisposed()) {
+        return;
+      }
+      logger.debug("[state:debounce] Change detected (debounced)");
+
+      const cursor = await loadHistoryCursor(evolu);
+      if (bailIfDisposed()) {
+        return;
+      }
+
+      const historyQuery = createHistoryChangesQuery(evolu, cursor);
+      const historyRows = await evolu.loadQuery(historyQuery);
+      if (bailIfDisposed()) {
+        return;
+      }
+
+      if (historyRows.length === 0) {
+        logger.debug("[state:debounce] No new changes to process");
+        debounceTimer = null;
+        return;
+      }
+
+      const contentChangeIds: FileId[] = [];
+      const deletionEventIds: FileId[] = [];
+
+      for (const historyRow of historyRows) {
+        const stringId = idBytesToId(
+          historyRow.id as unknown as IdBytes,
+        ) as FileId;
+        // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+        const column = historyRow["column"];
+
+        if (column === "isDeleted") {
+          deletionEventIds.push(stringId);
+        } else if (column === "content") {
+          contentChangeIds.push(stringId);
+        }
+      }
+
+      if (contentChangeIds.length > 0) {
+        const changedFilesQuery = createChangedFilesQuery(
+          evolu,
+          contentChangeIds,
+        );
+        const changedRows = await evolu.loadQuery(changedFilesQuery);
+        if (bailIfDisposed()) {
+          return;
+        }
+
+        if (changedRows.length === 1) {
+          logger.debug(
+            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+            `[materialize:evolu→fs] Processing changed file: ${changedRows[0]?.["path"]}`,
+          );
+        } else if (changedRows.length <= 5) {
+          // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+          const paths = changedRows.map((r) => r["path"]).join(", ");
+          logger.debug(
+            `[materialize:evolu→fs] Processing ${changedRows.length} changed files: ${paths}`,
+          );
+        } else {
+          logger.debug(
+            `[materialize:evolu→fs] Processing ${changedRows.length} changed files`,
+          );
+        }
+
+        await syncEvoluToFiles(ctx, changedRows, options);
+        if (bailIfDisposed()) {
+          return;
+        }
+      }
+
+      if (deletionEventIds.length > 0) {
+        const deletedFilesQuery = createDeletedFilesWithIdsQuery(
+          evolu,
+          deletionEventIds,
+        );
+        const deletedRows = await evolu.loadQuery(deletedFilesQuery);
+        if (bailIfDisposed()) {
+          return;
+        }
+
+        if (deletedRows.length === 1) {
+          logger.debug(
+            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
+            `[materialize:evolu→fs] Processing deletion: ${deletedRows[0]?.["path"]}`,
+          );
+        } else if (deletedRows.length > 0) {
+          logger.debug(
+            `[materialize:evolu→fs] Processing ${deletedRows.length} deletions`,
+          );
+        }
+
+        for (const deletedRow of deletedRows) {
+          if (bailIfDisposed()) {
+            return;
+          }
+          const path = deletedRow.path;
+          if (!path) continue;
+
+          const lastAppliedHashResult = await getTrackedHash(evolu, path);
+          if (!lastAppliedHashResult.ok) {
+            logger.error(
+              `[materialize:evolu→fs] Failed to get tracked hash for ${path}:`,
+              lastAppliedHashResult.error,
+            );
+            continue;
+          }
+
+          const deleteResult = await applyRemoteDeletionToFilesystem(
+            ctx,
+            path as string,
+            lastAppliedHashResult.value ?? "",
+            options,
+          );
+          if (!deleteResult.ok) {
+            logger.error(
+              `[materialize:evolu→fs] Failed to apply deletion for ${path}:`,
+              deleteResult.error,
+            );
+          }
+        }
+      }
+
+      if (bailIfDisposed()) {
+        return;
+      }
+      const lastRow = historyRows[historyRows.length - 1];
+      if (lastRow?.timestamp) {
+        saveHistoryCursor(
+          evolu,
+          lastRow.timestamp as unknown as TimestampBytes,
+        );
+      }
+
+      debounceTimer = null;
+    } catch (error) {
+      logger.error("[state:debounce] Unhandled error:", error);
+      debounceTimer = null;
+    }
+  };
 
   // Note: This subscription fires for ALL Evolu mutations including our own
   // local edits (echo/self-processing). This is accepted redundancy:
@@ -113,10 +272,12 @@ export const startStateMaterialization = (
   // - Alternative (tracking row IDs) adds complexity for marginal benefit
   // See: KNOWN_REDUNDANCY_ECHO_PROCESSING.md for full analysis
   const unsubscribe = evolu.subscribeQuery(allFilesQuery)(() => {
-    subscriptionFireCount++;
-    const triggerTime = new Date().toISOString();
+    if (!materializationLive) {
+      return;
+    }
+    subscriptionFireCount += 1;
     logger.debug(
-      `[state:subscription] 🔔 Subscription fired (#${subscriptionFireCount}) at ${triggerTime}`,
+      `[state:subscription] Subscription fired (#${subscriptionFireCount})`,
     );
 
     if (!initialLoadComplete) {
@@ -131,145 +292,16 @@ export const startStateMaterialization = (
       clearTimeout(debounceTimer);
     }
 
-    // TODO simplify debouncer
-    debounceTimer = setTimeout(async () => {
-      try {
-        logger.debug("[state:debounce] Change detected (debounced)");
-
-        // Load cursor to find last processed timestamp
-        const cursor = await loadHistoryCursor(evolu);
-
-        // Query evolu_history for both content and deletion changes since cursor
-        const historyQuery = createHistoryChangesQuery(evolu, cursor);
-        const historyRows = await evolu.loadQuery(historyQuery);
-
-        if (historyRows.length === 0) {
-          logger.debug("[state:debounce] No new changes to process");
-          debounceTimer = null;
-          return;
-        }
-
-        // Separate history rows by event type
-        const contentChangeIds: FileId[] = [];
-        const deletionEventIds: FileId[] = [];
-
-        for (const historyRow of historyRows) {
-          const stringId = idBytesToId(
-            historyRow.id as unknown as IdBytes,
-          ) as FileId;
-          // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-          const column = historyRow["column"];
-
-          if (column === "isDeleted") {
-            deletionEventIds.push(stringId);
-          } else if (column === "content") {
-            contentChangeIds.push(stringId);
-          }
-        }
-
-        // Process content changes
-        if (contentChangeIds.length > 0) {
-          const changedFilesQuery = createChangedFilesQuery(
-            evolu,
-            contentChangeIds,
-          );
-
-          const changedRows = await evolu.loadQuery(changedFilesQuery);
-
-          // Log which files are being processed
-          if (changedRows.length === 1) {
-            logger.debug(
-              // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-              `[materialize:evolu→fs] Processing changed file: ${changedRows[0]?.["path"]}`,
-            );
-          } else if (changedRows.length <= 5) {
-            // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-            const paths = changedRows.map((r) => r["path"]).join(", ");
-            logger.debug(
-              `[materialize:evolu→fs] Processing ${changedRows.length} changed files: ${paths}`,
-            );
-          } else {
-            logger.debug(
-              `[materialize:evolu→fs] Processing ${changedRows.length} changed files`,
-            );
-          }
-
-          // Process content changes
-          await syncEvoluToFiles(ctx, changedRows, options);
-        }
-
-        // Process deletion events
-        if (deletionEventIds.length > 0) {
-          const deletedFilesQuery = createDeletedFilesWithIdsQuery(
-            evolu,
-            deletionEventIds,
-          );
-          const deletedRows = await evolu.loadQuery(deletedFilesQuery);
-
-          if (deletedRows.length === 1) {
-            const firstRow = deletedRows[0];
-            logger.debug(
-              // biome-ignore lint/complexity/useLiteralKeys: typed via index signature; dot access triggers TS4111.
-              `[materialize:evolu→fs] Processing deletion: ${firstRow?.["path"]}`,
-            );
-          } else if (deletedRows.length > 0) {
-            logger.debug(
-              `[materialize:evolu→fs] Processing ${deletedRows.length} deletions`,
-            );
-          }
-
-          // Process each deletion
-          for (const deletedRow of deletedRows) {
-            const path = deletedRow.path;
-            if (!path) continue;
-
-            const lastAppliedHashResult = await getTrackedHash(evolu, path);
-
-            if (!lastAppliedHashResult.ok) {
-              logger.error(
-                `[materialize:evolu→fs] Failed to get tracked hash for ${path}:`,
-                lastAppliedHashResult.error,
-              );
-              continue;
-            }
-
-            const deleteResult = await applyRemoteDeletionToFilesystem(
-              ctx,
-              path as string,
-              lastAppliedHashResult.value ?? "",
-              options,
-            );
-
-            if (!deleteResult.ok) {
-              logger.error(
-                `[materialize:evolu→fs] Failed to apply deletion for ${path}:`,
-                deleteResult.error,
-              );
-            }
-          }
-        }
-
-        // Update cursor to latest timestamp
-        if (historyRows.length > 0) {
-          const lastRow = historyRows[historyRows.length - 1];
-          if (lastRow?.timestamp) {
-            const lastTimestamp =
-              lastRow.timestamp as unknown as TimestampBytes;
-            saveHistoryCursor(evolu, lastTimestamp);
-          }
-        }
-
-        debounceTimer = null;
-      } catch (error) {
-        logger.error("[state:debounce] Unhandled error:", error);
-        debounceTimer = null;
-      }
+    debounceTimer = setTimeout(() => {
+      void runDebouncedMaterialization();
     }, SUBSCRIPTION_DEBOUNCE_MS);
   });
 
   logger.debug("[state:subscription] Subscribed");
 
   return () => {
+    materializationLive = false;
+    initialLoadComplete = false;
     if (debounceTimer) {
       clearTimeout(debounceTimer);
       debounceTimer = null;
@@ -311,9 +343,7 @@ const syncEvoluToFiles = async (
       return;
     }
 
-    const preloadedHash = syncStateMap.has(row.path)
-      ? (syncStateMap.get(row.path) ?? null)
-      : null;
+    const preloadedHash = syncStateMap.get(row.path) ?? null;
     const result = await syncEvoluRowToFile(ctx, row, options, preloadedHash);
 
     if (!result.ok) {
@@ -395,12 +425,12 @@ const syncEvoluRowToFile = async (
   // Step 3: Execute plan (I/O)
   const results = await executePlan(ctx, plan);
 
-  // Step 4: Handle conflict notification if needed
-  const conflictAction = plan.find((a) => a.type === "CREATE_CONFLICT");
-  if (conflictAction && conflictAction.type === "CREATE_CONFLICT") {
-    if (options?.onConflictArtifactCreated) {
-      await options.onConflictArtifactCreated(conflictAction.conflictPath);
-    }
+  const conflictCreate = plan.find((a) => a.type === "CREATE_CONFLICT");
+  if (
+    conflictCreate?.type === "CREATE_CONFLICT" &&
+    options?.onConflictArtifactCreated
+  ) {
+    await options.onConflictArtifactCreated(conflictCreate.conflictPath);
   }
 
   // Check for execution errors

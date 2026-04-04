@@ -90,7 +90,6 @@ describe("bindShortcuts", () => {
     } as unknown as ReadlineInterface;
 
     const session = {
-      restart: vi.fn().mockResolvedValue(undefined),
       showStatus: vi.fn().mockResolvedValue(undefined),
       showMnemonic: vi.fn().mockResolvedValue(undefined),
       restoreMnemonic: vi.fn().mockResolvedValue(undefined),
@@ -141,7 +140,6 @@ describe("bindShortcuts", () => {
     } as unknown as ReadlineInterface;
 
     const session = {
-      restart: vi.fn().mockResolvedValue(undefined),
       showStatus: vi.fn().mockResolvedValue(undefined),
       showMnemonic: vi.fn().mockResolvedValue(undefined),
       restoreMnemonic: vi.fn().mockResolvedValue(undefined),

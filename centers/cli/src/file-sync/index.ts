@@ -23,7 +23,6 @@ import { logger } from "../logger";
 import type { FlushError } from "./errors";
 import { createEvoluClient } from "./evolu";
 import type { Schema } from "./evolu-schema";
-import { clearAllSyncStateTracking } from "./state";
 import {
   captureChange,
   type FileSyncContext,
@@ -85,7 +84,6 @@ export interface OwnerSession {
 export type ReadLineFn = (question: string) => Promise<string>;
 
 export interface FileSyncSession extends OwnerSession {
-  readonly restart: () => Promise<void>;
   readonly showMnemonic: () => Promise<void>;
   readonly showStatus: () => Promise<void>;
   readonly restoreMnemonic: (readLine: ReadLineFn) => Promise<void>;
@@ -331,29 +329,6 @@ export const startFileSync = async (
     detachSyncLoop(loopHandles);
   };
 
-  const restart = async (): Promise<void> => {
-    stopSyncOnly();
-    const cleared = await clearAllSyncStateTracking(evolu);
-    if (!cleared.ok) {
-      throw new Error("Failed to clear sync state for restart", {
-        cause: cleared.error,
-      });
-    }
-    const again = await runStartupReconciliation();
-    if (!again.ok) {
-      throw new Error("Fatal error during restart reconciliation", {
-        cause: again.error,
-      });
-    }
-    const reattach = await attachSyncLoop();
-    if (!reattach.ok) {
-      throw new Error("Failed to reattach sync after restart", {
-        cause: reattach.error,
-      });
-    }
-    logger.info("[lifecycle] Restart complete");
-  };
-
   const clearConsole = config?.clearConsole ?? ((): void => {});
 
   const stop = async (): Promise<void> => {
@@ -399,7 +374,6 @@ export const startFileSync = async (
       watchDir,
       relayUrl,
     },
-    restart,
     showMnemonic: async (): Promise<void> => {
       const o = await evolu.appOwner;
       cliShortcutInfo("");
@@ -418,11 +392,19 @@ export const startFileSync = async (
     restoreMnemonic: async (readLine: ReadLineFn): Promise<void> => {
       const line = (await readLine("Paste mnemonic words: ")).trim();
       await restoreOwnerFromMnemonic(ownerSession, line);
-      await restart();
+      cliShortcutInfo("");
+      cliShortcutInfo(
+        "  Owner restored. Stop this process (q) and start again to use the restored identity.",
+      );
+      cliShortcutInfo("");
     },
     resetOwner: async (): Promise<void> => {
       await resetOwnerData(ownerSession);
-      await restart();
+      cliShortcutInfo("");
+      cliShortcutInfo(
+        "  Owner reset. Stop this process (q) and start again to use the new owner.",
+      );
+      cliShortcutInfo("");
     },
     clearConsole,
     quit,
