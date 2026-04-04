@@ -65,24 +65,25 @@ export const startStateMaterialization = (
   const { evolu } = ctx;
   logger.debug("[materialize:evolu→fs] Starting state materialization");
 
+  const ac = new AbortController();
+  const { signal } = ac;
+
   const allFilesQuery = createAllFilesQuery(evolu);
 
   let initialLoadComplete = false;
-  /** When false, in-flight async from a stopped instance must not mutate Evolu/disk. */
-  let materializationLive = true;
 
   // Ensure cursor exists before starting
   ensureHistoryCursor(evolu);
 
   evolu.loadQuery(allFilesQuery).then(async (rows) => {
-    if (!materializationLive) {
+    if (signal.aborted) {
       return;
     }
     logger.debug(
       `[state:subscription] Initial load: ${rows.length} existing files`,
     );
-    await syncEvoluToFiles(ctx, rows, options);
-    if (!materializationLive) {
+    await syncEvoluToFiles(ctx, rows, options, signal);
+    if (signal.aborted) {
       return;
     }
 
@@ -91,7 +92,7 @@ export const startStateMaterialization = (
     const latestHistoryQuery = createLatestHistoryQuery(evolu);
 
     const latestHistory = await evolu.loadQuery(latestHistoryQuery);
-    if (!materializationLive) {
+    if (signal.aborted) {
       return;
     }
     const latestTs = latestHistory[0]?.["timestamp"] as
@@ -104,7 +105,7 @@ export const startStateMaterialization = (
       );
     }
 
-    if (materializationLive) {
+    if (!signal.aborted) {
       initialLoadComplete = true;
     }
   });
@@ -113,8 +114,15 @@ export const startStateMaterialization = (
   const SUBSCRIPTION_DEBOUNCE_MS = 500;
   let subscriptionFireCount = 0;
 
+  signal.addEventListener("abort", () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+  });
+
   const bailIfDisposed = (): boolean => {
-    if (!materializationLive) {
+    if (signal.aborted) {
       debounceTimer = null;
       return true;
     }
@@ -189,7 +197,7 @@ export const startStateMaterialization = (
           );
         }
 
-        await syncEvoluToFiles(ctx, changedRows, options);
+        await syncEvoluToFiles(ctx, changedRows, options, signal);
         if (bailIfDisposed()) {
           return;
         }
@@ -237,6 +245,7 @@ export const startStateMaterialization = (
             path as string,
             lastAppliedHashResult.value ?? "",
             options,
+            signal,
           );
           if (!deleteResult.ok) {
             logger.error(
@@ -272,9 +281,6 @@ export const startStateMaterialization = (
   // - Alternative (tracking row IDs) adds complexity for marginal benefit
   // See: KNOWN_REDUNDANCY_ECHO_PROCESSING.md for full analysis
   const unsubscribe = evolu.subscribeQuery(allFilesQuery)(() => {
-    if (!materializationLive) {
-      return;
-    }
     subscriptionFireCount += 1;
     logger.debug(
       `[state:subscription] Subscription fired (#${subscriptionFireCount})`,
@@ -300,7 +306,7 @@ export const startStateMaterialization = (
   logger.debug("[state:subscription] Subscribed");
 
   return () => {
-    materializationLive = false;
+    ac.abort();
     initialLoadComplete = false;
     if (debounceTimer) {
       clearTimeout(debounceTimer);
@@ -316,10 +322,14 @@ const syncEvoluToFiles = async (
   ctx: FileSyncContext,
   rows: readonly FileRow[],
   options?: StateMaterializationOptions,
+  signal?: AbortSignal,
 ): Promise<void> => {
   const { evolu } = ctx;
   const total = rows.length;
   if (total === 0) return;
+  if (signal?.aborted) {
+    return;
+  }
 
   const failedByType = new Map<string, number>();
   let failedCount = 0;
@@ -331,6 +341,9 @@ const syncEvoluToFiles = async (
 
   // Pre-load all sync states to avoid one DB query per file
   const syncStateRows = await evolu.loadQuery(createAllSyncStateQuery(evolu));
+  if (signal?.aborted) {
+    return;
+  }
   const syncStateMap = new Map<string, string | null>(
     syncStateRows.map((r) => [r.path as string, r.lastAppliedHash ?? null]),
   );
@@ -369,9 +382,19 @@ const syncEvoluToFiles = async (
   };
 
   for (let i = 0; i < rows.length; i += MATERIALIZE_CONCURRENCY) {
+    if (signal?.aborted) {
+      logger.debug(
+        `[materialize:evolu→fs] Aborted after ${processed}/${total} files`,
+      );
+      break;
+    }
     await Promise.all(
       rows.slice(i, i + MATERIALIZE_CONCURRENCY).map(processRow),
     );
+  }
+
+  if (signal?.aborted) {
+    return;
   }
 
   if (total > 50) {
@@ -455,9 +478,14 @@ export const applyRemoteDeletionToFilesystem = async (
   path: string,
   lastAppliedHash: string,
   options?: StateMaterializationOptions,
+  signal?: AbortSignal,
 ): Promise<Result<void, StateMaterializationError>> => {
   const { evolu, watchDir } = ctx;
   const absolutePath = join(watchDir, path);
+
+  if (signal?.aborted) {
+    return ok();
+  }
 
   const existsResult = await tryAsync(
     () =>
@@ -474,6 +502,10 @@ export const applyRemoteDeletionToFilesystem = async (
 
   if (!existsResult.ok) {
     return err(existsResult.error);
+  }
+
+  if (signal?.aborted) {
+    return ok();
   }
 
   if (!existsResult.value) {
@@ -493,6 +525,10 @@ export const applyRemoteDeletionToFilesystem = async (
     return err(diskHashResult.error);
   }
 
+  if (signal?.aborted) {
+    return ok();
+  }
+
   if (diskHashResult.value !== lastAppliedHash) {
     logger.info(`[materialize:evolu→fs] Deletion conflict detected: ${path}`);
 
@@ -507,6 +543,10 @@ export const applyRemoteDeletionToFilesystem = async (
 
     if (!localContentResult.ok) {
       return err(localContentResult.error);
+    }
+
+    if (signal?.aborted) {
+      return ok();
     }
 
     const conflictResult = await tryAsync(
@@ -525,6 +565,10 @@ export const applyRemoteDeletionToFilesystem = async (
 
     if (!conflictResult.ok) {
       return err(conflictResult.error);
+    }
+
+    if (signal?.aborted) {
+      return ok();
     }
 
     const stateResult = clearTrackedHash(evolu, path);
@@ -548,6 +592,10 @@ export const applyRemoteDeletionToFilesystem = async (
       return err(notifyResult.error);
     }
 
+    return ok();
+  }
+
+  if (signal?.aborted) {
     return ok();
   }
 
