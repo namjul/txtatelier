@@ -71,7 +71,7 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
     ? readline.createInterface({
         input: process.stdin,
         output: process.stdout,
-        prompt: "> ",
+        prompt: "",
       })
     : null;
 
@@ -96,10 +96,9 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
 
   if (isInteractive) {
     ilog.info("");
-    ilog.info(`  ➜  Watching: ${resolvedWatchDir}`);
-    ilog.info(`  ➜  ${fileRows.length} files`);
-    ilog.info(`  ➜  Owner: ${ownerShort}`);
-    ilog.info("");
+    ilog.info(`➜  Watching: ${resolvedWatchDir}`);
+    ilog.info(`➜  ${fileRows.length} files`);
+    ilog.info(`➜  Owner: ${ownerShort}`);
   } else {
     ilog.info(`Watching: ${resolvedWatchDir}`);
   }

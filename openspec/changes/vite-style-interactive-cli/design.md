@@ -168,10 +168,10 @@ const isInteractive = process.stdin.isTTY && !process.env.CI;
 14:32:01 [cli] 
 ➜  press h + enter to show help
 
->                           ← prompt for input
+                            ← cursor (no visible prompt marker)
 14:32:05 [sync:watch] File changed: notes.md
 14:32:05 [sync:evolu] Updated row for notes.md
-> r                         ← user types 'r' + Enter
+r                           ← user types 'r' + Enter
 14:32:06 [cli] Restarting...
 ```
 

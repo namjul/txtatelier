@@ -4,7 +4,7 @@
 
 ### Requirement: TTY-gated readline shortcuts
 
-The CLI SHALL detect interactive stdin using `process.stdin.isTTY` and absence of a truthy `CI` environment value. When interactive, the CLI SHALL bind a single readline interface with prompt `> ` and SHALL accept single-letter commands followed by Enter (`h`, `r`, `u`, `s`, `p`, `d`, `c`, `q`). When not interactive, the CLI SHALL log that shortcuts are disabled and SHALL NOT create a readline interface.
+The CLI SHALL detect interactive stdin using `process.stdin.isTTY` and absence of a truthy `CI` environment value. When interactive, the CLI SHALL bind a single readline interface with an empty visible prompt and SHALL accept single-letter commands followed by Enter (`h`, `r`, `u`, `s`, `p`, `d`, `c`, `q`). When not interactive, the CLI SHALL log that shortcuts are disabled and SHALL NOT create a readline interface.
 
 #### Scenario: Foreground terminal
 

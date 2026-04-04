@@ -8,7 +8,7 @@ When a readline interface is active, log lines SHALL clear the current prompt ro
 
 #### Scenario: Log during prompt
 
-- **WHEN** sync logs arrive while the user is at the `> ` prompt
+- **WHEN** sync logs arrive while readline is waiting for input (empty visible prompt)
 - **THEN** the prompt is redrawn after each coordinated log line
 
 ### Requirement: Viewport clear preserves scrollback
