@@ -90,9 +90,7 @@ export interface FileSyncSession extends OwnerSession {
   readonly resetOwner: () => Promise<void>;
   readonly clearConsole: () => void;
   readonly quit: () => Promise<void>;
-  readonly onStop: (
-    handler: () => void | Promise<void>,
-  ) => () => void;
+  readonly onStop: (handler: () => void | Promise<void>) => () => void;
   readonly stop: () => Promise<void>;
   readonly startupReconciliation: {
     readonly filesystem: ReconcileStats;
@@ -220,50 +218,49 @@ export const startFileSync = async (
     }
   });
 
-  const runStartupReconciliation =
-    async (): Promise<
-      Result<
-        { readonly filesystem: ReconcileStats; readonly evolu: ReconcileStats },
-        StartupFatalError
-      >
-    > => {
-      const evolResult = await reconcileStartupEvoluState(syncCtx);
+  const runStartupReconciliation = async (): Promise<
+    Result<
+      { readonly filesystem: ReconcileStats; readonly evolu: ReconcileStats },
+      StartupFatalError
+    >
+  > => {
+    const evolResult = await reconcileStartupEvoluState(syncCtx);
 
-      if (!evolResult.ok) {
-        logger.error(
-          "[error] Fatal error during Evolu reconciliation:",
-          evolResult.error,
-        );
-        return err({ type: "StartupFailed", cause: evolResult.error });
-      }
+    if (!evolResult.ok) {
+      logger.error(
+        "[error] Fatal error during Evolu reconciliation:",
+        evolResult.error,
+      );
+      return err({ type: "StartupFailed", cause: evolResult.error });
+    }
 
-      if (evolResult.value.failedCount > 0) {
-        logger.warn(
-          `[lifecycle] Evolu reconciliation completed with ${evolResult.value.failedCount} partial failures`,
-        );
-      }
+    if (evolResult.value.failedCount > 0) {
+      logger.warn(
+        `[lifecycle] Evolu reconciliation completed with ${evolResult.value.failedCount} partial failures`,
+      );
+    }
 
-      const fsResult = await reconcileStartupFilesystemState(syncCtx);
+    const fsResult = await reconcileStartupFilesystemState(syncCtx);
 
-      if (!fsResult.ok) {
-        logger.error(
-          "[error] Fatal error during filesystem reconciliation:",
-          fsResult.error,
-        );
-        return err({ type: "StartupFailed", cause: fsResult.error });
-      }
+    if (!fsResult.ok) {
+      logger.error(
+        "[error] Fatal error during filesystem reconciliation:",
+        fsResult.error,
+      );
+      return err({ type: "StartupFailed", cause: fsResult.error });
+    }
 
-      if (fsResult.value.failedCount > 0) {
-        logger.warn(
-          `[lifecycle] Filesystem reconciliation completed with ${fsResult.value.failedCount} partial failures`,
-        );
-      }
+    if (fsResult.value.failedCount > 0) {
+      logger.warn(
+        `[lifecycle] Filesystem reconciliation completed with ${fsResult.value.failedCount} partial failures`,
+      );
+    }
 
-      return ok({
-        filesystem: fsResult.value,
-        evolu: evolResult.value,
-      });
-    };
+    return ok({
+      filesystem: fsResult.value,
+      evolu: evolResult.value,
+    });
+  };
 
   const startupOnce = await runStartupReconciliation();
 
@@ -280,9 +277,7 @@ export const startFileSync = async (
     stopSyncing: null,
   };
 
-  const attachSyncLoop = async (): Promise<
-    Result<void, StartupFatalError>
-  > => {
+  const attachSyncLoop = async (): Promise<Result<void, StartupFatalError>> => {
     logger.info(`[lifecycle] Watching directory: ${watchDir}`);
     const stopWatching = await startWatching(watchDir, async (filePath) => {
       const result = await captureChange(syncCtx, filePath);
@@ -324,6 +319,7 @@ export const startFileSync = async (
 
   const stopHandlers: Array<() => void | Promise<void>> = [];
   let stopped = false;
+  let quitting = false;
 
   const stopSyncOnly = (): void => {
     detachSyncLoop(loopHandles);
@@ -355,6 +351,10 @@ export const startFileSync = async (
   };
 
   const quit = async (): Promise<void> => {
+    if (quitting) {
+      return;
+    }
+    quitting = true;
     await stop();
     if (config?.beforeQuit) {
       await config.beforeQuit();
