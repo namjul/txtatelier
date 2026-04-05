@@ -1,5 +1,5 @@
-import clipboard from "clipboardy";
 import type { Interface as ReadlineInterface } from "node:readline";
+import clipboard from "clipboardy";
 import type { FileSyncSession } from "./file-sync/index.js";
 import type { Logger } from "./logger.js";
 
@@ -28,9 +28,15 @@ export interface CLIShortcut {
   readonly description: string;
 }
 
-const exitOnShortcutError = (error: unknown, key: string): never => {
-  console.error(`[shortcut] Error on '${key}':`, error);
-  process.exit(1);
+const handleShortcutError = (
+  error: unknown,
+  key: string,
+  logger: Logger,
+): void => {
+  // Log error and return to prompt instead of killing process
+  // This allows users to retry or use other shortcuts
+  logger.error(`[shortcut] Error on '${key}':`, error);
+  logger.info("Returning to prompt. Press h + Enter for help.");
 };
 
 const normalizeMnemonicInput = (s: string): string =>
@@ -42,11 +48,7 @@ const normalizeMnemonicInput = (s: string): string =>
  * @returns Cleanup function (close readline when tearing down the CLI).
  */
 export const bindShortcuts = (
-  deps: SessionDep &
-    LoggerDep &
-    TTYDep &
-    ShortcutOptionsDep &
-    ReadlineDep,
+  deps: SessionDep & LoggerDep & TTYDep & ShortcutOptionsDep & ReadlineDep,
 ): (() => void) => {
   if (!deps.isTTY || deps.readline == null) {
     if (deps.options.print) {
@@ -66,7 +68,11 @@ export const bindShortcuts = (
       description:
         "restore mnemonic (type words, Ctrl+Shift+V / middle-click to paste, or Enter alone for clipboard)",
     },
-    { key: "d", description: "reset owner immediately (restore with p if you saved mnemonic)" },
+    {
+      key: "d",
+      description:
+        "reset owner immediately (restore with p if you saved mnemonic)",
+    },
     { key: "c", description: "clear viewport (scrollback kept)" },
     { key: "q", description: "quit" },
   ];
@@ -85,7 +91,9 @@ export const bindShortcuts = (
       });
     });
 
-  const readMnemonicLine = async (_promptFromSession: string): Promise<string> => {
+  const readMnemonicLine = async (
+    _promptFromSession: string,
+  ): Promise<string> => {
     const typed = await question(
       "Mnemonic, then Enter (empty line = system clipboard; use Ctrl+Shift+V to paste): ",
     );
@@ -122,7 +130,7 @@ export const bindShortcuts = (
     try {
       await fn();
     } catch (error) {
-      exitOnShortcutError(error, key);
+      handleShortcutError(error, key, deps.logger);
     } finally {
       actionRunning = false;
     }
@@ -144,7 +152,9 @@ export const bindShortcuts = (
         await runShortcut("s", () => deps.session.showMnemonic());
         return;
       case "p":
-        await runShortcut("p", () => deps.session.restoreMnemonic(readMnemonicLine));
+        await runShortcut("p", () =>
+          deps.session.restoreMnemonic(readMnemonicLine),
+        );
         return;
       case "d":
         await runShortcut("d", () => deps.session.resetOwner());

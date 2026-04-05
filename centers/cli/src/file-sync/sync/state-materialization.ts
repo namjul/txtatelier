@@ -114,16 +114,17 @@ export const startStateMaterialization = (
   const SUBSCRIPTION_DEBOUNCE_MS = 500;
   let subscriptionFireCount = 0;
 
-  signal.addEventListener("abort", () => {
+  // Store abort handler to allow cleanup (prevents memory leak)
+  const abortHandler = (): void => {
     if (debounceTimer) {
       clearTimeout(debounceTimer);
       debounceTimer = null;
     }
-  });
+  };
+  signal.addEventListener("abort", abortHandler);
 
   const bailIfDisposed = (): boolean => {
     if (signal.aborted) {
-      debounceTimer = null;
       return true;
     }
     return false;
@@ -312,6 +313,7 @@ export const startStateMaterialization = (
       clearTimeout(debounceTimer);
       debounceTimer = null;
     }
+    signal.removeEventListener("abort", abortHandler);
     unsubscribe();
   };
 };
