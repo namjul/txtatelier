@@ -30,7 +30,7 @@ export const createEvoluDeps = (io: PlatformIO): EvoluDeps => {
         options?.onError?.(error);
       },
       onClose: (event) => {
-        logger.warn("[net:websocket:close]", event.code, event.reason);
+        logger.debug("[net:websocket:close]", event.code, event.reason);
         options?.onClose?.(event);
       },
       onMessage: (data) => {

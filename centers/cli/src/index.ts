@@ -15,7 +15,7 @@ import {
   createInstanceLock,
   formatDuplicateInstanceMessage,
 } from "./file-sync/platform/index.js";
-import { createInteractiveLogger } from "./interactive-logger.js";
+import { createInteractiveLogger } from "./logger.js";
 import {
   bindShortcuts,
   computeStdinInteractive,
@@ -44,13 +44,12 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
 
   const isInteractive = computeStdinInteractive();
 
-  /** Filled after `createInteractiveLogger`; session.clearConsole calls this. */
-  const io = { clearViewport: (): void => {} };
+  let clearConsoleRef: (() => void) | undefined;
 
   const result = await startFileSync({
     watchDir: resolvedWatchDir,
     clearConsole: () => {
-      io.clearViewport();
+      clearConsoleRef?.();
     },
     beforeQuit: async () => {
       await instanceLock.release();
@@ -76,9 +75,7 @@ const runStart = async (watchDir?: string): Promise<number | undefined> => {
     : null;
 
   const ilog = createInteractiveLogger(rl);
-  io.clearViewport = () => {
-    ilog.clearScreen();
-  };
+  clearConsoleRef = () => ilog.clearScreen();
 
   ilog.printStartupBanner({
     clear: true,
